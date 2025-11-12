@@ -48,6 +48,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
+                rotation_angle = rule.get("rotate_roi", 0)  # Legge l'angolo di rotazione, default a 0
 
                 # Cicla attraverso ogni ROI definita per la regola
                 for roi in rois:
@@ -67,6 +68,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                         continue
 
                     cropped_img = img.crop(crop_box)
+
+                    # Ruota l'immagine se è specificato un angolo (negativo per senso orario)
+                    if rotation_angle != 0:
+                        cropped_img = cropped_img.rotate(-rotation_angle, expand=True)
 
                     try:
                         ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
