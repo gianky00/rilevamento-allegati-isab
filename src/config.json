@@ -1,30 +1,24 @@
 {
-    "tesseract_path": "",
-    "odc_roi": [
-        164,
-        144,
-        320,
-        170
-    ],
+    "tesseract_path": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+    "output_template": "{ODC}_{category}.pdf",
     "classification_rules": [
         {
             "category_name": "consuntivo",
             "keywords": [
-                "Riepilogo",
-                "Consuntivo"
+                "CONSUNTIVO"
             ],
             "rois": [
                 [
-                    100,
-                    100,
-                    500,
-                    200
+                    281,
+                    86,
+                    431,
+                    157
                 ],
                 [
-                    100,
-                    800,
-                    500,
-                    900
+                    176,
+                    23,
+                    378,
+                    126
                 ]
             ],
             "color": "#FF0000"
@@ -32,18 +26,123 @@
         {
             "category_name": "pdl",
             "keywords": [
-                "PDL"
+                "PARTE SECONDA",
+                "PERMESSO DI LAVORO",
+                "RICHIESTA PROVVISORIA"
             ],
-            "rois": [],
+            "rois": [
+                [
+                    94,
+                    160,
+                    501,
+                    198
+                ],
+                [
+                    172,
+                    1,
+                    408,
+                    102
+                ]
+            ],
             "color": "#00FF00"
         },
         {
             "category_name": "rapportini",
             "keywords": [
-                "Rapportino"
+                "RG1"
             ],
-            "rois": [],
-            "color": "#0000FF"
+            "rois": [
+                [
+                    31,
+                    44,
+                    162,
+                    116
+                ]
+            ],
+            "color": "#0000FF",
+            "rotate_roi": 0
+        },
+        {
+            "category_name": "schede",
+            "keywords": [
+                "CHIAMATA DI REPERIBILIT",
+                "X",
+                "MOTORE ELETTRICO",
+                "F0322",
+                "MATERIALI NECESSARI",
+                "SCHEDA DATI E MANUTENZIONE",
+                "SCHEDA MANUTENZIONE",
+                "SCHEDA CONTROLLO",
+                "GRUPPO ELETTROGENO",
+                "CONTROLLI GENERICI",
+                "F0301"
+            ],
+            "color": "#ff8080",
+            "rois": [
+                [
+                    420,
+                    21,
+                    533,
+                    74
+                ],
+                [
+                    847,
+                    50,
+                    1074,
+                    143
+                ],
+                [
+                    132,
+                    7,
+                    461,
+                    172
+                ],
+                [
+                    3,
+                    10,
+                    279,
+                    188
+                ],
+                [
+                    428,
+                    753,
+                    583,
+                    842
+                ]
+            ],
+            "rotate_roi": 0
+        },
+        {
+            "category_name": "sketch",
+            "keywords": [
+                "SK.1"
+            ],
+            "color": "#804000",
+            "rotate_roi": 0,
+            "rois": [
+                [
+                    516,
+                    0,
+                    595,
+                    57
+                ]
+            ]
+        },
+        {
+            "category_name": "mcr",
+            "keywords": [
+                "MODULO CONSEGNA RIFIUTI"
+            ],
+            "color": "#00ff00",
+            "rois": [
+                [
+                    200,
+                    36,
+                    399,
+                    131
+                ]
+            ],
+            "rotate_roi": 0
         }
     ]
 }
