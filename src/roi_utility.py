@@ -130,22 +130,27 @@ class ROIDrawingApp:
 
     def handle_delete_click(self, event):
         x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        item_ids = self.canvas.find_closest(x, y)
+        item_ids = self.canvas.find_overlapping(x, y, x, y)
         if not item_ids: return
 
-        tags = self.canvas.gettags(item_ids[0])
-        roi_tag = next((t for t in tags if t.startswith("roi_")), None)
-        if not roi_tag: return
+        # Itera su tutti gli item trovati, perché find_overlapping può restituirne più di uno
+        for item_id in item_ids:
+            tags = self.canvas.gettags(item_id)
+            roi_tag = next((t for t in tags if t.startswith("roi_")), None)
+            if not roi_tag: continue  # Se non è un ROI, passa al prossimo item
 
-        _, rule_index_str, roi_index_str = roi_tag.split("_")
-        rule_index, roi_index = int(rule_index_str), int(roi_index_str)
+            _, rule_index_str, roi_index_str = roi_tag.split("_")
+            rule_index, roi_index = int(rule_index_str), int(roi_index_str)
 
-        rule = self.config["classification_rules"][rule_index]
-        category_name = rule["category_name"]
+            # Controlla se l'indice della regola e del ROI sono validi
+            if rule_index < len(self.config["classification_rules"]) and roi_index < len(self.config["classification_rules"][rule_index].get("rois", [])):
+                rule = self.config["classification_rules"][rule_index]
+                category_name = rule["category_name"]
 
-        if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?"):
-            del rule["rois"][roi_index]
-            self.save_and_refresh()
+                if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?"):
+                    del rule["rois"][roi_index]
+                    self.save_and_refresh()
+                    return # Esci dopo aver cancellato per evitare cancellazioni multiple accidentali
 
     def prompt_and_save_roi(self, roi_coords):
         categories = [rule["category_name"] for rule in self.config.get("classification_rules", [])]
