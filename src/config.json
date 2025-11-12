@@ -13,7 +13,8 @@
                 0,
                 0,
                 0
-            ]
+            ],
+            "color": "#FF0000"
         },
         {
             "category_name": "pdl",
@@ -25,7 +26,8 @@
                 0,
                 0,
                 0
-            ]
+            ],
+            "color": "#00FF00"
         },
         {
             "category_name": "rapportini",
@@ -37,7 +39,8 @@
                 0,
                 0,
                 0
-            ]
+            ],
+            "color": "#0000FF"
         }
     ]
 }
