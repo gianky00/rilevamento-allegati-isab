@@ -7,40 +7,9 @@ import os
 import sys
 import threading
 import queue
-import re
-import pymupdf as fitz
-import pytesseract
-from PIL import Image
 
 # Un file semplice usato come segnale per comunicare tra l'utility e l'app principale
 SIGNAL_FILE = ".update_signal"
-
-def extract_odc_from_pdf(pdf_path, config):
-    """Estrae il valore ODC dalla prima pagina del PDF utilizzando una ROI definita."""
-    odc_roi = config.get("odc_roi")
-    if not odc_roi:
-        return ""
-
-    try:
-        pdf_doc = fitz.open(pdf_path)
-        first_page = pdf_doc[0]
-        pix = first_page.get_pixmap(dpi=300)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        pdf_doc.close()
-
-        factor = 300 / 72
-        crop_box = [int(c * factor) for c in odc_roi]
-
-        if crop_box[2] > img.width or crop_box[3] > img.height:
-            return ""
-
-        cropped_img = img.crop(crop_box)
-        ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').strip()
-
-        odc_value = re.sub(r'\D', '', ocr_text)
-        return odc_value
-    except Exception:
-        return ""
 
 class MainApp:
     """
@@ -108,9 +77,7 @@ class MainApp:
         if path:
             self.pdf_path = path
             self.pdf_path_label.config(text=os.path.basename(path))
-            # Tenta di estrarre l'ODC e popola il campo
-            odc = extract_odc_from_pdf(path, self.config)
-            self.odc_var.set(odc)
+            self.odc_var.set("") # Pulisce il campo ODC per l'inserimento manuale
 
     def add_log_message(self, message):
         self.log_area.config(state='normal')
