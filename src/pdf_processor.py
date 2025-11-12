@@ -93,16 +93,17 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         if progress_callback:
             progress_callback("Raggruppamento e salvataggio dei PDF...")
 
-        output_dir = os.path.dirname(pdf_path)
-        output_template = config.get("output_template", "{ODC}_{category}.pdf")
+        base_output_dir = os.path.dirname(pdf_path)
+        odc_dir = os.path.join(base_output_dir, odc)
+        os.makedirs(odc_dir, exist_ok=True)
 
-        # Salva i PDF divisi per ogni categoria
         for category, pages in page_groups.items():
-            if category == "sconosciuto" or not pages:
+            if not pages:
                 continue
 
-            output_filename = output_template.format(ODC=odc, category=category)
-            output_path = os.path.join(output_dir, output_filename)
+            # Nome del file fisso basato sulla categoria
+            output_filename = f"{category}.pdf"
+            output_path = os.path.join(odc_dir, output_filename)
 
             new_pdf = fitz.open()
             for page_num in pages:
@@ -111,8 +112,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.save(output_path)
             new_pdf.close()
 
+            # Log del percorso relativo
+            relative_path = os.path.join(odc, output_filename)
             if progress_callback:
-                progress_callback(f"Salvato: {output_filename}")
+                progress_callback(f"Salvato: {relative_path}")
 
         pdf_doc.close()
         if progress_callback:

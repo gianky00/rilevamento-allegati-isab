@@ -19,6 +19,7 @@ class ROIDrawingApp:
         self.current_page_index = 0
         self.config = config_manager.load_config()
         self.delete_mode = tk.BooleanVar(value=False)
+        self.roi_item_map = {}
 
         # --- Layout GUI ---
         control_frame = ttk.Frame(self.root)
@@ -93,6 +94,7 @@ class ROIDrawingApp:
     def draw_existing_rois(self):
         self.config = config_manager.load_config()
         self.canvas.delete("roi")
+        self.roi_item_map.clear()  # Pulisce la mappa prima di ridisegnare
         factor = 300 / 72
         for rule_index, rule in enumerate(self.config.get("classification_rules", [])):
             category_name = rule.get("category_name", "N/A")
@@ -100,9 +102,15 @@ class ROIDrawingApp:
             for roi_index, roi in enumerate(rule.get("rois", [])):
                 if not all(isinstance(c, int) for c in roi) or len(roi) != 4: continue
                 x0, y0, x1, y1 = [c * factor for c in roi]
-                tag = f"roi_{rule_index}_{roi_index}"
-                self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags=("roi", tag))
-                self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags=("roi", f"label_{tag}"))
+
+                # Creazione degli elementi grafici
+                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags="roi", fill="", stipple="gray12")
+                text_id = self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags="roi")
+
+                # Popolamento della mappa
+                roi_info = {"rule_index": rule_index, "roi_index": roi_index}
+                self.roi_item_map[rect_id] = roi_info
+                self.roi_item_map[text_id] = roi_info
 
     def on_button_press(self, event):
         if self.delete_mode.get():
@@ -130,22 +138,33 @@ class ROIDrawingApp:
 
     def handle_delete_click(self, event):
         x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        item_ids = self.canvas.find_closest(x, y)
+        item_ids = self.canvas.find_overlapping(x, y, x, y)
         if not item_ids: return
 
-        tags = self.canvas.gettags(item_ids[0])
-        roi_tag = next((t for t in tags if t.startswith("roi_")), None)
-        if not roi_tag: return
+        for item_id in reversed(item_ids):
+            if item_id in self.roi_item_map:
+                roi_info = self.roi_item_map[item_id]
+                rule_index = roi_info["rule_index"]
+                roi_index = roi_info["roi_index"]
 
-        _, rule_index_str, roi_index_str = roi_tag.split("_")
-        rule_index, roi_index = int(rule_index_str), int(roi_index_str)
+                if rule_index < len(self.config["classification_rules"]) and \
+                   roi_index < len(self.config["classification_rules"][rule_index].get("rois", [])):
 
-        rule = self.config["classification_rules"][rule_index]
-        category_name = rule["category_name"]
+                    rule = self.config["classification_rules"][rule_index]
+                    category_name = rule.get("category_name", "N/A")
 
-        if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?"):
-            del rule["rois"][roi_index]
-            self.save_and_refresh()
+                    if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?"):
+                        # Rimuovi il ROI dalla configurazione
+                        del rule["rois"][roi_index]
+
+                        # Aggiorna gli indici nella mappa per gli elementi successivi
+                        # Questa è la parte complessa ma cruciale per la consistenza
+                        for item, info in list(self.roi_item_map.items()):
+                            if info["rule_index"] == rule_index and info["roi_index"] > roi_index:
+                                self.roi_item_map[item]["roi_index"] -= 1
+
+                        self.save_and_refresh()
+                        return # Esci dopo una cancellazione riuscita
 
     def prompt_and_save_roi(self, roi_coords):
         categories = [rule["category_name"] for rule in self.config.get("classification_rules", [])]
