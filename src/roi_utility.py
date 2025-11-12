@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, simpledialog, messagebox
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import os
 import config_manager
