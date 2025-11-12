@@ -22,5 +22,5 @@ echo ===================================
 echo  Avvio dell'applicazione...
 echo ===================================
 echo.
-start "" pythonw src/main.py
+start "" pythonw main.py
 exit
