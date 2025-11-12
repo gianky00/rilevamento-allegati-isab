@@ -101,8 +101,10 @@ class ROIDrawingApp:
                 if not all(isinstance(c, int) for c in roi) or len(roi) != 4: continue
                 x0, y0, x1, y1 = [c * factor for c in roi]
                 tag = f"roi_{rule_index}_{roi_index}"
-                self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags=("roi", tag))
-                self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags=("roi", f"label_{tag}"))
+                # Rettangolo con riempimento trasparente per catturare l'evento di clic
+                self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags=("roi", tag), fill="", stipple="gray12")
+                # Etichetta di testo che ora condivide lo stesso tag specifico del ROI
+                self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags=("roi", f"label_{tag}", tag))
 
     def on_button_press(self, event):
         if self.delete_mode.get():
