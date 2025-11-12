@@ -22,8 +22,5 @@ echo ===================================
 echo  Avvio dell'applicazione...
 echo ===================================
 echo.
-python src/main.py
-
-echo.
-echo L'applicazione è stata chiusa. Premi un tasto per uscire.
-pause
+start "" pythonw src/main.py
+exit

@@ -18,7 +18,7 @@ class MainApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Splitter")
-        self.root.geometry("800x600")
+        self.root.state('zoomed')
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
@@ -35,6 +35,7 @@ class MainApp:
 
         self.setup_config_tab()
         self.setup_processing_tab()
+        self.display_license_info() # Aggiunta per mostrare la licenza
 
         self.load_settings()
         self.root.after(100, self.process_log_queue)
@@ -55,6 +56,16 @@ class MainApp:
                 print(f"Errore nella gestione del file segnale: {e}")
         # Ripianifica il controllo
         self.root.after(1000, self.check_for_updates)
+
+    def display_license_info(self):
+        try:
+            with open("infoLicense.txt", "r", encoding="utf-8") as f:
+                license_text = f.read()
+                self.add_log_message(license_text)
+        except FileNotFoundError:
+            self.add_log_message("File 'infoLicense.txt' non trovato.")
+        except Exception as e:
+            self.add_log_message(f"Errore nel caricamento della licenza: {e}")
 
     def setup_processing_tab(self):
         input_frame = ttk.LabelFrame(self.processing_tab, text="Input")
@@ -141,16 +152,26 @@ class MainApp:
 
         rules_frame = ttk.LabelFrame(self.config_tab, text="Regole di Classificazione")
         rules_frame.pack(expand=True, fill='both', padx=10, pady=10)
-
+        # Layout a due colonne: a sinistra la lista, a destra i dettagli
+        rules_display_frame = ttk.Frame(rules_frame)
+        rules_display_frame.pack(side=tk.LEFT, expand=True, fill='both', padx=5, pady=5)
         # Aggiunta colonna per il colore
-        self.rules_tree = ttk.Treeview(rules_frame, columns=("Color", "Category", "Keywords", "ROI"), show='headings')
+        self.rules_tree = ttk.Treeview(rules_display_frame, columns=("Color", "Category"), show='headings')
         self.rules_tree.heading("Color", text="Colore")
         self.rules_tree.column("Color", width=60, anchor='center')
         self.rules_tree.heading("Category", text="Categoria")
-        self.rules_tree.heading("Keywords", text="Keywords")
-        self.rules_tree.heading("ROI", text="ROI")
-        self.rules_tree.pack(side=tk.LEFT, expand=True, fill='both', padx=5, pady=5)
-
+        self.rules_tree.column("Category", width=200) # Diamo più spazio alla categoria
+        self.rules_tree.pack(expand=True, fill='both')
+        # Pannello Dettagli Regola
+        self.rule_details_frame = ttk.LabelFrame(rules_frame, text="Dettagli Regola")
+        self.rule_details_frame.pack(side=tk.RIGHT, fill='both', expand=True, padx=(10, 5), pady=5)
+        self.keywords_details_var = tk.StringVar()
+        self.roi_details_var = tk.StringVar()
+        ttk.Label(self.rule_details_frame, text="Keywords:", font="-weight bold").pack(anchor='w', padx=5, pady=(5, 0))
+        ttk.Label(self.rule_details_frame, textvariable=self.keywords_details_var, wraplength=300, justify=tk.LEFT).pack(anchor='w', padx=5, pady=(0, 10))
+        ttk.Label(self.rule_details_frame, text="ROI:", font="-weight bold").pack(anchor='w', padx=5, pady=(5, 0))
+        ttk.Label(self.rule_details_frame, textvariable=self.roi_details_var, wraplength=300, justify=tk.LEFT).pack(anchor='w', padx=5, pady=(0, 10))
+        self.rules_tree.bind("<<TreeviewSelect>>", self.update_rule_details_panel)
         rules_buttons_frame = ttk.Frame(rules_frame)
         rules_buttons_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
         ttk.Button(rules_buttons_frame, text="Aggiungi...", command=self.add_rule).pack(fill=tk.X, pady=5)
@@ -158,7 +179,6 @@ class MainApp:
         ttk.Button(rules_buttons_frame, text="Rimuovi", command=self.remove_rule).pack(fill=tk.X, pady=5)
         ttk.Separator(rules_buttons_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         ttk.Button(rules_buttons_frame, text="Avvia Utility ROI", command=self.launch_roi_utility).pack(fill=tk.X, pady=5)
-
         save_frame = ttk.Frame(self.config_tab)
         save_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
         ttk.Button(save_frame, text="Salva Impostazioni", command=self.save_settings).pack(side=tk.RIGHT)
@@ -182,14 +202,44 @@ class MainApp:
         messagebox.showwarning("Non Trovato", "Impossibile trovare Tesseract. Indicalo manualmente.")
 
     def populate_rules_tree(self):
+        # Pulisce sia la Treeview che il pannello dei dettagli
+        self.keywords_details_var.set("")
+        self.roi_details_var.set("")
         for item in self.rules_tree.get_children():
             self.rules_tree.delete(item)
+
+        # Popola la Treeview con le nuove colonne
         for rule in self.config.get("classification_rules", []):
-            keywords_str = ", ".join(rule.get("keywords", []))
             color = rule.get("color", "#FFFFFF")
+            # Inseriamo solo i dati per le colonne visibili
+            item = self.rules_tree.insert("", tk.END, values=(color, rule["category_name"]))
+
+            # Applica il tag per il colore di sfondo
+            self.rules_tree.tag_configure(color, background=color)
+            self.rules_tree.item(item, tags=(color,))
+
+    def update_rule_details_panel(self, event=None):
+        selected_item = self.rules_tree.focus()
+        if not selected_item:
+            self.keywords_details_var.set("")
+            self.roi_details_var.set("")
+            return
+
+        item_values = self.rules_tree.item(selected_item, "values")
+        category_name = item_values[1] # La categoria è il secondo valore
+
+        rule = next((r for r in self.config.get("classification_rules", []) if r["category_name"] == category_name), None)
+
+        if rule:
+            keywords_str = ", ".join(rule.get("keywords", ["N/A"]))
             rois_count = len(rule.get("rois", []))
             roi_summary = f"[{rois_count} Aree ROI definite]"
-            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], keywords_str, roi_summary))
+
+            self.keywords_details_var.set(keywords_str)
+            self.roi_details_var.set(roi_summary)
+        else:
+            self.keywords_details_var.set("Regola non trovata.")
+            self.roi_details_var.set("")
 
     def load_settings(self):
         self.config = config_manager.load_config()
