@@ -60,7 +60,7 @@ class MainApp:
         input_frame = ttk.LabelFrame(self.processing_tab, text="Input")
         input_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Label(input_frame, text="ODC:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.odc_var = tk.StringVar()
+        self.odc_var = tk.StringVar(value="5400") # Valore predefinito
         ttk.Entry(input_frame, textvariable=self.odc_var, width=40).grid(row=0, column=1, padx=5, pady=5)
         ttk.Button(input_frame, text="Seleziona PDF...", command=self.select_pdf).grid(row=1, column=0, padx=5, pady=5)
         self.pdf_path_label = ttk.Label(input_frame, text="Nessun file selezionato")
@@ -77,7 +77,7 @@ class MainApp:
         if path:
             self.pdf_path = path
             self.pdf_path_label.config(text=os.path.basename(path))
-            self.odc_var.set("") # Pulisce il campo ODC per l'inserimento manuale
+            # Non pulire il campo ODC
 
     def add_log_message(self, message):
         self.log_area.config(state='normal')
@@ -96,17 +96,29 @@ class MainApp:
             self.root.after(100, self.process_log_queue)
 
     def start_processing(self):
-        odc = self.odc_var.get().strip()
-        if not odc:
-            messagebox.showerror("Errore", "Per favore, inserisci un ODC.")
+        odc_input = self.odc_var.get().strip()
+
+        # Validazione dell'input ODC
+        if not odc_input.startswith("5400"):
+            messagebox.showerror("Errore ODC", "L'ODC deve iniziare con '5400'.")
             return
+
+        remaining_digits = odc_input[4:]
+        if not (remaining_digits.isdigit() and len(remaining_digits) == 6):
+            messagebox.showerror("Errore ODC", "Dopo '5400', devi inserire esattamente 6 cifre numeriche.")
+            return
+
+        full_odc = odc_input
+
         if not self.pdf_path:
             messagebox.showerror("Errore", "Per favore, seleziona un file PDF.")
             return
+
         self.log_area.config(state='normal')
         self.log_area.delete('1.0', tk.END)
         self.log_area.config(state='disabled')
-        thread = threading.Thread(target=self.processing_worker, args=(self.pdf_path, odc, self.config))
+
+        thread = threading.Thread(target=self.processing_worker, args=(self.pdf_path, full_odc, self.config))
         thread.daemon = True
         thread.start()
 

@@ -94,9 +94,9 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             progress_callback("Raggruppamento e salvataggio dei PDF...")
 
         base_output_dir = os.path.dirname(pdf_path)
-        odc_output_dir = os.path.join(base_output_dir, odc)
-        unclassified_dir = os.path.join(odc_output_dir, "non rilevati")
-        os.makedirs(unclassified_dir, exist_ok=True)
+        master_odc_dir = os.path.join(base_output_dir, odc)
+
+        # Non creiamo la cartella master qui, ma solo quando serve
 
         output_template = config.get("output_template", "{category}.pdf")
 
@@ -104,10 +104,16 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if not pages:
                 continue
 
-            # Scegli la cartella di output
-            current_output_dir = unclassified_dir if category == "sconosciuto" else odc_output_dir
+            # Determina la cartella di output e creala solo se necessario
+            if category == "sconosciuto":
+                category_dir = os.path.join(master_odc_dir, "non rilevati")
+            else:
+                category_dir = os.path.join(master_odc_dir, category)
+
+            os.makedirs(category_dir, exist_ok=True)
+
             output_filename = output_template.format(category=category)
-            output_path = os.path.join(current_output_dir, output_filename)
+            output_path = os.path.join(category_dir, output_filename)
 
             new_pdf = fitz.open()
             for page_num in pages:
@@ -116,8 +122,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.save(output_path)
             new_pdf.close()
 
+            # Fornisce un percorso relativo per un log più pulito
+            relative_path = os.path.join(odc, os.path.basename(category_dir), output_filename)
             if progress_callback:
-                progress_callback(f"Salvato: {os.path.join(os.path.basename(current_output_dir), output_filename)}")
+                progress_callback(f"Salvato: {relative_path}")
 
         pdf_doc.close()
         if progress_callback:
