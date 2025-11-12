@@ -45,42 +45,45 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
             # Itera attraverso ogni regola di classificazione
             for rule in config.get("classification_rules", []):
-                roi = rule.get("roi")
+                rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
 
-                # Salta la regola se la ROI non è valida
-                if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
-                    if progress_callback:
-                        progress_callback(f"Salto la regola '{category_name}' a causa di una ROI non valida.")
-                    continue
+                # Cicla attraverso ogni ROI definita per la regola
+                for roi in rois:
+                    # Salta la ROI se non è valida
+                    if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
+                        if progress_callback:
+                            progress_callback(f"Salto una ROI non valida per la regola '{category_name}'.")
+                        continue
 
-                # Converte le coordinate della ROI da punti PDF a coordinate pixel
-                factor = 300 / 72
-                crop_box = [int(c * factor) for c in roi]
+                    # Converte le coordinate della ROI da punti PDF a coordinate pixel
+                    factor = 300 / 72
+                    crop_box = [int(c * factor) for c in roi]
 
-                # Controlla se il riquadro di ritaglio è valido
-                if crop_box[2] > img.width or crop_box[3] > img.height:
-                    if progress_callback:
-                        progress_callback(f"Attenzione: la ROI per '{category_name}' è fuori dai limiti della pagina.")
-                    continue
+                    if crop_box[2] > img.width or crop_box[3] > img.height:
+                        if progress_callback:
+                            progress_callback(f"Attenzione: una ROI per '{category_name}' è fuori dai limiti della pagina.")
+                        continue
 
-                cropped_img = img.crop(crop_box)
+                    cropped_img = img.crop(crop_box)
 
-                # Esegue l'OCR sull'immagine ritagliata
-                try:
-                    ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
-                    for keyword in keywords:
-                        if keyword in ocr_text:
-                            page_category = category_name
-                            break  # Keyword trovata, interrompe il controllo delle keyword per questa regola
-                    if page_category == category_name:
-                        break  # Regola trovata, interrompe il controllo delle altre regole per questa pagina
-                except pytesseract.TesseractNotFoundError:
-                     raise ValueError("Eseguibile di Tesseract non trovato. Controlla il percorso nella configurazione.")
-                except Exception as ocr_error:
-                    if progress_callback:
-                        progress_callback(f"OCR fallito per la regola '{category_name}' sulla pagina {i+1}: {ocr_error}")
+                    try:
+                        ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
+                        for keyword in keywords:
+                            if keyword in ocr_text:
+                                page_category = category_name
+                                break  # Keyword trovata, interrompe il ciclo delle keyword
+                        if page_category == category_name:
+                            break  # ROI trovata, interrompe il ciclo delle ROI per questa regola
+                    except pytesseract.TesseractNotFoundError:
+                        raise ValueError("Eseguibile di Tesseract non trovato. Controlla il percorso nella configurazione.")
+                    except Exception as ocr_error:
+                        if progress_callback:
+                            progress_callback(f"OCR fallito per una ROI della regola '{category_name}': {ocr_error}")
+
+                if page_category == category_name:
+                    break  # Regola trovata, interrompe il ciclo delle regole per questa pagina
 
             # Aggiunge l'indice della pagina al gruppo corrispondente
             if page_category not in page_groups:

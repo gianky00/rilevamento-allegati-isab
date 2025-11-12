@@ -176,9 +176,10 @@ class MainApp:
             self.rules_tree.delete(item)
         for rule in self.config.get("classification_rules", []):
             keywords_str = ", ".join(rule.get("keywords", []))
-            color = rule.get("color", "#FFFFFF") # Bianco di default
-            # Inserisce i dati, incluso il colore, ma non lo mostra visivamente qui
-            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], keywords_str, str(rule["roi"])))
+            color = rule.get("color", "#FFFFFF")
+            rois_count = len(rule.get("rois", []))
+            roi_summary = f"[{rois_count} Aree ROI definite]"
+            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], keywords_str, roi_summary))
 
     def load_settings(self):
         self.config = config_manager.load_config()
@@ -254,8 +255,9 @@ class MainApp:
 
         ttk.Button(main_frame, text="Scegli...", command=_choose_color).grid(row=2, column=2, padx=5, pady=5)
 
-        ttk.Label(main_frame, text="ROI:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Label(main_frame, text=str(rule["roi"]) if rule else "[Verrà impostato con l'utility ROI]").grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(main_frame, text="Aree ROI:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.W)
+        roi_count = len(rule.get("rois", [])) if rule else 0
+        ttk.Label(main_frame, text=f"[{roi_count} aree definite]").grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W)
 
         def on_save():
             category_name = category_var.get().strip()
@@ -274,7 +276,7 @@ class MainApp:
                 if any(r["category_name"] == category_name for r in self.config.get("classification_rules", [])):
                     messagebox.showerror("Errore", "Categoria già esistente.", parent=dialog)
                     return
-                new_rule_data["roi"] = [0,0,0,0] # ROI di default per le nuove regole
+                new_rule_data["rois"] = [] # Inizializza con una lista vuota di ROI
                 self.config.setdefault("classification_rules", []).append(new_rule_data)
 
             self.populate_rules_tree()
