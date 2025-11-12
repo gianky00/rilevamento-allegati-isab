@@ -94,9 +94,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             progress_callback("Raggruppamento e salvataggio dei PDF...")
 
         base_output_dir = os.path.dirname(pdf_path)
-        master_odc_dir = os.path.join(base_output_dir, odc)
+        odc_dir = os.path.join(base_output_dir, odc)
+        os.makedirs(odc_dir, exist_ok=True)
 
-        # Non creiamo la cartella master qui, ma solo quando serve
+        unclassified_dir = os.path.join(odc_dir, "non rilevati")
 
         output_template = config.get("output_template", "{category}.pdf")
 
@@ -104,16 +105,16 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if not pages:
                 continue
 
-            # Determina la cartella di output e creala solo se necessario
+            # Scegli la cartella di destinazione
             if category == "sconosciuto":
-                category_dir = os.path.join(master_odc_dir, "non rilevati")
+                # Crea la cartella "non rilevati" solo se necessario
+                os.makedirs(unclassified_dir, exist_ok=True)
+                output_dir = unclassified_dir
             else:
-                category_dir = os.path.join(master_odc_dir, category)
-
-            os.makedirs(category_dir, exist_ok=True)
+                output_dir = odc_dir
 
             output_filename = output_template.format(category=category)
-            output_path = os.path.join(category_dir, output_filename)
+            output_path = os.path.join(output_dir, output_filename)
 
             new_pdf = fitz.open()
             for page_num in pages:
@@ -122,10 +123,13 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.save(output_path)
             new_pdf.close()
 
-            # Fornisce un percorso relativo per un log più pulito
-            relative_path = os.path.join(odc, os.path.basename(category_dir), output_filename)
+            # Log del percorso relativo
+            relative_dir = os.path.basename(output_dir)
+            if output_dir != odc_dir:
+                relative_dir = os.path.join(os.path.basename(odc_dir), relative_dir)
+
             if progress_callback:
-                progress_callback(f"Salvato: {relative_path}")
+                progress_callback(f"Salvato: {os.path.join(relative_dir, output_filename)}")
 
         pdf_doc.close()
         if progress_callback:
