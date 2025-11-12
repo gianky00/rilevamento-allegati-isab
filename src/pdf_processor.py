@@ -99,8 +99,11 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if not pages:
                 continue
 
-            # Nome del file fisso basato sulla categoria
-            output_filename = f"{category}.pdf"
+            # Nome del file basato su ODC e categoria
+            if category == "sconosciuto":
+                output_filename = f"{odc}_.pdf"
+            else:
+                output_filename = f"{odc}_{category}.pdf"
             output_path = os.path.join(odc_dir, output_filename)
 
             new_pdf = fitz.open()
