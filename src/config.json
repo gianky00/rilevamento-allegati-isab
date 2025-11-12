@@ -1,24 +1,31 @@
 {
-    "tesseract_path": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
-    "output_template": "{ODC}_{category}.pdf",
+    "tesseract_path": "",
+    "output_template": "{category}.pdf",
+    "odc_roi": [
+        164,
+        144,
+        320,
+        170
+    ],
     "classification_rules": [
         {
             "category_name": "consuntivo",
             "keywords": [
-                "CONSUNTIVO"
+                "Riepilogo",
+                "Consuntivo"
             ],
             "rois": [
                 [
-                    195,
-                    35,
-                    363,
-                    64
+                    100,
+                    100,
+                    500,
+                    200
                 ],
                 [
-                    307,
-                    88,
-                    413,
-                    109
+                    100,
+                    800,
+                    500,
+                    900
                 ]
             ],
             "color": "#FF0000"
@@ -26,61 +33,18 @@
         {
             "category_name": "pdl",
             "keywords": [
-                "PARTE SECONDA",
-                "PERMESSO DI LAVORO",
-                "RICHIESTA PROVVISORIA"
+                "PDL"
             ],
-            "rois": [
-                [
-                    232,
-                    16,
-                    394,
-                    36
-                ],
-                [
-                    247,
-                    43,
-                    348,
-                    64
-                ],
-                [
-                    94,
-                    160,
-                    501,
-                    198
-                ]
-            ],
+            "rois": [],
             "color": "#00FF00"
         },
         {
             "category_name": "rapportini",
             "keywords": [
-                "DETTAGLIO PRESTAZIONE"
+                "Rapportino"
             ],
-            "rois": [
-                [
-                    18,
-                    749,
-                    67,
-                    818
-                ]
-            ],
+            "rois": [],
             "color": "#0000FF"
-        },
-        {
-            "category_name": "schede",
-            "keywords": [
-                "CHIAMATA DI REPERIBILIT"
-            ],
-            "color": "#ff8080",
-            "rois": [
-                [
-                    62,
-                    83,
-                    261,
-                    119
-                ]
-            ]
         }
     ]
 }
