@@ -18,7 +18,7 @@ class MainApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Splitter")
-        self.root.attributes('-fullscreen', True)
+        self.root.state('zoomed')
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
