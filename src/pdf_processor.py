@@ -3,50 +3,24 @@ import pytesseract
 from PIL import Image
 import os
 
-import re
+def process_pdf(pdf_path, odc, config, progress_callback=None):
+    """
+    Elabora un file PDF, classifica le pagine in base a regole OCR e salva i PDF divisi.
 
-def extract_odc_from_pdf(pdf_doc, config, progress_callback=None):
-    """Estrae il valore ODC dalla prima pagina del PDF utilizzando una ROI definita."""
-    odc_roi = config.get("odc_roi")
-    if not odc_roi:
-        if progress_callback:
-            progress_callback("ROI per ODC non definita nella configurazione. Salto estrazione.")
-        return "ODC_Sconosciuto"
+    Args:
+        pdf_path (str): Il percorso del file PDF da elaborare.
+        odc (str): Il numero ODC da utilizzare nel nome del file di output.
+        config (dict): Il dizionario di configurazione contenente le impostazioni.
+        progress_callback (function, optional): Una funzione da chiamare per riportare i progressi.
 
-    try:
-        first_page = pdf_doc[0]
-        pix = first_page.get_pixmap(dpi=300)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-        factor = 300 / 72
-        crop_box = [int(c * factor) for c in odc_roi]
-
-        if crop_box[2] > img.width or crop_box[3] > img.height:
-            if progress_callback:
-                progress_callback("Attenzione: la ROI per ODC è fuori dai limiti della pagina.")
-            return "ODC_Invalido"
-
-        cropped_img = img.crop(crop_box)
-        ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').strip()
-
-        # Pulizia dell'output OCR: rimuovi caratteri non numerici
-        odc_value = re.sub(r'\D', '', ocr_text)
-
-        if not odc_value:
-            return "ODC_NonTrovato"
-
-        return odc_value
-
-    except Exception as e:
-        if progress_callback:
-            progress_callback(f"Errore durante l'estrazione dell'ODC: {e}")
-        return "ODC_Errore"
-
-def process_pdf(pdf_path, config, progress_callback=None):
+    Returns:
+        tuple: Una tupla contenente un booleano di successo e un messaggio.
+    """
     if progress_callback:
         progress_callback("Avvio dell'elaborazione del PDF...")
 
     try:
+        # Imposta il percorso di Tesseract se specificato
         tesseract_path = config.get("tesseract_path")
         if tesseract_path and os.path.exists(tesseract_path):
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
@@ -55,62 +29,76 @@ def process_pdf(pdf_path, config, progress_callback=None):
 
         pdf_doc = fitz.open(pdf_path)
 
-        # Estrai ODC dalla prima pagina
-        odc = extract_odc_from_pdf(pdf_doc, config, progress_callback)
-        if progress_callback:
-            progress_callback(f"ODC estratto: {odc}")
-
-        page_groups = {"sconosciuto": []}
+        page_groups = {}
         total_pages = len(pdf_doc)
 
+        # Itera su ogni pagina del PDF
         for i, page in enumerate(pdf_doc):
             if progress_callback:
                 progress_callback(f"Elaborazione pagina {i + 1}/{total_pages}...")
 
+            # Renderizza la pagina come immagine ad alta risoluzione
             pix = page.get_pixmap(dpi=300)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
             page_category = "sconosciuto"
 
+            # Itera attraverso ogni regola di classificazione
             for rule in config.get("classification_rules", []):
-                # ... (resto della logica di classificazione invariata)
                 rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
 
+                # Cicla attraverso ogni ROI definita per la regola
                 for roi in rois:
+                    # Salta la ROI se non è valida
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
+                        if progress_callback:
+                            progress_callback(f"Salto una ROI non valida per la regola '{category_name}'.")
                         continue
+
+                    # Converte le coordinate della ROI da punti PDF a coordinate pixel
                     factor = 300 / 72
                     crop_box = [int(c * factor) for c in roi]
+
                     if crop_box[2] > img.width or crop_box[3] > img.height:
+                        if progress_callback:
+                            progress_callback(f"Attenzione: una ROI per '{category_name}' è fuori dai limiti della pagina.")
                         continue
+
                     cropped_img = img.crop(crop_box)
+
                     try:
                         ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
                         for keyword in keywords:
                             if keyword in ocr_text:
                                 page_category = category_name
-                                break
+                                break  # Keyword trovata, interrompe il ciclo delle keyword
                         if page_category == category_name:
-                            break
-                    except Exception:
-                        pass # Ignora errori OCR per singole ROI
-                if page_category == category_name:
-                    break
+                            break  # ROI trovata, interrompe il ciclo delle ROI per questa regola
+                    except pytesseract.TesseractNotFoundError:
+                        raise ValueError("Eseguibile di Tesseract non trovato. Controlla il percorso nella configurazione.")
+                    except Exception as ocr_error:
+                        if progress_callback:
+                            progress_callback(f"OCR fallito per una ROI della regola '{category_name}': {ocr_error}")
 
+                if page_category == category_name:
+                    break  # Regola trovata, interrompe il ciclo delle regole per questa pagina
+
+            # Aggiunge l'indice della pagina al gruppo corrispondente
             if page_category not in page_groups:
                 page_groups[page_category] = []
             page_groups[page_category].append(i)
 
         if progress_callback:
-            progress_callback("Salvataggio dei PDF divisi...")
+            progress_callback("Raggruppamento e salvataggio dei PDF...")
 
         base_output_dir = os.path.dirname(pdf_path)
         odc_output_dir = os.path.join(base_output_dir, odc)
         unclassified_dir = os.path.join(odc_output_dir, "non rilevati")
         os.makedirs(unclassified_dir, exist_ok=True)
 
-        output_template = config.get("output_template", "{category}.pdf") # Rimuoviamo ODC dal template
+        output_template = config.get("output_template", "{category}.pdf")
 
         for category, pages in page_groups.items():
             if not pages:
