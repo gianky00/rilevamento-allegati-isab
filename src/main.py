@@ -197,7 +197,7 @@ class MainApp:
     def load_settings(self):
         self.config = config_manager.load_config()
         self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
-        self.output_template_var.set(self.config.get("output_template", "{ODC}_{category}.pdf"))
+        self.output_template_var.set(self.config.get("output_template", "{category}.pdf"))
         self.populate_rules_tree()
 
     def save_settings(self):
