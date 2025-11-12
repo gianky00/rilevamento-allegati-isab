@@ -1,0 +1,21 @@
+{
+    "tesseract_path": "",
+    "output_template": "{ODC}_{category}.pdf",
+    "classification_rules": [
+        {
+            "category_name": "consuntivo",
+            "keyword": "Riepilogo",
+            "roi": [0, 0, 0, 0]
+        },
+        {
+            "category_name": "pdl",
+            "keyword": "PDL",
+            "roi": [0, 0, 0, 0]
+        },
+        {
+            "category_name": "rapportini",
+            "keyword": "Rapportino",
+            "roi": [0, 0, 0, 0]
+        }
+    ]
+}
