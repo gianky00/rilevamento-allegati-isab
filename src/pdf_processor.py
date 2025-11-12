@@ -97,24 +97,15 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         odc_dir = os.path.join(base_output_dir, odc)
         os.makedirs(odc_dir, exist_ok=True)
 
-        unclassified_dir = os.path.join(odc_dir, "non rilevati")
-
         output_template = config.get("output_template", "{category}.pdf")
 
         for category, pages in page_groups.items():
             if not pages:
                 continue
 
-            # Scegli la cartella di destinazione
-            if category == "sconosciuto":
-                # Crea la cartella "non rilevati" solo se necessario
-                os.makedirs(unclassified_dir, exist_ok=True)
-                output_dir = unclassified_dir
-            else:
-                output_dir = odc_dir
-
+            # Tutti i file vengono salvati nella cartella ODC
             output_filename = output_template.format(category=category)
-            output_path = os.path.join(output_dir, output_filename)
+            output_path = os.path.join(odc_dir, output_filename)
 
             new_pdf = fitz.open()
             for page_num in pages:
@@ -124,12 +115,9 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.close()
 
             # Log del percorso relativo
-            relative_dir = os.path.basename(output_dir)
-            if output_dir != odc_dir:
-                relative_dir = os.path.join(os.path.basename(odc_dir), relative_dir)
-
+            relative_path = os.path.join(odc, output_filename)
             if progress_callback:
-                progress_callback(f"Salvato: {os.path.join(relative_dir, output_filename)}")
+                progress_callback(f"Salvato: {relative_path}")
 
         pdf_doc.close()
         if progress_callback:
