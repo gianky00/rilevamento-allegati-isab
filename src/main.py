@@ -57,6 +57,9 @@ class MainApp:
         # Ripianifica il controllo
         self.root.after(1000, self.check_for_updates)
 
+    def _on_details_resize(self, event):
+        self.keywords_label.config(wraplength=event.width - 10) # 10px di margine
+
     def display_license_info(self):
         try:
             with open("infoLicense.txt", "r", encoding="utf-8") as f:
@@ -152,33 +155,46 @@ class MainApp:
 
         rules_frame = ttk.LabelFrame(self.config_tab, text="Regole di Classificazione")
         rules_frame.pack(expand=True, fill='both', padx=10, pady=10)
-        # Layout a due colonne: a sinistra la lista, a destra i dettagli
-        rules_display_frame = ttk.Frame(rules_frame)
-        rules_display_frame.pack(side=tk.LEFT, expand=True, fill='both', padx=5, pady=5)
-        # Aggiunta colonna per il colore
-        self.rules_tree = ttk.Treeview(rules_display_frame, columns=("Color", "Category"), show='headings')
+        rules_frame.columnconfigure(1, weight=3) # Dà più peso alla colonna dei dettagli
+        rules_frame.columnconfigure(0, weight=1)
+        rules_frame.rowconfigure(0, weight=1)
+        # -- Contenitore per Treeview e Scrollbar --
+        tree_container = ttk.Frame(rules_frame)
+        tree_container.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+        tree_container.columnconfigure(0, weight=1)
+        tree_container.rowconfigure(0, weight=1)
+        self.rules_tree = ttk.Treeview(tree_container, columns=("Color", "Category"), show='headings')
         self.rules_tree.heading("Color", text="Colore")
-        self.rules_tree.column("Color", width=60, anchor='center')
+        self.rules_tree.column("Color", width=60, anchor='center', stretch=False)
         self.rules_tree.heading("Category", text="Categoria")
-        self.rules_tree.column("Category", width=200) # Diamo più spazio alla categoria
-        self.rules_tree.pack(expand=True, fill='both')
-        # Pannello Dettagli Regola
+        self.rules_tree.column("Category", width=150)
+        self.rules_tree.grid(row=0, column=0, sticky='nsew')
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.rules_tree.yview)
+        self.rules_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        # -- Pannello Dettagli Regola --
         self.rule_details_frame = ttk.LabelFrame(rules_frame, text="Dettagli Regola")
-        self.rule_details_frame.pack(side=tk.RIGHT, fill='both', expand=True, padx=(10, 5), pady=5)
+        self.rule_details_frame.grid(row=0, column=1, sticky='nsew', padx=(0, 5), pady=5)
+        self.rule_details_frame.columnconfigure(0, weight=1)
         self.keywords_details_var = tk.StringVar()
         self.roi_details_var = tk.StringVar()
-        ttk.Label(self.rule_details_frame, text="Keywords:", font="-weight bold").pack(anchor='w', padx=5, pady=(5, 0))
-        ttk.Label(self.rule_details_frame, textvariable=self.keywords_details_var, wraplength=300, justify=tk.LEFT).pack(anchor='w', padx=5, pady=(0, 10))
-        ttk.Label(self.rule_details_frame, text="ROI:", font="-weight bold").pack(anchor='w', padx=5, pady=(5, 0))
-        ttk.Label(self.rule_details_frame, textvariable=self.roi_details_var, wraplength=300, justify=tk.LEFT).pack(anchor='w', padx=5, pady=(0, 10))
+        ttk.Label(self.rule_details_frame, text="Keywords:", font="-weight bold").grid(row=0, column=0, sticky='w', padx=5, pady=(5, 0))
+        self.keywords_label = ttk.Label(self.rule_details_frame, textvariable=self.keywords_details_var, justify=tk.LEFT, anchor="nw")
+        self.keywords_label.grid(row=1, column=0, sticky='nsew', padx=5, pady=(0, 10))
+        ttk.Label(self.rule_details_frame, text="ROI:", font="-weight bold").grid(row=2, column=0, sticky='w', padx=5, pady=(5, 0))
+        ttk.Label(self.rule_details_frame, textvariable=self.roi_details_var, justify=tk.LEFT).grid(row=3, column=0, sticky='w', padx=5, pady=(0, 10))
+        # Abilita il wrapping dinamico
+        self.rule_details_frame.bind("<Configure>", self._on_details_resize)
+        # -- Contenitore Pulsanti --
+        buttons_container = ttk.Frame(rules_frame)
+        buttons_container.grid(row=0, column=2, sticky='ns', padx=(5, 0), pady=5)
+        ttk.Button(buttons_container, text="Aggiungi...", command=self.add_rule).pack(fill=tk.X, pady=2)
+        ttk.Button(buttons_container, text="Modifica...", command=self.modify_rule).pack(fill=tk.X, pady=2)
+        ttk.Button(buttons_container, text="Rimuovi", command=self.remove_rule).pack(fill=tk.X, pady=2)
+        ttk.Separator(buttons_container, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        ttk.Button(buttons_container, text="Avvia Utility ROI", command=self.launch_roi_utility).pack(fill=tk.X, pady=2)
         self.rules_tree.bind("<<TreeviewSelect>>", self.update_rule_details_panel)
-        rules_buttons_frame = ttk.Frame(rules_frame)
-        rules_buttons_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
-        ttk.Button(rules_buttons_frame, text="Aggiungi...", command=self.add_rule).pack(fill=tk.X, pady=5)
-        ttk.Button(rules_buttons_frame, text="Modifica...", command=self.modify_rule).pack(fill=tk.X, pady=5)
-        ttk.Button(rules_buttons_frame, text="Rimuovi", command=self.remove_rule).pack(fill=tk.X, pady=5)
-        ttk.Separator(rules_buttons_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
-        ttk.Button(rules_buttons_frame, text="Avvia Utility ROI", command=self.launch_roi_utility).pack(fill=tk.X, pady=5)
         save_frame = ttk.Frame(self.config_tab)
         save_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
         ttk.Button(save_frame, text="Salva Impostazioni", command=self.save_settings).pack(side=tk.RIGHT)
@@ -212,11 +228,7 @@ class MainApp:
         for rule in self.config.get("classification_rules", []):
             color = rule.get("color", "#FFFFFF")
             # Inseriamo solo i dati per le colonne visibili
-            item = self.rules_tree.insert("", tk.END, values=(color, rule["category_name"]))
-
-            # Applica il tag per il colore di sfondo
-            self.rules_tree.tag_configure(color, background=color)
-            self.rules_tree.item(item, tags=(color,))
+            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"]))
 
     def update_rule_details_panel(self, event=None):
         selected_item = self.rules_tree.focus()
