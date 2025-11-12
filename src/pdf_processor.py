@@ -46,7 +46,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             # Itera attraverso ogni regola di classificazione
             for rule in config.get("classification_rules", []):
                 roi = rule.get("roi")
-                keyword = rule.get("keyword", "").lower()
+                keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
 
                 # Salta la regola se la ROI non è valida
@@ -70,9 +70,12 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 # Esegue l'OCR sull'immagine ritagliata
                 try:
                     ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
-                    if keyword in ocr_text:
-                        page_category = category_name
-                        break  # Interrompe il controllo delle regole per questa pagina
+                    for keyword in keywords:
+                        if keyword in ocr_text:
+                            page_category = category_name
+                            break  # Keyword trovata, interrompe il controllo delle keyword per questa regola
+                    if page_category == category_name:
+                        break  # Regola trovata, interrompe il controllo delle altre regole per questa pagina
                 except pytesseract.TesseractNotFoundError:
                      raise ValueError("Eseguibile di Tesseract non trovato. Controlla il percorso nella configurazione.")
                 except Exception as ocr_error:

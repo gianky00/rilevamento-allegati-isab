@@ -4,18 +4,40 @@
     "classification_rules": [
         {
             "category_name": "consuntivo",
-            "keyword": "Riepilogo",
-            "roi": [0, 0, 0, 0]
+            "keywords": [
+                "Riepilogo",
+                "Consuntivo"
+            ],
+            "roi": [
+                0,
+                0,
+                0,
+                0
+            ]
         },
         {
             "category_name": "pdl",
-            "keyword": "PDL",
-            "roi": [0, 0, 0, 0]
+            "keywords": [
+                "PDL"
+            ],
+            "roi": [
+                0,
+                0,
+                0,
+                0
+            ]
         },
         {
             "category_name": "rapportini",
-            "keyword": "Rapportino",
-            "roi": [0, 0, 0, 0]
+            "keywords": [
+                "Rapportino"
+            ],
+            "roi": [
+                0,
+                0,
+                0,
+                0
+            ]
         }
     ]
 }

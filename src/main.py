@@ -41,6 +41,19 @@ class MainApp:
         self.load_settings()
         self.root.after(100, self.process_log_queue)
 
+        # Associa l'evento di cambio tab per ricaricare le impostazioni
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
+    def on_tab_changed(self, event):
+        """
+        Ricarica le impostazioni quando la scheda di configurazione viene selezionata,
+        garantendo che le modifiche esterne (es. dall'utility ROI) siano visibili.
+        """
+        selected_tab_index = self.notebook.index(self.notebook.select())
+        # L'indice della scheda di configurazione è 1 (0 è Elaborazione)
+        if selected_tab_index == 1:
+            self.load_settings()
+
     def setup_processing_tab(self):
         """
         Configura la scheda 'Elaborazione' con i widget per l'input e il logging.
@@ -144,18 +157,24 @@ class MainApp:
         """
         path_frame = ttk.LabelFrame(self.config_tab, text="Impostazioni Generali")
         path_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        path_frame.columnconfigure(1, weight=1)
+
         ttk.Label(path_frame, text="Path Tesseract:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         self.tesseract_path_var = tk.StringVar()
-        ttk.Entry(path_frame, textvariable=self.tesseract_path_var, width=60).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Entry(path_frame, textvariable=self.tesseract_path_var).grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
         ttk.Button(path_frame, text="Sfoglia...", command=self.browse_tesseract).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(path_frame, text="Rileva Automaticamente", command=self.auto_detect_tesseract).grid(row=0, column=3, padx=5, pady=5)
+
         ttk.Label(path_frame, text="Template Nome File:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
         self.output_template_var = tk.StringVar()
-        ttk.Entry(path_frame, textvariable=self.output_template_var, width=60).grid(row=1, column=1, padx=5, pady=5)
+        ttk.Entry(path_frame, textvariable=self.output_template_var).grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky=tk.EW)
+
         rules_frame = ttk.LabelFrame(self.config_tab, text="Regole di Classificazione")
         rules_frame.pack(expand=True, fill='both', padx=10, pady=10)
-        self.rules_tree = ttk.Treeview(rules_frame, columns=("Category", "Keyword", "ROI"), show='headings')
+        self.rules_tree = ttk.Treeview(rules_frame, columns=("Category", "Keywords", "ROI"), show='headings')
         self.rules_tree.heading("Category", text="Categoria")
-        self.rules_tree.heading("Keyword", text="Keyword")
+        self.rules_tree.heading("Keywords", text="Keywords (separate da virgola)")
         self.rules_tree.heading("ROI", text="ROI (x0, y0, x1, y1)")
         self.rules_tree.pack(side=tk.LEFT, expand=True, fill='both', padx=5, pady=5)
         rules_buttons_frame = ttk.Frame(rules_frame)
@@ -173,9 +192,25 @@ class MainApp:
         """
         Apre un dialogo per selezionare il percorso dell'eseguibile di Tesseract.
         """
-        path = filedialog.askopenfilename(title="Seleziona l'eseguibile di Tesseract")
+        path = filedialog.askopenfilename(title="Seleziona l'eseguibile di Tesseract", filetypes=[("Executable", "*.exe")])
         if path:
             self.tesseract_path_var.set(path)
+
+    def auto_detect_tesseract(self):
+        """
+        Cerca Tesseract in percorsi comuni su Windows.
+        """
+        search_paths = [
+            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA"), "Tesseract-OCR", "tesseract.exe")
+        ]
+        for path in search_paths:
+            if os.path.exists(path):
+                self.tesseract_path_var.set(path)
+                messagebox.showinfo("Successo", f"Tesseract trovato in:\n{path}")
+                return
+        messagebox.showwarning("Non Trovato", "Impossibile trovare automaticamente Tesseract. Per favore, indicalo manualmente.")
 
     def populate_rules_tree(self):
         """
@@ -184,7 +219,8 @@ class MainApp:
         for item in self.rules_tree.get_children():
             self.rules_tree.delete(item)
         for rule in self.config.get("classification_rules", []):
-            self.rules_tree.insert("", tk.END, values=(rule["category_name"], rule["keyword"], str(rule["roi"])))
+            keywords_str = ", ".join(rule.get("keywords", []))
+            self.rules_tree.insert("", tk.END, values=(rule["category_name"], keywords_str, str(rule["roi"])))
 
     def load_settings(self):
         """
@@ -248,7 +284,8 @@ class MainApp:
         dialog.title("Modifica Regola" if rule else "Aggiungi Regola")
 
         category_var = tk.StringVar(value=rule["category_name"] if rule else "")
-        keyword_var = tk.StringVar(value=rule["keyword"] if rule else "")
+        keywords_str = ", ".join(rule.get("keywords", [])) if rule else ""
+        keywords_var = tk.StringVar(value=keywords_str)
 
         ttk.Label(dialog, text="Nome Categoria:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         category_entry = ttk.Entry(dialog, textvariable=category_var)
@@ -256,25 +293,28 @@ class MainApp:
         if rule:
             category_entry.config(state='readonly')
 
-        ttk.Label(dialog, text="Keyword:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Entry(dialog, textvariable=keyword_var).grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(dialog, text="Keywords (separate da virgola):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(dialog, textvariable=keywords_var, width=40).grid(row=1, column=1, padx=5, pady=5)
 
         ttk.Label(dialog, text="ROI:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
         ttk.Label(dialog, text=str(rule["roi"]) if rule else "[Verrà impostato con l'utility ROI]").grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
 
         def on_save():
-            if not category_var.get() or not keyword_var.get():
-                messagebox.showerror("Errore", "I campi non possono essere vuoti.", parent=dialog)
+            category_name = category_var.get().strip()
+            keywords_list = [k.strip() for k in keywords_var.get().split(',') if k.strip()]
+
+            if not category_name or not keywords_list:
+                messagebox.showerror("Errore", "Nome categoria e almeno una keyword sono obbligatori.", parent=dialog)
                 return
 
             if rule: # Modifica
-                rule["keyword"] = keyword_var.get()
+                rule["keywords"] = keywords_list
             else: # Aggiunta
-                if any(r["category_name"] == category_var.get() for r in self.config.get("classification_rules", [])):
+                if any(r["category_name"] == category_name for r in self.config.get("classification_rules", [])):
                     messagebox.showerror("Errore", "Categoria già esistente.", parent=dialog)
                     return
                 self.config.setdefault("classification_rules", []).append({
-                    "category_name": category_var.get(), "keyword": keyword_var.get(), "roi": [0,0,0,0]
+                    "category_name": category_name, "keywords": keywords_list, "roi": [0,0,0,0]
                 })
 
             self.populate_rules_tree()
