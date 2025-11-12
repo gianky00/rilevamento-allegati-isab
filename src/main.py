@@ -59,14 +59,14 @@ class MainApp:
     def setup_processing_tab(self):
         input_frame = ttk.LabelFrame(self.processing_tab, text="Input")
         input_frame.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Label(input_frame, text="ODC:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.odc_var = tk.StringVar()
-        ttk.Entry(input_frame, textvariable=self.odc_var, width=40).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Button(input_frame, text="Seleziona PDF...", command=self.select_pdf).grid(row=1, column=0, padx=5, pady=5)
+
+        ttk.Button(input_frame, text="Seleziona PDF...", command=self.select_pdf).grid(row=0, column=0, padx=5, pady=5)
         self.pdf_path_label = ttk.Label(input_frame, text="Nessun file selezionato")
-        self.pdf_path_label.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        self.pdf_path_label.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+
         start_button = ttk.Button(self.processing_tab, text="Avvia Divisione", command=self.start_processing)
         start_button.pack(pady=10)
+
         log_frame = ttk.LabelFrame(self.processing_tab, text="Log")
         log_frame.pack(expand=True, fill='both', padx=10, pady=10)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled', height=15)
@@ -95,24 +95,20 @@ class MainApp:
             self.root.after(100, self.process_log_queue)
 
     def start_processing(self):
-        odc = self.odc_var.get().strip()
-        if not odc:
-            messagebox.showerror("Errore", "Per favore, inserisci un ODC.")
-            return
         if not self.pdf_path:
             messagebox.showerror("Errore", "Per favore, seleziona un file PDF.")
             return
         self.log_area.config(state='normal')
         self.log_area.delete('1.0', tk.END)
         self.log_area.config(state='disabled')
-        thread = threading.Thread(target=self.processing_worker, args=(self.pdf_path, odc, self.config))
+        thread = threading.Thread(target=self.processing_worker, args=(self.pdf_path, self.config))
         thread.daemon = True
         thread.start()
 
-    def processing_worker(self, pdf_path, odc, config):
+    def processing_worker(self, pdf_path, config):
         def progress_callback(message):
             self.log_queue.put(message)
-        success, message = pdf_processor.process_pdf(pdf_path, odc, config, progress_callback)
+        success, message = pdf_processor.process_pdf(pdf_path, config, progress_callback)
         if not success:
             self.log_queue.put(f"ERRORE FINALE: {message}")
 

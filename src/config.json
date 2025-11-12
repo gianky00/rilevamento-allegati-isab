@@ -1,6 +1,12 @@
 {
     "tesseract_path": "",
     "output_template": "{ODC}_{category}.pdf",
+    "odc_roi": [
+        164,
+        144,
+        320,
+        170
+    ],
     "classification_rules": [
         {
             "category_name": "consuntivo",
