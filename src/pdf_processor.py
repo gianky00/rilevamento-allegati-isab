@@ -48,47 +48,40 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
-                rotation_angle = rule.get("rotate_roi", 0)  # Legge l'angolo di rotazione, default a 0
 
                 # Cicla attraverso ogni ROI definita per la regola
                 for roi in rois:
-                    # Salta la ROI se non è valida
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
-                        if progress_callback:
-                            progress_callback(f"Salto una ROI non valida per la regola '{category_name}'.")
                         continue
 
-                    # Converte le coordinate della ROI da punti PDF a coordinate pixel
                     factor = 300 / 72
                     crop_box = [int(c * factor) for c in roi]
 
                     if crop_box[2] > img.width or crop_box[3] > img.height:
-                        if progress_callback:
-                            progress_callback(f"Attenzione: una ROI per '{category_name}' è fuori dai limiti della pagina.")
                         continue
 
                     cropped_img = img.crop(crop_box)
 
-                    # Ruota l'immagine se è specificato un angolo (negativo per senso orario)
-                    if rotation_angle != 0:
-                        cropped_img = cropped_img.rotate(-rotation_angle, expand=True)
+                    # Tenta l'OCR sull'immagine originale e poi ruotata
+                    for angle in [0, -90]: # 0 = nessuna rotazione, -90 = 90 gradi orario
+                        img_to_scan = cropped_img
+                        if angle != 0:
+                            img_to_scan = cropped_img.rotate(angle, expand=True)
 
-                    try:
-                        ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
-                        for keyword in keywords:
-                            if keyword in ocr_text:
+                        try:
+                            ocr_text = pytesseract.image_to_string(img_to_scan, lang='ita').lower()
+                            if any(keyword in ocr_text for keyword in keywords):
                                 page_category = category_name
-                                break  # Keyword trovata, interrompe il ciclo delle keyword
-                        if page_category == category_name:
-                            break  # ROI trovata, interrompe il ciclo delle ROI per questa regola
-                    except pytesseract.TesseractNotFoundError:
-                        raise ValueError("Eseguibile di Tesseract non trovato. Controlla il percorso nella configurazione.")
-                    except Exception as ocr_error:
-                        if progress_callback:
-                            progress_callback(f"OCR fallito per una ROI della regola '{category_name}': {ocr_error}")
+                                break  # Keyword trovata, esce dal ciclo di rotazione
+                        except Exception as ocr_error:
+                            if progress_callback:
+                                progress_callback(f"Avviso OCR per '{category_name}': {ocr_error}")
+
+                    if page_category == category_name:
+                        break  # Regola trovata, interrompe il ciclo delle ROI
 
                 if page_category == category_name:
-                    break  # Regola trovata, interrompe il ciclo delle regole per questa pagina
+                    break  # Regola trovata, interrompe il ciclo delle regole
 
             # Aggiunge l'indice della pagina al gruppo corrispondente
             if page_category not in page_groups:

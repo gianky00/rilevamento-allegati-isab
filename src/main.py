@@ -267,19 +267,10 @@ class MainApp:
         roi_count = len(rule.get("rois", [])) if rule else 0
         ttk.Label(main_frame, text=f"[{roi_count} aree definite]").grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W)
 
-        ttk.Label(main_frame, text="Rotazione ROI (gradi):").grid(row=4, column=0, padx=5, pady=5, sticky=tk.W)
-        rotation_var = tk.StringVar(value=str(rule.get("rotate_roi", 0)) if rule else "0")
-        ttk.Entry(main_frame, textvariable=rotation_var, width=10).grid(row=4, column=1, padx=5, pady=5, sticky="w")
-
         def on_save():
             category_name = category_var.get().strip()
             keywords_list = [k.strip() for k in keywords_var.get().split(',') if k.strip()]
             color = chosen_color.get()
-            try:
-                rotation = int(rotation_var.get())
-            except ValueError:
-                messagebox.showerror("Errore", "La rotazione deve essere un numero intero.", parent=dialog)
-                return
 
             if not category_name or not keywords_list:
                 messagebox.showerror("Errore", "Nome categoria e almeno una keyword sono obbligatori.", parent=dialog)
@@ -288,11 +279,12 @@ class MainApp:
             new_rule_data = {
                 "category_name": category_name,
                 "keywords": keywords_list,
-                "color": color,
-                "rotate_roi": rotation
+                "color": color
             }
 
             if rule: # Modifica
+                # Mantieni la chiave 'rotate_roi' se esiste, ma non la esponiamo più
+                new_rule_data['rotate_roi'] = rule.get('rotate_roi', 0)
                 rule.update(new_rule_data)
             else: # Aggiunta
                 if any(r["category_name"] == category_name for r in self.config.get("classification_rules", [])):

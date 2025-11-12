@@ -43,8 +43,7 @@
                 "Rapportino"
             ],
             "rois": [],
-            "color": "#0000FF",
-            "rotate_roi": 90
+            "color": "#0000FF"
         }
     ]
 }
