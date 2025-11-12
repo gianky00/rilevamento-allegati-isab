@@ -69,9 +69,9 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
                     cropped_img = img.crop(crop_box)
 
-                    # Ruota l'immagine se è specificato un angolo
+                    # Ruota l'immagine se è specificato un angolo (negativo per senso orario)
                     if rotation_angle != 0:
-                        cropped_img = cropped_img.rotate(rotation_angle, expand=True)
+                        cropped_img = cropped_img.rotate(-rotation_angle, expand=True)
 
                     try:
                         ocr_text = pytesseract.image_to_string(cropped_img, lang='ita').lower()
