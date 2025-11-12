@@ -97,14 +97,12 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         odc_dir = os.path.join(base_output_dir, odc)
         os.makedirs(odc_dir, exist_ok=True)
 
-        output_template = config.get("output_template", "{category}.pdf")
-
         for category, pages in page_groups.items():
             if not pages:
                 continue
 
-            # Tutti i file vengono salvati nella cartella ODC
-            output_filename = output_template.format(category=category)
+            # Nome del file fisso basato sulla categoria
+            output_filename = f"{category}.pdf"
             output_path = os.path.join(odc_dir, output_filename)
 
             new_pdf = fitz.open()

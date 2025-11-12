@@ -1,6 +1,5 @@
 {
     "tesseract_path": "",
-    "output_template": "{category}.pdf",
     "odc_roi": [
         164,
         144,

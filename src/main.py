@@ -138,9 +138,6 @@ class MainApp:
         ttk.Entry(path_frame, textvariable=self.tesseract_path_var).grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
         ttk.Button(path_frame, text="Sfoglia...", command=self.browse_tesseract).grid(row=0, column=2, padx=5, pady=5)
         ttk.Button(path_frame, text="Rileva Automaticamente", command=self.auto_detect_tesseract).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Label(path_frame, text="Template Nome File:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        self.output_template_var = tk.StringVar()
-        ttk.Entry(path_frame, textvariable=self.output_template_var).grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky=tk.EW)
 
         rules_frame = ttk.LabelFrame(self.config_tab, text="Regole di Classificazione")
         rules_frame.pack(expand=True, fill='both', padx=10, pady=10)
@@ -197,12 +194,10 @@ class MainApp:
     def load_settings(self):
         self.config = config_manager.load_config()
         self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
-        self.output_template_var.set(self.config.get("output_template", "{category}.pdf"))
         self.populate_rules_tree()
 
     def save_settings(self):
         self.config["tesseract_path"] = self.tesseract_path_var.get()
-        self.config["output_template"] = self.output_template_var.get()
         try:
             config_manager.save_config(self.config)
             messagebox.showinfo("Successo", "Impostazioni salvate con successo.")
