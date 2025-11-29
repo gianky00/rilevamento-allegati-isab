@@ -201,6 +201,9 @@ class MainApp:
         if not success:
             self.log_queue.put(f"ERRORE FINALE: {message}")
 
+        # Reset ODC to default on main thread after processing finishes
+        self.root.after(0, lambda: self.odc_var.set("5400"))
+
     # REMOVED: unused create_color_swatch
 
     def setup_config_tab(self):
