@@ -111,6 +111,7 @@ def verify_license():
 
         # Check against normalized values
         if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
+             # Using original IDs in error message for clarity on what exactly was seen
              return False, f"Hardware ID non valido.\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}"
 
         # Validate Expiry
