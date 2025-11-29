@@ -101,16 +101,12 @@ def verify_license():
         # Clean up ID for comparison (remove dots/spaces if needed as per admin tool logic)
         license_hw_id = payload.get("Hardware ID", "")
 
-        # Simple flexible check (contains or equals) to handle potential formatting diffs
-        # The admin tool does: clean_disk_serial = disk_serial.rstrip('.')
-        # We should be strict but fair.
+        # Normalize IDs: strip whitespace and trailing dots (common in wmic output)
+        norm_current = current_hw_id.strip().rstrip('.')
+        norm_license = license_hw_id.strip().rstrip('.')
 
-        # If we are in development/testing (e.g. Linux sandbox), we might want to bypass HW check or simulate it.
-        # But for production code, we must check.
-        # Since I can't easily replicate the exact 'wmic' output of a real Windows user here,
-        # I will assume exact match is required, but I'll strip whitespace.
-
-        if current_hw_id.strip() != license_hw_id.strip() and "UNKNOWN" not in current_hw_id:
+        # Check against normalized values
+        if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
              return False, f"Hardware ID non valido.\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}"
 
         # Validate Expiry
