@@ -39,8 +39,8 @@ class MainApp:
 
         self.load_settings()
         self.root.after(100, self.process_log_queue)
-        # Avvia il controllo per gli aggiornamenti dalla utility ROI
-        self.root.after(1000, self.check_for_updates)
+        # Avvia il controllo per gli aggiornamenti dalla utility ROI (intervallo ridotto a 200ms)
+        self.root.after(200, self.check_for_updates)
 
     def check_for_updates(self):
         """
@@ -54,8 +54,8 @@ class MainApp:
                 self.add_log_message("Configurazione aggiornata dall'utility ROI.")
             except OSError as e:
                 print(f"Errore nella gestione del file segnale: {e}")
-        # Ripianifica il controllo
-        self.root.after(1000, self.check_for_updates)
+        # Ripianifica il controllo con frequenza più alta per maggiore reattività
+        self.root.after(200, self.check_for_updates)
 
     def _on_details_resize(self, event):
         self.keywords_label.config(wraplength=event.width - 10) # 10px di margine
@@ -149,6 +149,8 @@ class MainApp:
         path_frame.columnconfigure(1, weight=1)
         ttk.Label(path_frame, text="Path Tesseract:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         self.tesseract_path_var = tk.StringVar()
+        self.tesseract_path_var.trace("w", self.on_tesseract_path_change) # Auto-save trigger
+
         ttk.Entry(path_frame, textvariable=self.tesseract_path_var).grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
         ttk.Button(path_frame, text="Sfoglia...", command=self.browse_tesseract).grid(row=0, column=2, padx=5, pady=5)
         ttk.Button(path_frame, text="Rileva Automaticamente", command=self.auto_detect_tesseract).grid(row=0, column=3, padx=5, pady=5)
@@ -163,11 +165,14 @@ class MainApp:
         tree_container.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
         tree_container.columnconfigure(0, weight=1)
         tree_container.rowconfigure(0, weight=1)
-        self.rules_tree = ttk.Treeview(tree_container, columns=("Color", "Category"), show='headings')
+        self.rules_tree = ttk.Treeview(tree_container, columns=("Color", "Category", "Suffix"), show='headings')
         self.rules_tree.heading("Color", text="Colore")
         self.rules_tree.column("Color", width=60, anchor='center', stretch=False)
         self.rules_tree.heading("Category", text="Categoria")
         self.rules_tree.column("Category", width=150)
+        self.rules_tree.heading("Suffix", text="Suffisso")
+        self.rules_tree.column("Suffix", width=100)
+
         self.rules_tree.grid(row=0, column=0, sticky='nsew')
         # Scrollbar
         scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.rules_tree.yview)
@@ -195,14 +200,22 @@ class MainApp:
         ttk.Separator(buttons_container, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         ttk.Button(buttons_container, text="Avvia Utility ROI", command=self.launch_roi_utility).pack(fill=tk.X, pady=2)
         self.rules_tree.bind("<<TreeviewSelect>>", self.update_rule_details_panel)
-        save_frame = ttk.Frame(self.config_tab)
-        save_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
-        ttk.Button(save_frame, text="Salva Impostazioni", command=self.save_settings).pack(side=tk.RIGHT)
+
+        # REMOVED: Save button frame
+        # save_frame = ttk.Frame(self.config_tab)
+        # save_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
+        # ttk.Button(save_frame, text="Salva Impostazioni", command=self.save_settings).pack(side=tk.RIGHT)
+
+    def on_tesseract_path_change(self, *args):
+        # Update config directly
+        self.config["tesseract_path"] = self.tesseract_path_var.get()
+        self.auto_save_settings()
 
     def browse_tesseract(self):
         path = filedialog.askopenfilename(title="Seleziona l'eseguibile di Tesseract", filetypes=[("Executable", "*.exe")])
         if path:
             self.tesseract_path_var.set(path)
+            # This will trigger trace which saves
 
     def auto_detect_tesseract(self):
         search_paths = [
@@ -227,8 +240,8 @@ class MainApp:
         # Popola la Treeview con le nuove colonne
         for rule in self.config.get("classification_rules", []):
             color = rule.get("color", "#FFFFFF")
-            # Inseriamo solo i dati per le colonne visibili
-            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"]))
+            suffix = rule.get("filename_suffix", rule["category_name"])
+            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], suffix))
 
     def update_rule_details_panel(self, event=None):
         selected_item = self.rules_tree.focus()
@@ -255,17 +268,24 @@ class MainApp:
 
     def load_settings(self):
         self.config = config_manager.load_config()
+        # Temporarily disable trace to avoid re-saving during load
+        trace_id = self.tesseract_path_var.trace_vinfo()[0][1]
+        self.tesseract_path_var.trace_vdelete("w", trace_id)
         self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
+        self.tesseract_path_var.trace("w", self.on_tesseract_path_change)
+
         self.populate_rules_tree()
 
-    def save_settings(self):
-        self.config["tesseract_path"] = self.tesseract_path_var.get()
+    def auto_save_settings(self):
+        """
+        Salva automaticamente le impostazioni su file senza bloccare l'UI.
+        """
         try:
             config_manager.save_config(self.config)
-            messagebox.showinfo("Successo", "Impostazioni salvate con successo.")
-            self.load_settings()
+            # Optional: visual indicator or log? Keeping it silent for max reactivity.
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile salvare le impostazioni: {e}")
+            # We log error but don't popup to interrupt flow unless critical?
+            print(f"Errore Auto-Save: {e}")
 
     def add_rule(self):
         self.show_rule_editor()
@@ -289,12 +309,18 @@ class MainApp:
         if messagebox.askyesno("Conferma", f"Sei sicuro di voler rimuovere la regola '{category_name}'?"):
             self.config["classification_rules"] = [r for r in self.config["classification_rules"] if r["category_name"] != category_name]
             self.populate_rules_tree()
+            self.auto_save_settings()
 
     def show_rule_editor(self, rule=None):
         dialog = tk.Toplevel(self.root)
         dialog.title("Modifica Regola" if rule else "Aggiungi Regola")
 
         category_var = tk.StringVar(value=rule["category_name"] if rule else "")
+
+        # Suffix handling
+        default_suffix = rule.get("filename_suffix", rule["category_name"]) if rule else ""
+        suffix_var = tk.StringVar(value=default_suffix)
+
         keywords_str = ", ".join(rule.get("keywords", [])) if rule else ""
         keywords_var = tk.StringVar(value=keywords_str)
         # Colore di default nero se non specificato
@@ -304,18 +330,25 @@ class MainApp:
         main_frame = ttk.Frame(dialog, padding="10")
         main_frame.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(main_frame, text="Nome Categoria:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        row = 0
+        ttk.Label(main_frame, text="Nome Categoria:").grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
         category_entry = ttk.Entry(main_frame, textvariable=category_var)
-        category_entry.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+        category_entry.grid(row=row, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
         if rule:
             category_entry.config(state='readonly')
 
-        ttk.Label(main_frame, text="Keywords (separate da virgola):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Entry(main_frame, textvariable=keywords_var, width=40).grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+        row += 1
+        ttk.Label(main_frame, text="Suffisso File:").grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=suffix_var).grid(row=row, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(main_frame, text="Colore:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        row += 1
+        ttk.Label(main_frame, text="Keywords (separate da virgola):").grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(main_frame, textvariable=keywords_var, width=40).grid(row=row, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+
+        row += 1
+        ttk.Label(main_frame, text="Colore:").grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
         color_swatch = tk.Label(main_frame, text="      ", bg=chosen_color.get())
-        color_swatch.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        color_swatch.grid(row=row, column=1, padx=5, pady=5, sticky="w")
 
         def _choose_color():
             color_code = colorchooser.askcolor(title="Scegli un colore", initialcolor=chosen_color.get())
@@ -323,14 +356,16 @@ class MainApp:
                 chosen_color.set(color_code[1])
                 color_swatch.config(bg=color_code[1])
 
-        ttk.Button(main_frame, text="Scegli...", command=_choose_color).grid(row=2, column=2, padx=5, pady=5)
+        ttk.Button(main_frame, text="Scegli...", command=_choose_color).grid(row=row, column=2, padx=5, pady=5)
 
-        ttk.Label(main_frame, text="Aree ROI:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.W)
+        row += 1
+        ttk.Label(main_frame, text="Aree ROI:").grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
         roi_count = len(rule.get("rois", [])) if rule else 0
-        ttk.Label(main_frame, text=f"[{roi_count} aree definite]").grid(row=3, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(main_frame, text=f"[{roi_count} aree definite]").grid(row=row, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W)
 
         def on_save():
             category_name = category_var.get().strip()
+            suffix = suffix_var.get().strip()
             keywords_list = [k.strip() for k in keywords_var.get().split(',') if k.strip()]
             color = chosen_color.get()
 
@@ -338,15 +373,22 @@ class MainApp:
                 messagebox.showerror("Errore", "Nome categoria e almeno una keyword sono obbligatori.", parent=dialog)
                 return
 
+            # Se suffisso è vuoto, usa categoria come default (ma salviamo vuoto? No, meglio esplicito o default)
+            # L'utente vuole poterlo modificare. Se lo lascia vuoto, assumiamo che voglia il nome categoria.
+            if not suffix:
+                suffix = category_name
+
             new_rule_data = {
                 "category_name": category_name,
+                "filename_suffix": suffix,
                 "keywords": keywords_list,
                 "color": color
             }
 
             if rule: # Modifica
-                # Mantieni la chiave 'rotate_roi' se esiste, ma non la esponiamo più
+                # Mantieni la chiave 'rotate_roi' e 'rois'
                 new_rule_data['rotate_roi'] = rule.get('rotate_roi', 0)
+                new_rule_data['rois'] = rule.get('rois', [])
                 rule.update(new_rule_data)
             else: # Aggiunta
                 if any(r["category_name"] == category_name for r in self.config.get("classification_rules", [])):
@@ -356,9 +398,11 @@ class MainApp:
                 self.config.setdefault("classification_rules", []).append(new_rule_data)
 
             self.populate_rules_tree()
+            self.auto_save_settings()
             dialog.destroy()
 
-        ttk.Button(main_frame, text="Salva", command=on_save).grid(row=4, column=0, columnspan=3, pady=10)
+        row += 1
+        ttk.Button(main_frame, text="Salva", command=on_save).grid(row=row, column=0, columnspan=3, pady=10)
 
     def launch_roi_utility(self):
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_utility.py')

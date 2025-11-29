@@ -2,6 +2,7 @@ import pymupdf as fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 import os
+import shutil
 
 def process_pdf(pdf_path, odc, config, progress_callback=None):
     """
@@ -92,19 +93,34 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             progress_callback("Raggruppamento e salvataggio dei PDF...")
 
         base_output_dir = os.path.dirname(pdf_path)
-        odc_dir = os.path.join(base_output_dir, odc)
-        os.makedirs(odc_dir, exist_ok=True)
+        # REMOVED: odc_dir creation
+        # odc_dir = os.path.join(base_output_dir, odc)
+        # os.makedirs(odc_dir, exist_ok=True)
 
         for category, pages in page_groups.items():
             if not pages:
                 continue
 
-            # Nome del file basato su ODC e categoria
+            # Determina il suffisso del file
+            suffix = category # Default
+            if category != "sconosciuto":
+                for rule in config.get("classification_rules", []):
+                    if rule["category_name"] == category:
+                        suffix = rule.get("filename_suffix", category)
+                        if not suffix: # Handle empty string case if present
+                            suffix = category
+                        break
+
+            # Sconosciuto logic handling (if needed specific override, or just empty string?)
+            # Prompt said: "quando trovi la categoria "consuntivo" devi rinominare il pdf con "cons" finale"
+            # And: "2. Unknown Category: Currently, unrecognized pages are saved as {ODC}_.pdf. How should these be named? -> cosi come attualmente"
+            # Currently it is `{ODC}_.pdf` for unknown.
             if category == "sconosciuto":
                 output_filename = f"{odc}_.pdf"
             else:
-                output_filename = f"{odc}_{category}.pdf"
-            output_path = os.path.join(odc_dir, output_filename)
+                output_filename = f"{odc}_{suffix}.pdf"
+
+            output_path = os.path.join(base_output_dir, output_filename)
 
             new_pdf = fitz.open()
             for page_num in pages:
@@ -113,12 +129,29 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.save(output_path)
             new_pdf.close()
 
-            # Log del percorso relativo
-            relative_path = os.path.join(odc, output_filename)
+            # Log del percorso (ora relativo alla cartella base)
             if progress_callback:
-                progress_callback(f"Salvato: {relative_path}")
+                progress_callback(f"Salvato: {output_filename}")
 
         pdf_doc.close()
+
+        # Sposta il file originale nella cartella ORIGINALI
+        if progress_callback:
+            progress_callback("Spostamento file originale...")
+
+        originali_dir = os.path.join(base_output_dir, "ORIGINALI")
+        os.makedirs(originali_dir, exist_ok=True)
+
+        destination_path = os.path.join(originali_dir, os.path.basename(pdf_path))
+
+        # Gestione sovrascrittura se necessario (shutil.move sovrascrive su POSIX ma su Windows dipende)
+        # Per sicurezza, se esiste lo cancelliamo prima? O lasciamo che fallisca?
+        # User said "devono essere spostati". Usually implies simple move.
+        if os.path.exists(destination_path):
+            os.remove(destination_path)
+
+        shutil.move(pdf_path, destination_path)
+
         if progress_callback:
             progress_callback("Elaborazione completata.")
 
