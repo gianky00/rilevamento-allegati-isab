@@ -13,6 +13,7 @@ class ROIDrawingApp:
         self.root = root
         self.root.title("Utility di Gestione ROI")
         self.root.geometry("1200x900")
+        self.root.attributes('-topmost', False) # Ensure main window is normal
 
         self.pdf_doc = None
         self.tk_image = None
@@ -128,8 +129,22 @@ class ROIDrawingApp:
 
     def on_button_release(self, event):
         if not self.delete_mode.get():
-            factor = 72 / 300
+            # Check for drag distance to avoid accidental clicks opening the dialog
+            if self.start_x is None or self.start_y is None:
+                return
+
             end_x, end_y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+
+            # Distance check (e.g., must be > 5 pixels diagonal)
+            dist = math.hypot(end_x - self.start_x, end_y - self.start_y)
+            if dist < 5:
+                # Cancel operation if drag is too small
+                if self.rect:
+                    self.canvas.delete(self.rect)
+                    self.rect = None
+                return
+
+            factor = 72 / 300
             x0, y0, x1, y1 = min(self.start_x, end_x), min(self.start_y, end_y), max(self.start_x, end_x), max(self.start_y, end_y)
             roi_pdf_coords = [int(c * factor) for c in [x0, y0, x1, y1]]
             self.prompt_and_save_roi(roi_pdf_coords)
@@ -153,7 +168,7 @@ class ROIDrawingApp:
                     rule = self.config["classification_rules"][rule_index]
                     category_name = rule.get("category_name", "N/A")
 
-                    if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?"):
+                    if messagebox.askyesno("Conferma Cancellazione", f"Sei sicuro di voler cancellare questa ROI per la categoria '{category_name}'?", parent=self.root):
                         # Rimuovi il ROI dalla configurazione
                         del rule["rois"][roi_index]
 
@@ -170,6 +185,8 @@ class ROIDrawingApp:
         categories = [rule["category_name"] for rule in self.config.get("classification_rules", [])]
         dialog = tk.Toplevel(self.root)
         dialog.title("Aggiungi ROI")
+        dialog.attributes('-topmost', True) # Always on top
+
         ttk.Label(dialog, text="Associa nuova ROI alla categoria:").pack(pady=5)
         category_var = tk.StringVar()
         category_combo = ttk.Combobox(dialog, textvariable=category_var, values=categories, state='readonly')
@@ -194,7 +211,7 @@ class ROIDrawingApp:
             with open(SIGNAL_FILE, "w") as f: f.write("update")
             self.render_page(self.current_page_index)
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile salvare la configurazione: {e}")
+            messagebox.showerror("Errore", f"Impossibile salvare la configurazione: {e}", parent=self.root)
 
     def prev_page(self):
         self.render_page(self.current_page_index - 1)

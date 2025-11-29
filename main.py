@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser
+# Removed unused imports: PIL (Image, ImageTk, ImageDraw)
 import config_manager
 import pdf_processor
 import subprocess
@@ -32,6 +33,7 @@ class MainApp:
         self.config = {}
         self.pdf_path = ""
         self.log_queue = queue.Queue()
+        # Removed unused color_icons cache
 
         self.setup_config_tab()
         self.setup_processing_tab()
@@ -57,8 +59,7 @@ class MainApp:
         # Ripianifica il controllo con frequenza più alta per maggiore reattività
         self.root.after(200, self.check_for_updates)
 
-    def _on_details_resize(self, event):
-        self.keywords_label.config(wraplength=event.width - 10) # 10px di margine
+    # REMOVED: _on_details_resize (Text widget handles wrapping automatically)
 
     def display_license_info(self):
         try:
@@ -79,8 +80,9 @@ class MainApp:
         ttk.Button(input_frame, text="Seleziona PDF...", command=self.select_pdf).grid(row=1, column=0, padx=5, pady=5)
         self.pdf_path_label = ttk.Label(input_frame, text="Nessun file selezionato")
         self.pdf_path_label.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
-        start_button = ttk.Button(self.processing_tab, text="Avvia Divisione", command=self.start_processing)
-        start_button.pack(pady=10)
+
+        # REMOVED: start_button
+
         log_frame = ttk.LabelFrame(self.processing_tab, text="Log")
         log_frame.pack(expand=True, fill='both', padx=10, pady=10)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled', height=15)
@@ -91,7 +93,8 @@ class MainApp:
         if path:
             self.pdf_path = path
             self.pdf_path_label.config(text=os.path.basename(path))
-            # Non pulire il campo ODC
+            # Auto-start processing
+            self.start_processing()
 
     def add_log_message(self, message):
         self.log_area.config(state='normal')
@@ -143,6 +146,8 @@ class MainApp:
         if not success:
             self.log_queue.put(f"ERRORE FINALE: {message}")
 
+    # REMOVED: unused create_color_swatch
+
     def setup_config_tab(self):
         path_frame = ttk.LabelFrame(self.config_tab, text="Impostazioni Generali")
         path_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -157,17 +162,25 @@ class MainApp:
 
         rules_frame = ttk.LabelFrame(self.config_tab, text="Regole di Classificazione")
         rules_frame.pack(expand=True, fill='both', padx=10, pady=10)
-        rules_frame.columnconfigure(1, weight=3) # Dà più peso alla colonna dei dettagli
-        rules_frame.columnconfigure(0, weight=1)
+
+        # CHANGED: Weights to stabilize layout
+        rules_frame.columnconfigure(1, weight=1)
+        rules_frame.columnconfigure(0, weight=0)
         rules_frame.rowconfigure(0, weight=1)
+
         # -- Contenitore per Treeview e Scrollbar --
         tree_container = ttk.Frame(rules_frame)
         tree_container.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
         tree_container.columnconfigure(0, weight=1)
         tree_container.rowconfigure(0, weight=1)
-        self.rules_tree = ttk.Treeview(tree_container, columns=("Color", "Category", "Suffix"), show='headings')
-        self.rules_tree.heading("Color", text="Colore")
-        self.rules_tree.column("Color", width=60, anchor='center', stretch=False)
+
+        # Added "ColorSwatch" column
+        self.rules_tree = ttk.Treeview(tree_container, columns=("ColorCode", "Category", "Suffix"), show='headings')
+
+        # Make the "ColorCode" column hold the visual swatch
+        self.rules_tree.heading("ColorCode", text="Colore")
+        self.rules_tree.column("ColorCode", width=80, anchor='center', stretch=False)
+
         self.rules_tree.heading("Category", text="Categoria")
         self.rules_tree.column("Category", width=150)
         self.rules_tree.heading("Suffix", text="Suffisso")
@@ -182,15 +195,21 @@ class MainApp:
         self.rule_details_frame = ttk.LabelFrame(rules_frame, text="Dettagli Regola")
         self.rule_details_frame.grid(row=0, column=1, sticky='nsew', padx=(0, 5), pady=5)
         self.rule_details_frame.columnconfigure(0, weight=1)
-        self.keywords_details_var = tk.StringVar()
+
+        # REMOVED: keywords_details_var
         self.roi_details_var = tk.StringVar()
+
         ttk.Label(self.rule_details_frame, text="Keywords:", font="-weight bold").grid(row=0, column=0, sticky='w', padx=5, pady=(5, 0))
-        self.keywords_label = ttk.Label(self.rule_details_frame, textvariable=self.keywords_details_var, justify=tk.LEFT, anchor="nw")
-        self.keywords_label.grid(row=1, column=0, sticky='nsew', padx=5, pady=(0, 10))
+
+        # CHANGED: Replaced Label with Text widget for wrapping
+        self.keywords_text = tk.Text(self.rule_details_frame, height=5, width=40, wrap=tk.WORD, state=tk.DISABLED, bg=self.root.cget("bg"), relief=tk.GROOVE)
+        self.keywords_text.grid(row=1, column=0, sticky='nsew', padx=5, pady=(0, 10))
+
         ttk.Label(self.rule_details_frame, text="ROI:", font="-weight bold").grid(row=2, column=0, sticky='w', padx=5, pady=(5, 0))
         ttk.Label(self.rule_details_frame, textvariable=self.roi_details_var, justify=tk.LEFT).grid(row=3, column=0, sticky='w', padx=5, pady=(0, 10))
-        # Abilita il wrapping dinamico
-        self.rule_details_frame.bind("<Configure>", self._on_details_resize)
+
+        # REMOVED: Binding for resize
+
         # -- Contenitore Pulsanti --
         buttons_container = ttk.Frame(rules_frame)
         buttons_container.grid(row=0, column=2, sticky='ns', padx=(5, 0), pady=5)
@@ -200,11 +219,6 @@ class MainApp:
         ttk.Separator(buttons_container, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         ttk.Button(buttons_container, text="Avvia Utility ROI", command=self.launch_roi_utility).pack(fill=tk.X, pady=2)
         self.rules_tree.bind("<<TreeviewSelect>>", self.update_rule_details_panel)
-
-        # REMOVED: Save button frame
-        # save_frame = ttk.Frame(self.config_tab)
-        # save_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=10)
-        # ttk.Button(save_frame, text="Salva Impostazioni", command=self.save_settings).pack(side=tk.RIGHT)
 
     def on_tesseract_path_change(self, *args):
         # Update config directly
@@ -232,21 +246,45 @@ class MainApp:
 
     def populate_rules_tree(self):
         # Pulisce sia la Treeview che il pannello dei dettagli
-        self.keywords_details_var.set("")
+        self.keywords_text.config(state=tk.NORMAL)
+        self.keywords_text.delete("1.0", tk.END)
+        self.keywords_text.config(state=tk.DISABLED)
         self.roi_details_var.set("")
         for item in self.rules_tree.get_children():
             self.rules_tree.delete(item)
+
+        # Clear tags
+        for tag in self.rules_tree.tag_names():
+            if tag.startswith("color_"):
+                 self.rules_tree.tag_configure(tag, background="")
 
         # Popola la Treeview con le nuove colonne
         for rule in self.config.get("classification_rules", []):
             color = rule.get("color", "#FFFFFF")
             suffix = rule.get("filename_suffix", rule["category_name"])
-            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], suffix))
+
+            tag_name = f"color_{color}"
+            self.rules_tree.tag_configure(tag_name, background=color)
+
+            # Calculate contrast text color
+            h = color.lstrip('#')
+            try:
+                rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+                brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
+                text_color = "black" if brightness > 128 else "white"
+            except:
+                text_color = "black"
+
+            self.rules_tree.tag_configure(tag_name, background=color, foreground=text_color)
+
+            self.rules_tree.insert("", tk.END, values=(color, rule["category_name"], suffix), tags=(tag_name,))
 
     def update_rule_details_panel(self, event=None):
         selected_item = self.rules_tree.focus()
         if not selected_item:
-            self.keywords_details_var.set("")
+            self.keywords_text.config(state=tk.NORMAL)
+            self.keywords_text.delete("1.0", tk.END)
+            self.keywords_text.config(state=tk.DISABLED)
             self.roi_details_var.set("")
             return
 
@@ -260,19 +298,33 @@ class MainApp:
             rois_count = len(rule.get("rois", []))
             roi_summary = f"[{rois_count} Aree ROI definite]"
 
-            self.keywords_details_var.set(keywords_str)
+            self.keywords_text.config(state=tk.NORMAL)
+            self.keywords_text.delete("1.0", tk.END)
+            self.keywords_text.insert(tk.END, keywords_str)
+            self.keywords_text.config(state=tk.DISABLED)
+
             self.roi_details_var.set(roi_summary)
         else:
-            self.keywords_details_var.set("Regola non trovata.")
+            self.keywords_text.config(state=tk.NORMAL)
+            self.keywords_text.delete("1.0", tk.END)
+            self.keywords_text.insert(tk.END, "Regola non trovata.")
+            self.keywords_text.config(state=tk.DISABLED)
             self.roi_details_var.set("")
 
     def load_settings(self):
         self.config = config_manager.load_config()
         # Temporarily disable trace to avoid re-saving during load
-        trace_id = self.tesseract_path_var.trace_vinfo()[0][1]
-        self.tesseract_path_var.trace_vdelete("w", trace_id)
-        self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
-        self.tesseract_path_var.trace("w", self.on_tesseract_path_change)
+        if hasattr(self, 'tesseract_path_var'):
+            try:
+                trace_info = self.tesseract_path_var.trace_vinfo()
+                if trace_info:
+                    trace_id = trace_info[0][1]
+                    self.tesseract_path_var.trace_vdelete("w", trace_id)
+            except Exception:
+                pass
+
+            self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
+            self.tesseract_path_var.trace("w", self.on_tesseract_path_change)
 
         self.populate_rules_tree()
 
@@ -314,6 +366,7 @@ class MainApp:
     def show_rule_editor(self, rule=None):
         dialog = tk.Toplevel(self.root)
         dialog.title("Modifica Regola" if rule else "Aggiungi Regola")
+        dialog.attributes('-topmost', True) # Ensure topmost
 
         category_var = tk.StringVar(value=rule["category_name"] if rule else "")
 
