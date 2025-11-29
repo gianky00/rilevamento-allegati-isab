@@ -4,6 +4,7 @@
     "classification_rules": [
         {
             "category_name": "consuntivo",
+            "filename_suffix": "cons",
             "keywords": [
                 "CONSUNTIVO"
             ],
@@ -25,6 +26,7 @@
         },
         {
             "category_name": "pdl",
+            "filename_suffix": "Pdl",
             "keywords": [
                 "PARTE SECONDA",
                 "PERMESSO DI LAVORO",
@@ -48,6 +50,7 @@
         },
         {
             "category_name": "rapportini",
+            "filename_suffix": "rapportini",
             "keywords": [
                 "RG1"
             ],
@@ -64,6 +67,7 @@
         },
         {
             "category_name": "schede",
+            "filename_suffix": "schede",
             "keywords": [
                 "CHIAMATA DI REPERIBILIT",
                 "X",
@@ -114,6 +118,7 @@
         },
         {
             "category_name": "sketch",
+            "filename_suffix": "sketch",
             "keywords": [
                 "SK.1"
             ],
@@ -130,6 +135,7 @@
         },
         {
             "category_name": "mcr",
+            "filename_suffix": "mcr",
             "keywords": [
                 "MODULO CONSEGNA RIFIUTI"
             ],
