@@ -10,16 +10,16 @@
             ],
             "rois": [
                 [
-                    281,
-                    86,
-                    431,
-                    157
-                ],
-                [
                     176,
                     23,
                     378,
                     126
+                ],
+                [
+                    247,
+                    85,
+                    430,
+                    156
                 ]
             ],
             "color": "#FF0000"
@@ -60,6 +60,12 @@
                     44,
                     162,
                     116
+                ],
+                [
+                    0,
+                    378,
+                    79,
+                    470
                 ]
             ],
             "color": "#0000FF",
@@ -70,8 +76,6 @@
             "filename_suffix": "schede",
             "keywords": [
                 "CHIAMATA DI REPERIBILIT",
-                "X",
-                "MOTORE ELETTRICO",
                 "F0322",
                 "MATERIALI NECESSARI",
                 "SCHEDA DATI E MANUTENZIONE",
@@ -146,6 +150,30 @@
                     36,
                     399,
                     131
+                ]
+            ],
+            "rotate_roi": 0
+        },
+        {
+            "category_name": "DDT",
+            "filename_suffix": "DDT",
+            "keywords": [
+                "Documento di Trasporto",
+                "trasporto"
+            ],
+            "color": "#80ffff",
+            "rois": [
+                [
+                    377,
+                    0,
+                    594,
+                    103
+                ],
+                [
+                    0,
+                    696,
+                    235,
+                    834
                 ]
             ],
             "rotate_roi": 0
