@@ -54,7 +54,11 @@ def verify_license():
     Verifies the license presence and validity.
     Returns (True, message) if valid, (False, message) otherwise.
     """
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
     license_dir = os.path.join(base_dir, "Licenza")
 
     # Check if directory exists

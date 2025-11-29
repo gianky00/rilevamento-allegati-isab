@@ -193,7 +193,9 @@ def build():
 
         # Hidden imports relevant to this project
         hidden_imports = [
-            "tkinter", "PIL", "fitz", "pytesseract", "cryptography",
+            "tkinter", "tkinter.ttk", "tkinter.messagebox", "tkinter.filedialog",
+            "tkinter.scrolledtext", "tkinter.colorchooser", "tkinter.simpledialog",
+            "PIL", "fitz", "pytesseract", "cryptography",
             "config_manager", "pdf_processor", "license_validator"
         ]
 
