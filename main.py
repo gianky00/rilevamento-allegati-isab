@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser
+from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
 # Removed unused imports: PIL (Image, ImageTk, ImageDraw)
 import config_manager
 import pdf_processor
@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import queue
+import license_validator
 
 # Un file semplice usato come segnale per comunicare tra l'utility e l'app principale
 SIGNAL_FILE = ".update_signal"
@@ -16,7 +17,7 @@ class MainApp:
     """
     Applicazione principale per la divisione di file PDF basata su regole OCR.
     """
-    def __init__(self, root):
+    def __init__(self, root, auto_file_path=None):
         self.root = root
         self.root.title("PDF Splitter")
         self.root.state('zoomed')
@@ -43,6 +44,25 @@ class MainApp:
         self.root.after(100, self.process_log_queue)
         # Avvia il controllo per gli aggiornamenti dalla utility ROI (intervallo ridotto a 200ms)
         self.root.after(200, self.check_for_updates)
+
+        # Gestione avvio automatico con file da CLI
+        if auto_file_path and os.path.exists(auto_file_path):
+             self.root.after(500, lambda: self.handle_cli_start(auto_file_path))
+
+    def handle_cli_start(self, file_path):
+        """Gestisce l'avvio con file passato da riga di comando."""
+        self.pdf_path = file_path
+        self.pdf_path_label.config(text=os.path.basename(file_path))
+
+        # Chiedi ODC
+        odc = simpledialog.askstring("Input ODC", "Inserisci il codice ODC (es. 5400xxxxxx):", parent=self.root)
+
+        if odc:
+            self.odc_var.set(odc)
+            # Avvia elaborazione
+            self.start_processing()
+        else:
+            messagebox.showinfo("Annullato", "Elaborazione annullata.")
 
     def check_for_updates(self):
         """
@@ -462,8 +482,35 @@ class MainApp:
             messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI: {e}")
 
 if __name__ == "__main__":
+    # --- LICENSE CHECK ---
+    is_valid, msg = license_validator.verify_license()
+    if not is_valid:
+        # Mostra GUI minima per errore se Tk non è ancora avviato
+        root = tk.Tk()
+        root.withdraw()
+
+        # Copia Hardware ID
+        hw_id = license_validator.get_hardware_id()
+
+        err_msg = f"{msg}\n\nIl tuo Hardware ID è:\n{hw_id}\n\n(Copiato negli appunti. Invialo all'amministratore.)"
+        root.clipboard_clear()
+        root.clipboard_append(hw_id)
+
+        messagebox.showerror("Licenza Non Valida", err_msg)
+        sys.exit(1)
+    # ---------------------
+
     if os.path.exists(SIGNAL_FILE):
         os.remove(SIGNAL_FILE) # Pulisce il file segnale all'avvio
+
     root = tk.Tk()
-    app = MainApp(root)
+
+    # Check CLI args
+    cli_file_path = None
+    if len(sys.argv) > 1:
+        potential_path = sys.argv[1]
+        if os.path.exists(potential_path) and potential_path.lower().endswith('.pdf'):
+            cli_file_path = potential_path
+
+    app = MainApp(root, auto_file_path=cli_file_path)
     root.mainloop()
