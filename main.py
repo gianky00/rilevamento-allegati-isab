@@ -253,10 +253,7 @@ class MainApp:
         for item in self.rules_tree.get_children():
             self.rules_tree.delete(item)
 
-        # Clear tags
-        for tag in self.rules_tree.tag_names():
-            if tag.startswith("color_"):
-                 self.rules_tree.tag_configure(tag, background="")
+        # REMOVED: Loop with tag_names() which caused AttributeError
 
         # Popola la Treeview con le nuove colonne
         for rule in self.config.get("classification_rules", []):
