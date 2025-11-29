@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser
+from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
 # Removed unused imports: PIL (Image, ImageTk, ImageDraw)
 import config_manager
 import pdf_processor
@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import queue
+import license_validator
 
 # Un file semplice usato come segnale per comunicare tra l'utility e l'app principale
 SIGNAL_FILE = ".update_signal"
@@ -16,7 +17,7 @@ class MainApp:
     """
     Applicazione principale per la divisione di file PDF basata su regole OCR.
     """
-    def __init__(self, root):
+    def __init__(self, root, auto_file_path=None):
         self.root = root
         self.root.title("PDF Splitter")
         self.root.state('zoomed')
@@ -44,6 +45,25 @@ class MainApp:
         # Avvia il controllo per gli aggiornamenti dalla utility ROI (intervallo ridotto a 200ms)
         self.root.after(200, self.check_for_updates)
 
+        # Gestione avvio automatico con file da CLI
+        if auto_file_path and os.path.exists(auto_file_path):
+             self.root.after(500, lambda: self.handle_cli_start(auto_file_path))
+
+    def handle_cli_start(self, file_path):
+        """Gestisce l'avvio con file passato da riga di comando."""
+        self.pdf_path = file_path
+        self.pdf_path_label.config(text=os.path.basename(file_path))
+
+        # Chiedi ODC
+        odc = simpledialog.askstring("Input ODC", "Inserisci il codice ODC (es. 5400xxxxxx):", parent=self.root)
+
+        if odc:
+            self.odc_var.set(odc)
+            # Avvia elaborazione
+            self.start_processing()
+        else:
+            messagebox.showinfo("Annullato", "Elaborazione annullata.")
+
     def check_for_updates(self):
         """
         Controlla se l'utility ROI ha creato il file segnale.
@@ -63,13 +83,48 @@ class MainApp:
 
     def display_license_info(self):
         try:
-            with open("infoLicense.txt", "r", encoding="utf-8") as f:
-                license_text = f.read()
-                self.add_log_message(license_text)
-        except FileNotFoundError:
-            self.add_log_message("File 'infoLicense.txt' non trovato.")
+            # Recupera informazioni dalla licenza crittografata
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+
+            license_dir = os.path.join(base_dir, "Licenza")
+            config_path = os.path.join(license_dir, "config.dat")
+
+            if os.path.exists(config_path):
+                # Usa license_validator per decifrare (riusiamo la logica interna se possibile,
+                # ma qui importiamo e decifriamo manualmente per semplicità o usiamo una funzione helper se esistesse)
+                # Poiché license_validator ha la chiave, usiamo Fernet direttamente qui copiando la chiave?
+                # Meglio: espandiamo license_validator per restituire i dati info.
+
+                # Importiamo la chiave da license_validator
+                from license_validator import LICENSE_SECRET_KEY
+                from cryptography.fernet import Fernet
+                import json
+
+                with open(config_path, "rb") as f:
+                    encrypted_data = f.read()
+
+                cipher = Fernet(LICENSE_SECRET_KEY)
+                decrypted_data = cipher.decrypt(encrypted_data)
+                payload = json.loads(decrypted_data.decode('utf-8'))
+
+                cliente = payload.get('Cliente', 'N/A')
+                scadenza = payload.get('Scadenza Licenza', 'N/A')
+                hw_id = payload.get('Hardware ID', 'N/A')
+
+                info_text = (f"=== INFO LICENZA ===\n"
+                             f"Cliente: {cliente}\n"
+                             f"Scadenza: {scadenza}\n"
+                             f"Hardware ID: {hw_id}\n"
+                             f"====================")
+                self.add_log_message(info_text)
+            else:
+                self.add_log_message("File licenza 'config.dat' non trovato.")
+
         except Exception as e:
-            self.add_log_message(f"Errore nel caricamento della licenza: {e}")
+            self.add_log_message(f"Errore nel caricamento info licenza: {e}")
 
     def setup_processing_tab(self):
         input_frame = ttk.LabelFrame(self.processing_tab, text="Input")
@@ -462,8 +517,35 @@ class MainApp:
             messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI: {e}")
 
 if __name__ == "__main__":
+    # --- LICENSE CHECK ---
+    is_valid, msg = license_validator.verify_license()
+    if not is_valid:
+        # Mostra GUI minima per errore se Tk non è ancora avviato
+        root = tk.Tk()
+        root.withdraw()
+
+        # Copia Hardware ID
+        hw_id = license_validator.get_hardware_id()
+
+        err_msg = f"{msg}\n\nIl tuo Hardware ID è:\n{hw_id}\n\n(Copiato negli appunti. Invialo all'amministratore.)"
+        root.clipboard_clear()
+        root.clipboard_append(hw_id)
+
+        messagebox.showerror("Licenza Non Valida", err_msg)
+        sys.exit(1)
+    # ---------------------
+
     if os.path.exists(SIGNAL_FILE):
         os.remove(SIGNAL_FILE) # Pulisce il file segnale all'avvio
+
     root = tk.Tk()
-    app = MainApp(root)
+
+    # Check CLI args
+    cli_file_path = None
+    if len(sys.argv) > 1:
+        potential_path = sys.argv[1]
+        if os.path.exists(potential_path) and potential_path.lower().endswith('.pdf'):
+            cli_file_path = potential_path
+
+    app = MainApp(root, auto_file_path=cli_file_path)
     root.mainloop()
