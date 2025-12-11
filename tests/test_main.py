@@ -43,7 +43,8 @@ class TestMainLogic(unittest.TestCase):
             patch("main.license_validator.get_license_info", return_value={}),
             patch("os.path.exists", return_value=False),
             patch("license_validator.verify_license", return_value=(True, "OK")),
-            patch("main.MainApp.load_settings")
+            patch("main.MainApp.load_settings"),
+            patch("main.UnknownFilesReviewDialog")
         ]
 
         for p in self.patchers:
@@ -84,26 +85,15 @@ class TestMainLogic(unittest.TestCase):
             mock_error.assert_called()
 
     def test_add_log_message_progress(self):
-        # Test progress update logic
         self.app.log_area = MagicMock()
-
-        # Mock getting last line
         self.app.log_area.get.return_value = "Elaborazione pagina 1/5..."
-
         self.app.add_log_message("Elaborazione pagina 2/5...", "PROGRESS")
-
-        # Should have deleted previous line
         self.app.log_area.delete.assert_called_with(ANY, "end-1c")
         self.app.log_area.insert.assert_called_with(tk.END, "Elaborazione pagina 2/5...\n", "PROGRESS")
 
     def test_on_drop_single_file(self):
         event = MagicMock()
         event.data = "path/to/file.pdf"
-
-        # Need to re-patch os.path.exists specifically for this test logic
-        # because the global patch returns False.
-        # But we can't easily override the started patch?
-        # Yes, standard patch on top works.
         with patch("os.path.exists", return_value=True), patch("os.path.isdir", return_value=False):
              with patch.object(self.app, 'start_processing') as mock_start:
                  self.app.on_drop(event)
@@ -111,7 +101,6 @@ class TestMainLogic(unittest.TestCase):
                  mock_start.assert_called_once()
 
     def test_check_for_updates_signal(self):
-        # Test signal file detection
         with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove:
             with patch.object(self.app, 'load_settings') as mock_load:
                  self.app.check_for_updates()
@@ -119,48 +108,40 @@ class TestMainLogic(unittest.TestCase):
                  mock_load.assert_called_once()
 
     def test_process_log_queue_dialog(self):
-        # Test queue processing triggers show_unknown_dialog
-        self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': [], 'odc': '123'})
-
+        self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': ['a.pdf'], 'odc': '123'})
         with patch.object(self.app, 'show_unknown_dialog') as mock_show:
             self.app.process_log_queue()
             mock_show.assert_called_once()
 
     def test_processing_worker(self):
-        # Test worker logic (success path)
         files = ["test.pdf"]
         odc = "123"
         config = {}
-
         with patch("pdf_processor.process_pdf") as mock_process:
             mock_process.return_value = (True, "OK", [{'category': 'sconosciuto', 'path': 'out.pdf'}])
-
             self.app.processing_worker(files, odc, config)
-
-            # Should have put unknown dialog request in queue
             item = self.app.log_queue.get()
-            # First item is "Inizio file..."
             self.assertIsInstance(item, tuple)
-
-            # Drain queue
             while not self.app.log_queue.empty():
                 item = self.app.log_queue.get()
                 if isinstance(item, dict) and item.get('action') == 'show_unknown_dialog':
                     self.assertEqual(item['files'], ['out.pdf'])
                     return
-
             self.fail("Did not find show_unknown_dialog action in queue")
 
     def test_main_app_no_dnd(self):
-        # Test MainApp when root has no drop_target_register
         mock_root = MagicMock()
-        del mock_root.drop_target_register # Ensure it doesn't have it
-
-        # Should not raise
+        del mock_root.drop_target_register
         app = main.MainApp(mock_root)
-        # Verify drop_target_register was not called
         with self.assertRaises(AttributeError):
              mock_root.drop_target_register(ANY)
+
+    # --- New Tests for UnknownFilesReviewDialog Logic ---
+
+    def test_unknown_dialog_empty_files(self):
+        with patch("main.UnknownFilesReviewDialog") as mock_dialog_class:
+            self.app.show_unknown_dialog([], "ODC")
+            mock_dialog_class.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

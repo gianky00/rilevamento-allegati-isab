@@ -137,11 +137,47 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             output_path = os.path.join(base_output_dir, output_filename)
 
             new_pdf = fitz.open()
-            for page_num in pages:
-                new_pdf.insert_pdf(pdf_doc, from_page=page_num, to_page=page_num)
 
-            new_pdf.save(output_path)
+            # Optimization: Insert contiguous page ranges instead of single pages
+            if pages:
+                pages.sort()
+                ranges = []
+                if pages:
+                    start = pages[0]
+                    end = pages[0]
+                    for p in pages[1:]:
+                        if p == end + 1:
+                            end = p
+                        else:
+                            ranges.append((start, end))
+                            start = p
+                            end = p
+                    ranges.append((start, end))
+
+                for start, end in ranges:
+                    new_pdf.insert_pdf(pdf_doc, from_page=start, to_page=end)
+
+            # Retry loop for saving file (robustness against locks)
+            saved = False
+            save_error = None
+            for attempt in range(3):
+                try:
+                    new_pdf.save(output_path)
+                    saved = True
+                    break
+                except PermissionError as e:
+                    save_error = e
+                    log(f"Tentativo salvataggio {attempt+1}/3 fallito (file bloccato): {output_filename}. Riprovo...", "WARNING")
+                    time.sleep(1.0)
+                except Exception as e:
+                    save_error = e
+                    break
+
             new_pdf.close()
+
+            if not saved:
+                log(f"Errore: Impossibile salvare {output_filename}: {save_error}", "ERROR")
+                continue
 
             abs_path = os.path.abspath(output_path)
             log(f"Salvato: {abs_path}", "INFO")

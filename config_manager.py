@@ -38,7 +38,23 @@ def load_config():
 
 def save_config(data):
     """
-    Saves the configuration to the config.json file.
+    Saves the configuration to the config.json file atomically.
+    Writes to a temp file first, then renames it to ensure data integrity.
     """
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    tmp_file = CONFIG_FILE + ".tmp"
+    try:
+        with open(tmp_file, 'w') as f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno()) # Ensure write to disk
+
+        # Atomic replacement
+        os.replace(tmp_file, CONFIG_FILE)
+    except Exception as e:
+        print(f"Errore durante il salvataggio della configurazione: {e}")
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except:
+                pass
+        raise e

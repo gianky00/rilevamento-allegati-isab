@@ -7,3 +7,5 @@ nuitka
 zstandard
 tkinterdnd2
 numpy
+pytest
+pytest-cov
