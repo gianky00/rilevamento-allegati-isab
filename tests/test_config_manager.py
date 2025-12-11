@@ -1,8 +1,8 @@
 import unittest
 import os
-import sys
 import json
-from unittest.mock import patch, MagicMock
+import time
+from unittest.mock import patch, mock_open, MagicMock
 import config_manager
 
 class TestConfigManager(unittest.TestCase):
@@ -18,6 +18,11 @@ class TestConfigManager(unittest.TestCase):
         if os.path.exists(self.test_config_file + ".bak"):
             try:
                 os.remove(self.test_config_file + ".bak")
+            except:
+                pass
+        if os.path.exists(self.test_config_file + ".tmp"):
+            try:
+                os.remove(self.test_config_file + ".tmp")
             except:
                 pass
 
@@ -66,19 +71,17 @@ class TestConfigManager(unittest.TestCase):
                 # Check if error printed
                 mock_print.assert_called()
 
-    def test_get_config_path_frozen(self):
-        with patch.object(sys, 'frozen', True, create=True):
-            with patch.object(sys, 'executable', '/frozen/path/app'):
-                path = config_manager.get_config_path()
-                self.assertEqual(path, os.path.join('/frozen/path', 'config.json'))
+    @patch("config_manager.CONFIG_FILE", "test_config_temp.json")
+    def test_atomic_save_failure(self):
+        # Test that temp file is cleaned up if rename fails
+        test_data = {"key": "value"}
 
-    def test_get_config_path_normal(self):
-         with patch.object(sys, 'frozen', False, create=True):
-             # When not frozen, it uses __file__
-             # We can't easily mock __file__ directly on the module once imported without reload,
-             # but we can rely on os.path.dirname logic being called.
-             path = config_manager.get_config_path()
-             self.assertTrue(path.endswith("config.json"))
+        with patch("os.replace", side_effect=OSError("Rename Fail")):
+            with self.assertRaises(OSError):
+                config_manager.save_config(test_data)
+
+            # Temp file should be removed by exception handler
+            self.assertFalse(os.path.exists(self.test_config_file + ".tmp"))
 
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,10 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.lbl_status.pack(side='bottom', anchor='w', padx=5)
 
     def load_current_file(self):
+        if not self.files:
+            self.lbl_status.config(text="Nessun file da revisionare.")
+            return
+
         file_path = self.files[self.current_index]
         filename = os.path.basename(file_path)
 
@@ -157,7 +161,9 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             doc.close()
         except Exception as e:
             self.canvas.delete("all")
-            self.canvas.create_text(100, 100, text=f"Errore anteprima: {e}", fill="red")
+            width = self.canvas.winfo_width() or 400
+            height = self.canvas.winfo_height() or 300
+            self.canvas.create_text(width//2, height//2, text=f"Anteprima non disponibile:\n{e}", fill="red", justify="center")
 
     def on_resize(self, event):
         # Debounce or just redraw? Redrawing fitz on every pixel change is heavy.
