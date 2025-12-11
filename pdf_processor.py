@@ -137,8 +137,25 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             output_path = os.path.join(base_output_dir, output_filename)
 
             new_pdf = fitz.open()
-            for page_num in pages:
-                new_pdf.insert_pdf(pdf_doc, from_page=page_num, to_page=page_num)
+
+            # Optimization: Insert contiguous page ranges instead of single pages
+            if pages:
+                pages.sort()
+                ranges = []
+                if pages:
+                    start = pages[0]
+                    end = pages[0]
+                    for p in pages[1:]:
+                        if p == end + 1:
+                            end = p
+                        else:
+                            ranges.append((start, end))
+                            start = p
+                            end = p
+                    ranges.append((start, end))
+
+                for start, end in ranges:
+                    new_pdf.insert_pdf(pdf_doc, from_page=start, to_page=end)
 
             # Retry loop for saving file (robustness against locks)
             saved = False

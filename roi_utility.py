@@ -92,7 +92,8 @@ class ROIDrawingApp:
 
         self.current_page_index = page_index
         page = self.pdf_doc[page_index]
-        pix = page.get_pixmap(dpi=300)
+        # Optimize rendering DPI for screen (150 vs 300)
+        pix = page.get_pixmap(dpi=150)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         self.tk_image = ImageTk.PhotoImage(img)
 
@@ -107,7 +108,7 @@ class ROIDrawingApp:
         self.config = config_manager.load_config()
         self.canvas.delete("roi")
         self.roi_item_map.clear()  # Pulisce la mappa prima di ridisegnare
-        factor = 300 / 72
+        factor = 150 / 72
         for rule_index, rule in enumerate(self.config.get("classification_rules", [])):
             category_name = rule.get("category_name", "N/A")
             color = rule.get("color", "#FF0000")
@@ -155,7 +156,7 @@ class ROIDrawingApp:
                     self.rect = None
                 return
 
-            factor = 72 / 300
+            factor = 72 / 150
             x0, y0, x1, y1 = min(self.start_x, end_x), min(self.start_y, end_y), max(self.start_x, end_x), max(self.start_y, end_y)
             roi_pdf_coords = [int(c * factor) for c in [x0, y0, x1, y1]]
             self.prompt_and_save_roi(roi_pdf_coords)

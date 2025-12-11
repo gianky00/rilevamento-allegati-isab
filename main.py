@@ -27,6 +27,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.current_index = 0
         self.zoom_level = 1.0
         self.image_ref = None # Keep reference to avoid GC
+        self.current_doc = None # Cached fitz document
 
         # Track renamed status to avoid re-processing or confusion
         # Map path -> new_name (if renamed)
@@ -102,6 +103,11 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self.lbl_status.config(text="Nessun file da revisionare.")
             return
 
+        # Close previous doc if open
+        if self.current_doc:
+            self.current_doc.close()
+            self.current_doc = None
+
         file_path = self.files[self.current_index]
         filename = os.path.basename(file_path)
 
@@ -122,13 +128,22 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self.lbl_status.config(text="File in attesa di revisione.")
             self.entry_suffix.config(state='normal')
 
-        # Render PDF
-        self.render_pdf(file_path)
-
-    def render_pdf(self, path):
+        # Open doc once
         try:
-            doc = fitz.open(path)
-            page = doc[0]
+            self.current_doc = fitz.open(file_path)
+            self.render_pdf()
+        except Exception as e:
+            self.canvas.delete("all")
+            width = self.canvas.winfo_width() or 400
+            height = self.canvas.winfo_height() or 300
+            self.canvas.create_text(width//2, height//2, text=f"Errore apertura PDF:\n{e}", fill="red", justify="center")
+
+    def render_pdf(self, path=None): # Path argument kept for compatibility but ignored in favor of self.current_doc
+        if not self.current_doc:
+            return
+
+        try:
+            page = self.current_doc[0]
 
             # Calculate zoom to fit window width/height with some padding
             canvas_w = self.canvas.winfo_width()
@@ -158,7 +173,6 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self.canvas.create_image(canvas_w//2, canvas_h//2, anchor='center', image=self.image_ref)
             self.canvas.config(scrollregion=self.canvas.bbox("all"))
 
-            doc.close()
         except Exception as e:
             self.canvas.delete("all")
             width = self.canvas.winfo_width() or 400
@@ -178,7 +192,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self.zoom_level *= 1.1
         else:
             self.zoom_level /= 1.1
-        self.render_pdf(self.files[self.current_index])
+        self.render_pdf()
 
     def go_prev(self):
         if self.current_index > 0:
@@ -245,6 +259,8 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             messagebox.showerror("Errore Rinomina", f"{e}", parent=self)
 
     def on_close(self):
+        if self.current_doc:
+            self.current_doc.close()
         self.destroy()
         if self.callback:
             self.callback()
