@@ -38,11 +38,8 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if progress_callback:
                 progress_callback(f"Elaborazione pagina {i + 1}/{total_pages}...")
 
-            # Renderizza la pagina come immagine ad alta risoluzione
-            pix = page.get_pixmap(dpi=300)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
             page_category = "sconosciuto"
+            page_rect = page.rect
 
             # Itera attraverso ogni regola di classificazione
             for rule in config.get("classification_rules", []):
@@ -55,13 +52,28 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
                         continue
 
-                    factor = 300 / 72
-                    crop_box = [int(c * factor) for c in roi]
+                    # Crea un rettangolo per la ROI (coordinate PDF originali)
+                    roi_rect = fitz.Rect(roi)
 
-                    if crop_box[2] > img.width or crop_box[3] > img.height:
+                    # Verifica che la ROI sia all'interno della pagina
+                    if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
                         continue
 
-                    cropped_img = img.crop(crop_box)
+                    # Renderizza SOLO l'area definita dalla ROI
+                    # Matrix(300/72, 300/72) scala da 72 DPI (default PDF) a 300 DPI
+                    mat = fitz.Matrix(300/72, 300/72)
+                    try:
+                        pix = page.get_pixmap(matrix=mat, clip=roi_rect)
+
+                        # Verifica validità pixmap
+                        if pix.width < 1 or pix.height < 1:
+                            continue
+
+                        cropped_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    except Exception as e:
+                        if progress_callback:
+                            progress_callback(f"Errore rendering ROI per '{category_name}': {e}")
+                        continue
 
                     # Tenta l'OCR sull'immagine originale e poi ruotata
                     for angle in [0, -90]: # 0 = nessuna rotazione, -90 = 90 gradi orario
