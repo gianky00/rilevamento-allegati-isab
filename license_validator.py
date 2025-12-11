@@ -6,8 +6,6 @@ import hashlib
 import platform
 from datetime import date
 from cryptography.fernet import Fernet
-import tkinter as tk
-from tkinter import messagebox
 
 # SECURITY WARNING: Keep this key secret!
 LICENSE_SECRET_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
@@ -49,43 +47,69 @@ def get_hardware_id():
     except Exception:
         return "ERROR_GETTING_ID"
 
-def verify_license():
-    """
-    Verifies the license presence and validity.
-    Returns (True, message) if valid, (False, message) otherwise.
-    """
+def _get_license_paths():
+    """Returns the paths for license files."""
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
 
     license_dir = os.path.join(base_dir, "Licenza")
+    return {
+        "dir": license_dir,
+        "config": os.path.join(license_dir, "config.dat"),
+        "rkey": os.path.join(license_dir, "pyarmor.rkey"),
+        "manifest": os.path.join(license_dir, "manifest.json")
+    }
+
+def get_license_info():
+    """
+    Retrieves the decrypted license information without validation.
+    Returns a dictionary with license details or None if error.
+    """
+    paths = _get_license_paths()
+    config_path = paths["config"]
+
+    if not os.path.exists(config_path):
+        return None
+
+    try:
+        with open(config_path, "rb") as f:
+            encrypted_data = f.read()
+
+        cipher = Fernet(LICENSE_SECRET_KEY)
+        decrypted_data = cipher.decrypt(encrypted_data)
+        return json.loads(decrypted_data.decode('utf-8'))
+    except Exception:
+        return None
+
+def verify_license():
+    """
+    Verifies the license presence and validity.
+    Returns (True, message) if valid, (False, message) otherwise.
+    """
+    paths = _get_license_paths()
 
     # Check if directory exists
-    if not os.path.exists(license_dir):
+    if not os.path.exists(paths["dir"]):
         return False, "Cartella 'Licenza' mancante."
 
-    # Paths
-    rkey_path = os.path.join(license_dir, "pyarmor.rkey")
-    config_path = os.path.join(license_dir, "config.dat")
-    manifest_path = os.path.join(license_dir, "manifest.json")
-
     # Check files existence
-    if not os.path.exists(config_path) or not os.path.exists(manifest_path):
+    if not os.path.exists(paths["config"]) or not os.path.exists(paths["manifest"]):
          return False, "File di licenza danneggiati o mancanti."
 
     # 1. Verify Integrity via Manifest
     try:
-        with open(manifest_path, "r") as f:
+        with open(paths["manifest"], "r") as f:
             manifest = json.load(f)
 
         # Verify config.dat hash
-        if _calculate_sha256(config_path) != manifest.get("config.dat"):
+        if _calculate_sha256(paths["config"]) != manifest.get("config.dat"):
             return False, "Integrità licenza compromessa (config.dat)."
 
         # Verify pyarmor.rkey hash if present in manifest and on disk
-        if "pyarmor.rkey" in manifest and os.path.exists(rkey_path):
-             if _calculate_sha256(rkey_path) != manifest.get("pyarmor.rkey"):
+        if "pyarmor.rkey" in manifest and os.path.exists(paths["rkey"]):
+             if _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
                  return False, "Integrità licenza compromessa (pyarmor.rkey)."
 
     except Exception as e:
@@ -93,16 +117,12 @@ def verify_license():
 
     # 2. Decrypt and Validate Config
     try:
-        with open(config_path, "rb") as f:
-            encrypted_data = f.read()
-
-        cipher = Fernet(LICENSE_SECRET_KEY)
-        decrypted_data = cipher.decrypt(encrypted_data)
-        payload = json.loads(decrypted_data.decode('utf-8'))
+        payload = get_license_info()
+        if not payload:
+             return False, "Impossibile leggere i dati della licenza."
 
         # Validate Hardware ID
         current_hw_id = get_hardware_id()
-        # Clean up ID for comparison (remove dots/spaces if needed as per admin tool logic)
         license_hw_id = payload.get("Hardware ID", "")
 
         # Normalize IDs: strip whitespace and trailing dots (common in wmic output)
@@ -111,7 +131,6 @@ def verify_license():
 
         # Check against normalized values
         if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
-             # Using original IDs in error message for clarity on what exactly was seen
              return False, f"Hardware ID non valido.\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}"
 
         # Validate Expiry
