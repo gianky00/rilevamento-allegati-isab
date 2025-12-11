@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
+from tkinterdnd2 import DND_FILES, TkinterDnD
 # Removed unused imports: PIL (Image, ImageTk, ImageDraw)
 import config_manager
 import pdf_processor
@@ -9,6 +10,8 @@ import sys
 import threading
 import queue
 import license_validator
+import pymupdf as fitz
+from PIL import Image, ImageTk
 
 # Un file semplice usato come segnale per comunicare tra l'utility e l'app principale
 SIGNAL_FILE = ".update_signal"
@@ -22,6 +25,14 @@ class MainApp:
         self.root.title("PDF Splitter")
         self.root.state('zoomed')
 
+        # Configure Drag & Drop
+        if hasattr(self.root, 'drop_target_register'):
+            try:
+                self.root.drop_target_register(DND_FILES)
+                self.root.dnd_bind('<<Drop>>', self.on_drop)
+            except Exception as e:
+                print(f"Errore configurazione DND: {e}")
+
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
 
@@ -32,7 +43,7 @@ class MainApp:
         self.notebook.add(self.config_tab, text='Configurazione')
 
         self.config = {}
-        self.pdf_path = ""
+        self.pdf_files = [] # List to hold selected files
         self.log_queue = queue.Queue()
         # Removed unused color_icons cache
 
@@ -49,9 +60,58 @@ class MainApp:
         if auto_file_path and os.path.exists(auto_file_path):
              self.root.after(500, lambda: self.handle_cli_start(auto_file_path))
 
+    def on_drop(self, event):
+        files_to_add = []
+        data = event.data
+        if sys.platform == 'win32':
+             # Windows DND data often comes in braces {} if containing spaces
+             # Simple parser for standard Windows paths
+             import re
+             # Split by space but respect braces
+             # This regex is a simple approximation; handling all edge cases in DND strings is tricky
+             # Usually tkdnd returns paths separated by space, or enclosed in {}
+             # Let's try to parse carefully
+             raw_files = self.root.tk.splitlist(data)
+             for f in raw_files:
+                 if os.path.exists(f):
+                     if os.path.isdir(f):
+                         for root, dirs, files in os.walk(f):
+                             for name in files:
+                                 if name.lower().endswith('.pdf'):
+                                     files_to_add.append(os.path.join(root, name))
+                     elif f.lower().endswith('.pdf'):
+                         files_to_add.append(f)
+        else:
+             # Unix/Linux simple split
+             paths = data.split('\n')
+             for f in paths:
+                 f = f.strip()
+                 if f.startswith('file://'):
+                     f = f[7:]
+                 if os.path.exists(f):
+                      if os.path.isdir(f):
+                         for root, dirs, files in os.walk(f):
+                             for name in files:
+                                 if name.lower().endswith('.pdf'):
+                                     files_to_add.append(os.path.join(root, name))
+                      elif f.lower().endswith('.pdf'):
+                         files_to_add.append(f)
+
+        if files_to_add:
+            self.pdf_files = files_to_add
+            if len(self.pdf_files) == 1:
+                 self.pdf_path_label.config(text=os.path.basename(self.pdf_files[0]))
+            else:
+                 self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
+
+            # Auto-start if ODC is ready (or just let user click? Prompt implied auto-start on selection)
+            # "PDF processing initiates automatically immediately upon file selection"
+            # If multiple files, we should probably start processing them sequentially
+            self.start_processing()
+
     def handle_cli_start(self, file_path):
         """Gestisce l'avvio con file passato da riga di comando."""
-        self.pdf_path = file_path
+        self.pdf_files = [file_path]
         self.pdf_path_label.config(text=os.path.basename(file_path))
 
         # Chiedi ODC
@@ -73,13 +133,11 @@ class MainApp:
             try:
                 os.remove(SIGNAL_FILE)
                 self.load_settings()
-                self.add_log_message("Configurazione aggiornata dall'utility ROI.")
+                self.add_log_message("Configurazione aggiornata dall'utility ROI.", "INFO")
             except OSError as e:
                 print(f"Errore nella gestione del file segnale: {e}")
         # Ripianifica il controllo con frequenza più alta per maggiore reattività
         self.root.after(200, self.check_for_updates)
-
-    # REMOVED: _on_details_resize (Text widget handles wrapping automatically)
 
     def display_license_info(self):
         try:
@@ -94,12 +152,12 @@ class MainApp:
                              f"Scadenza: {scadenza}\n"
                              f"Hardware ID: {hw_id}\n"
                              f"====================")
-                self.add_log_message(info_text)
+                self.add_log_message(info_text, "INFO")
             else:
-                self.add_log_message("File licenza 'config.dat' non trovato o illeggibile.")
+                self.add_log_message("File licenza 'config.dat' non trovato o illeggibile.", "WARNING")
 
         except Exception as e:
-            self.add_log_message(f"Errore nel caricamento info licenza: {e}")
+            self.add_log_message(f"Errore nel caricamento info licenza: {e}", "ERROR")
 
     def setup_processing_tab(self):
         input_frame = ttk.LabelFrame(self.processing_tab, text="Input")
@@ -111,32 +169,66 @@ class MainApp:
         self.pdf_path_label = ttk.Label(input_frame, text="Nessun file selezionato")
         self.pdf_path_label.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
 
-        # REMOVED: start_button
+        # Hint text
+        ttk.Label(input_frame, text="(Puoi trascinare file o cartelle qui)", font=("Arial", 8, "italic")).grid(row=2, column=0, columnspan=2, padx=5, pady=0)
 
         log_frame = ttk.LabelFrame(self.processing_tab, text="Log")
         log_frame.pack(expand=True, fill='both', padx=10, pady=10)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled', height=15)
         self.log_area.pack(expand=True, fill='both', padx=5, pady=5)
 
+        # Configure tags for colors
+        self.log_area.tag_config("ERROR", foreground="red")
+        self.log_area.tag_config("WARNING", foreground="orange")
+        self.log_area.tag_config("INFO", foreground="black") # Assuming white/light background
+        self.log_area.tag_config("PROGRESS", foreground="blue")
+
     def select_pdf(self):
-        path = filedialog.askopenfilename(title="Seleziona file PDF", filetypes=[("PDF Files", "*.pdf")])
-        if path:
-            self.pdf_path = path
-            self.pdf_path_label.config(text=os.path.basename(path))
+        paths = filedialog.askopenfilenames(title="Seleziona file PDF", filetypes=[("PDF Files", "*.pdf")])
+        if paths:
+            self.pdf_files = list(paths)
+            if len(self.pdf_files) == 1:
+                self.pdf_path_label.config(text=os.path.basename(self.pdf_files[0]))
+            else:
+                self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
             # Auto-start processing
             self.start_processing()
 
-    def add_log_message(self, message):
+    def add_log_message(self, message, level="INFO"):
         self.log_area.config(state='normal')
-        self.log_area.insert(tk.END, message + "\n")
+
+        if level == "PROGRESS":
+            # Check if last line was a progress line, if so replace it
+            # We use a mark "progress_start" to track
+            # However, simpler approach: search backwards for "Elaborazione pagina"
+            # Actually, standard scrolledtext append is easier.
+            # To do in-place update:
+            # We can delete the last line if it matches a pattern?
+            # Or use a fixed mark.
+
+            # Let's try to delete the last line if it contains "Elaborazione pagina"
+            last_idx = self.log_area.index("end-2l") # Line before the empty newline at end
+            last_line_text = self.log_area.get(last_idx, "end-1c")
+            if "Elaborazione pagina" in last_line_text:
+                 self.log_area.delete(last_idx, "end-1c")
+
+        self.log_area.insert(tk.END, message + "\n", level)
         self.log_area.config(state='disabled')
         self.log_area.yview(tk.END)
 
     def process_log_queue(self):
         try:
             while True:
-                message = self.log_queue.get_nowait()
-                self.add_log_message(message)
+                item = self.log_queue.get_nowait()
+                if isinstance(item, tuple):
+                     # (message, level)
+                     self.add_log_message(item[0], item[1])
+                elif isinstance(item, dict):
+                    # Command/Action
+                    if item.get('action') == 'show_unknown_dialog':
+                        self.show_unknown_dialog(item['files'], item['odc'])
+                else:
+                     self.add_log_message(item)
         except queue.Empty:
             pass
         finally:
@@ -145,39 +237,167 @@ class MainApp:
     def start_processing(self):
         odc_input = self.odc_var.get().strip()
 
-        # Validazione dell'input ODC
-        if not odc_input.startswith("5400"):
-            messagebox.showerror("Errore ODC", "L'ODC deve iniziare con '5400'.")
+        # Removed strict validation as requested
+        if not odc_input:
+            messagebox.showerror("Errore ODC", "Inserire un codice ODC.")
             return
 
-        remaining_digits = odc_input[4:]
-        if not (remaining_digits.isdigit() and len(remaining_digits) == 6):
-            messagebox.showerror("Errore ODC", "Dopo '5400', devi inserire esattamente 6 cifre numeriche.")
-            return
-
-        full_odc = odc_input
-
-        if not self.pdf_path:
-            messagebox.showerror("Errore", "Per favore, seleziona un file PDF.")
+        if not self.pdf_files:
+            messagebox.showerror("Errore", "Per favore, seleziona almeno un file PDF.")
             return
 
         self.log_area.config(state='normal')
         self.log_area.delete('1.0', tk.END)
         self.log_area.config(state='disabled')
 
-        thread = threading.Thread(target=self.processing_worker, args=(self.pdf_path, full_odc, self.config))
+        # Deep copy list to avoid issues if selection changes during processing
+        files_to_process = list(self.pdf_files)
+
+        thread = threading.Thread(target=self.processing_worker, args=(files_to_process, odc_input, self.config))
         thread.daemon = True
         thread.start()
 
-    def processing_worker(self, pdf_path, odc, config):
-        def progress_callback(message):
-            self.log_queue.put(message)
-        success, message = pdf_processor.process_pdf(pdf_path, odc, config, progress_callback)
-        if not success:
-            self.log_queue.put(f"ERRORE FINALE: {message}")
+    def processing_worker(self, pdf_files, odc, config):
+        unknown_files = []
+
+        for i, pdf_path in enumerate(pdf_files):
+            def progress_callback(message, level="INFO"):
+                self.log_queue.put((message, level))
+
+            progress_callback(f"--- Inizio file {i+1}/{len(pdf_files)}: {os.path.basename(pdf_path)} ---", "INFO")
+
+            success, message, generated = pdf_processor.process_pdf(pdf_path, odc, config, progress_callback)
+
+            if not success:
+                self.log_queue.put((f"ERRORE su {os.path.basename(pdf_path)}: {message}", "ERROR"))
+            else:
+                # Collect unknown files
+                for f in generated:
+                    if f['category'] == 'sconosciuto':
+                        unknown_files.append(f['path'])
+
+        if unknown_files:
+            self.log_queue.put({'action': 'show_unknown_dialog', 'files': unknown_files, 'odc': odc})
 
         # Reset ODC to default on main thread after processing finishes
         self.root.after(0, lambda: self.odc_var.set("5400"))
+
+    def show_unknown_dialog(self, files, odc):
+        # Handle one by one or all? Request: "darmi un anteprima ... alla fine ... inserire il nome"
+        # Since files can be multiple, we probably need a wizard or a list.
+        # Let's do one dialog per file or a dialog with next/prev?
+        # Simpler: Loop through them using a recursive function or managing state.
+
+        if not files:
+            return
+
+        def process_next_unknown(index):
+            if index >= len(files):
+                self.add_log_message("Tutti i file sconosciuti sono stati gestiti.", "INFO")
+                return
+
+            file_path = files[index]
+            self.create_rename_dialog(file_path, odc, lambda: process_next_unknown(index + 1))
+
+        process_next_unknown(0)
+
+    def create_rename_dialog(self, file_path, odc, on_close_callback):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Rinomina File Sconosciuto ({os.path.basename(file_path)})")
+        dialog.attributes('-topmost', True)
+        dialog.grab_set() # Modal
+
+        # Layout
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill='both', expand=True)
+
+        # Preview
+        preview_label = ttk.Label(main_frame, text="Caricamento anteprima...")
+        preview_label.pack(pady=5)
+
+        try:
+            doc = fitz.open(file_path)
+            if len(doc) > 0:
+                page = doc[0]
+                pix = page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5)) # Scale down
+                img_data = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                # Resize for display if too big
+                max_height = 400
+                if img_data.height > max_height:
+                    ratio = max_height / img_data.height
+                    img_data = img_data.resize((int(img_data.width * ratio), int(img_data.height * ratio)))
+
+                tk_img = ImageTk.PhotoImage(img_data)
+                preview_label.config(image=tk_img, text="")
+                preview_label.image = tk_img # Keep ref
+            doc.close()
+        except Exception as e:
+            preview_label.config(text=f"Impossibile caricare anteprima: {e}")
+
+        # Input
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(fill='x', pady=10)
+
+        ttk.Label(input_frame, text="Nome file finale:").pack(anchor='w')
+
+        name_var = tk.StringVar()
+
+        # Display preview of full name
+        preview_name_label = ttk.Label(input_frame, text=f"Anteprima: {odc}_[SUFFIX].pdf")
+        preview_name_label.pack(anchor='w')
+
+        def update_preview(*args):
+            suffix = name_var.get()
+            preview_name_label.config(text=f"Anteprima: {odc}_{suffix}.pdf")
+
+        name_var.trace('w', update_preview)
+
+        entry = ttk.Entry(input_frame, textvariable=name_var)
+        entry.pack(fill='x', pady=5)
+        entry.focus_set()
+
+        def on_confirm():
+            suffix = name_var.get().strip()
+            if not suffix:
+                messagebox.showerror("Errore", "Inserisci un nome.", parent=dialog)
+                return
+
+            new_name = f"{odc}_{suffix}.pdf"
+            dir_path = os.path.dirname(file_path)
+            new_path = os.path.join(dir_path, new_name)
+
+            try:
+                # Prevent self-overwrite if suffix results in same name
+                if os.path.abspath(new_path) == os.path.abspath(file_path):
+                    messagebox.showinfo("Nessuna Modifica", "Il nome del file non è cambiato.", parent=dialog)
+                    dialog.destroy()
+                    on_close_callback()
+                    return
+
+                # Close fitz doc before renaming? Already closed above.
+                if os.path.exists(new_path):
+                     if not messagebox.askyesno("File Esistente", f"Il file {new_name} esiste già. Sovrascrivere?", parent=dialog):
+                         return
+                     os.remove(new_path)
+
+                os.rename(file_path, new_path)
+                self.add_log_message(f"Rinominato sconosciuto in: {new_path}", "INFO")
+                dialog.destroy()
+                on_close_callback()
+            except Exception as e:
+                messagebox.showerror("Errore", f"Errore rinomina: {e}", parent=dialog)
+
+        def on_cancel():
+            # Keep as is
+            dialog.destroy()
+            on_close_callback()
+
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill='x', pady=10)
+        ttk.Button(btn_frame, text="Conferma Rinomina", command=on_confirm).pack(side='right', padx=5)
+        ttk.Button(btn_frame, text="Salta (Mantieni)", command=on_cancel).pack(side='right', padx=5)
+
+        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
 
     # REMOVED: unused create_color_swatch
 
@@ -516,7 +736,12 @@ if __name__ == "__main__":
     if os.path.exists(SIGNAL_FILE):
         os.remove(SIGNAL_FILE) # Pulisce il file segnale all'avvio
 
-    root = tk.Tk()
+    # Changed from tk.Tk() to TkinterDnD.Tk()
+    try:
+        root = TkinterDnD.Tk()
+    except Exception as e:
+        print(f"Attenzione: Impossibile inizializzare Drag & Drop ({e}). Avvio in modalità standard.")
+        root = tk.Tk()
 
     # Check CLI args
     cli_file_path = None

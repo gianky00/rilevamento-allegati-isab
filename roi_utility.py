@@ -183,12 +183,6 @@ class ROIDrawingApp:
                         # Rimuovi il ROI dalla configurazione
                         del rule["rois"][roi_index]
 
-                        # Aggiorna gli indici nella mappa per gli elementi successivi
-                        # Questa è la parte complessa ma cruciale per la consistenza
-                        for item, info in list(self.roi_item_map.items()):
-                            if info["rule_index"] == rule_index and info["roi_index"] > roi_index:
-                                self.roi_item_map[item]["roi_index"] -= 1
-
                         self.save_and_refresh()
                         return # Esci dopo una cancellazione riuscita
 

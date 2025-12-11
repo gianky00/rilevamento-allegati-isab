@@ -14,12 +14,19 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         odc (str): Il numero ODC da utilizzare nel nome del file di output.
         config (dict): Il dizionario di configurazione contenente le impostazioni.
         progress_callback (function, optional): Una funzione da chiamare per riportare i progressi.
+            La signature attesa è `progress_callback(message, level="INFO")`.
 
     Returns:
-        tuple: Una tupla contenente un booleano di successo e un messaggio.
+        tuple: (success (bool), message (str), generated_files (list))
+               generated_files è una lista di dict: {'category': str, 'path': str}
     """
-    if progress_callback:
-        progress_callback("Avvio dell'elaborazione del PDF...")
+    generated_files = []
+
+    def log(msg, level="INFO"):
+        if progress_callback:
+            progress_callback(msg, level)
+
+    log(f"Avvio dell'elaborazione del PDF: {os.path.basename(pdf_path)}", "INFO")
 
     try:
         # Imposta il percorso di Tesseract se specificato
@@ -36,8 +43,9 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
         # Itera su ogni pagina del PDF
         for i, page in enumerate(pdf_doc):
-            if progress_callback:
-                progress_callback(f"Elaborazione pagina {i + 1}/{total_pages}...")
+            # Dynamic log update format implied by repeated calls with same prefix?
+            # The UI handles the "Elaborazione pagina X/Y..." logic if we send a specific message format.
+            log(f"Elaborazione pagina {i + 1}/{total_pages}...", "PROGRESS")
 
             page_category = "sconosciuto"
             page_rect = page.rect
@@ -73,8 +81,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
                         cropped_img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                     except Exception as e:
-                        if progress_callback:
-                            progress_callback(f"Errore rendering ROI per '{category_name}': {e}")
+                        log(f"Errore rendering ROI per '{category_name}': {e}", "WARNING")
                         continue
 
                     # Tenta l'OCR sull'immagine originale e poi ruotata
@@ -84,14 +91,14 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                             img_to_scan = cropped_img.rotate(angle, expand=True)
 
                         try:
-                            ocr_text = pytesseract.image_to_string(img_to_scan, lang='ita').lower()
+                            # Add timeout to prevent indefinite hangs
+                            ocr_text = pytesseract.image_to_string(img_to_scan, lang='ita', timeout=30).lower()
                             # print(f"DEBUG OCR (angle={angle}): '{ocr_text}'")
                             if any(keyword in ocr_text for keyword in keywords):
                                 page_category = category_name
                                 break  # Keyword trovata, esce dal ciclo di rotazione
                         except Exception as ocr_error:
-                            if progress_callback:
-                                progress_callback(f"Avviso OCR per '{category_name}': {ocr_error}")
+                            log(f"Avviso OCR per '{category_name}': {ocr_error}", "WARNING")
 
                     if page_category == category_name:
                         break  # Regola trovata, interrompe il ciclo delle ROI
@@ -104,13 +111,9 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 page_groups[page_category] = []
             page_groups[page_category].append(i)
 
-        if progress_callback:
-            progress_callback("Raggruppamento e salvataggio dei PDF...")
+        log("Raggruppamento e salvataggio dei PDF...", "INFO")
 
         base_output_dir = os.path.dirname(pdf_path)
-        # REMOVED: odc_dir creation
-        # odc_dir = os.path.join(base_output_dir, odc)
-        # os.makedirs(odc_dir, exist_ok=True)
 
         for category, pages in page_groups.items():
             if not pages:
@@ -126,10 +129,6 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                             suffix = category
                         break
 
-            # Sconosciuto logic handling (if needed specific override, or just empty string?)
-            # Prompt said: "quando trovi la categoria "consuntivo" devi rinominare il pdf con "cons" finale"
-            # And: "2. Unknown Category: Currently, unrecognized pages are saved as {ODC}_.pdf. How should these be named? -> cosi come attualmente"
-            # Currently it is `{ODC}_.pdf` for unknown.
             if category == "sconosciuto":
                 output_filename = f"{odc}_.pdf"
             else:
@@ -144,30 +143,29 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.save(output_path)
             new_pdf.close()
 
-            # Log del percorso (ora relativo alla cartella base)
-            if progress_callback:
-                progress_callback(f"Salvato: {output_filename}")
+            abs_path = os.path.abspath(output_path)
+            log(f"Salvato: {abs_path}", "INFO")
+
+            generated_files.append({
+                'category': category,
+                'path': abs_path
+            })
 
         pdf_doc.close()
 
         # Sposta il file originale nella cartella ORIGINALI
-        if progress_callback:
-            progress_callback("Spostamento file originale...")
+        log("Spostamento file originale...", "INFO")
 
         originali_dir = os.path.join(base_output_dir, "ORIGINALI")
         os.makedirs(originali_dir, exist_ok=True)
 
         destination_path = os.path.join(originali_dir, os.path.basename(pdf_path))
 
-        # Gestione sovrascrittura se necessario (shutil.move sovrascrive su POSIX ma su Windows dipende)
-        # Per sicurezza, se esiste lo cancelliamo prima? O lasciamo che fallisca?
-        # User said "devono essere spostati". Usually implies simple move.
         if os.path.exists(destination_path):
             try:
                 os.remove(destination_path)
             except OSError as e:
-                if progress_callback:
-                    progress_callback(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI: {e}")
+                log(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI: {e}", "WARNING")
 
         # Retry loop for file move (robustness against file locks)
         moved = False
@@ -177,23 +175,19 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 moved = True
                 break
             except PermissionError:
-                if progress_callback:
-                    progress_callback(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...")
+                log(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...", "WARNING")
                 time.sleep(1.0)
             except Exception as e:
-                if progress_callback:
-                    progress_callback(f"Errore durante lo spostamento: {e}")
+                log(f"Errore durante lo spostamento: {e}", "ERROR")
                 break
 
         if not moved:
              raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
 
-        if progress_callback:
-            progress_callback("Elaborazione completata.")
+        log("Elaborazione completata.", "INFO")
 
-        return True, "Successo"
+        return True, "Successo", generated_files
 
     except Exception as e:
-        if progress_callback:
-            progress_callback(f"Errore: {e}")
-        return False, str(e)
+        log(f"Errore critico: {e}", "ERROR")
+        return False, str(e), generated_files
