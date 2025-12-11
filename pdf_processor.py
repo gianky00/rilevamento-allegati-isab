@@ -64,13 +64,14 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     # Matrix(300/72, 300/72) scala da 72 DPI (default PDF) a 300 DPI
                     mat = fitz.Matrix(300/72, 300/72)
                     try:
-                        pix = page.get_pixmap(matrix=mat, clip=roi_rect)
+                        # Optimization: Use grayscale (csGRAY) directly from MuPDF to reduce memory and processing
+                        pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
 
                         # Verifica validità pixmap
                         if pix.width < 1 or pix.height < 1:
                             continue
 
-                        cropped_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        cropped_img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                     except Exception as e:
                         if progress_callback:
                             progress_callback(f"Errore rendering ROI per '{category_name}': {e}")
@@ -84,6 +85,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
                         try:
                             ocr_text = pytesseract.image_to_string(img_to_scan, lang='ita').lower()
+                            # print(f"DEBUG OCR (angle={angle}): '{ocr_text}'")
                             if any(keyword in ocr_text for keyword in keywords):
                                 page_category = category_name
                                 break  # Keyword trovata, esce dal ciclo di rotazione
