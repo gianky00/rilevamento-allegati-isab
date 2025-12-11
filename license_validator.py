@@ -4,6 +4,7 @@ import subprocess
 import json
 import hashlib
 import platform
+import uuid
 from datetime import date
 from cryptography.fernet import Fernet
 
@@ -19,31 +20,69 @@ def _calculate_sha256(filepath):
     return sha256_hash.hexdigest()
 
 def get_hardware_id():
-    """Retrieves a unique hardware ID for the machine."""
+    """Retrieves a unique hardware ID for the machine with fallbacks."""
     system = platform.system()
-    try:
-        if system == 'Windows':
-            # Use wmic to get disk serial number
-            cmd = 'wmic diskdrive get serialnumber'
-            output = subprocess.check_output(cmd, shell=True).decode().split('\n')[1].strip()
-            return output
-        elif system == 'Linux':
-            # Use lsblk or machine-id as fallback
-            try:
-                # Try getting root disk serial
-                cmd = "lsblk --nodeps -o name,serial | grep -v 'NAME' | head -n 1 | awk '{print $2}'"
-                output = subprocess.check_output(cmd, shell=True).decode().strip()
-                if output:
-                     return output
-            except: pass
 
-            # Fallback to machine-id
-            if os.path.exists('/etc/machine-id'):
+    if system == 'Windows':
+        # 1. Try WMIC (Legacy)
+        try:
+            cmd = 'wmic diskdrive get serialnumber'
+            # Use shell=True and suppress stderr
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+            parts = output.strip().split('\n')
+            if len(parts) > 1:
+                return parts[1].strip()
+        except Exception:
+            pass # WMIC failed, try next
+
+        # 2. Try PowerShell (Disk Serial)
+        try:
+            cmd = ["powershell", "-NoProfile", "-Command",
+                   "Get-CimInstance -Class Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber"]
+            # Create startupinfo to hide console window
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+            if output:
+                # If multiple disks, taking the first one (splitlines()[0]) is usually stable enough
+                return output.splitlines()[0].strip()
+        except Exception:
+            pass
+
+        # 3. Try PowerShell (System UUID) - Alternative stable ID
+        try:
+            cmd = ["powershell", "-NoProfile", "-Command",
+                   "Get-CimInstance -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID"]
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+            if output:
+                return output
+        except Exception:
+            pass
+
+    elif system == 'Linux':
+        # Use lsblk or machine-id as fallback
+        try:
+            # Try getting root disk serial
+            cmd = "lsblk --nodeps -o name,serial | grep -v 'NAME' | head -n 1 | awk '{print $2}'"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
+            if output:
+                 return output
+        except: pass
+
+        # Fallback to machine-id
+        if os.path.exists('/etc/machine-id'):
+            try:
                 with open('/etc/machine-id', 'r') as f:
                     return f.read().strip()
-            return "UNKNOWN_LINUX_ID"
-        else:
-            return "UNKNOWN_ID"
+            except: pass
+
+    # 4. Final Fallback: Python UUID (MAC Address based)
+    # This works on all platforms and requires no external commands
+    try:
+        return str(uuid.getnode())
     except Exception:
         return "ERROR_GETTING_ID"
 
