@@ -71,13 +71,20 @@ class ROIDrawingApp:
         filepath = filedialog.askopenfilename(title="Seleziona PDF", filetypes=[("PDF Files", "*.pdf")])
         if not filepath: return
         try:
-            self.pdf_doc = fitz.open(filepath)
+            try:
+                self.pdf_doc = fitz.open(filepath)
+            except Exception as e:
+                messagebox.showerror("Errore", f"File non valido o corrotto:\n{e}")
+                return
+
             if self.pdf_doc.page_count > 0:
                 self.current_page_index = 0
                 self.nav_frame.pack(side=tk.LEFT, padx=20)
                 self.render_page(self.current_page_index)
+            else:
+                messagebox.showwarning("Attenzione", "Il PDF selezionato non contiene pagine.")
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile aprire il PDF: {e}")
+            messagebox.showerror("Errore Imprevisto", f"Impossibile aprire il PDF: {e}")
 
     def render_page(self, page_index):
         if not self.pdf_doc or not (0 <= page_index < self.pdf_doc.page_count):

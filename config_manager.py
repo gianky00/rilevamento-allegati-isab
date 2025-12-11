@@ -24,6 +24,17 @@ def load_config():
             return json.load(f)
     except FileNotFoundError:
         return {}
+    except json.JSONDecodeError:
+        print(f"Errore: Il file di configurazione '{CONFIG_FILE}' è corrotto.")
+        try:
+            backup_path = CONFIG_FILE + ".bak"
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            os.rename(CONFIG_FILE, backup_path)
+            print(f"Il file corrotto è stato rinominato in '{backup_path}'. Verrà creata una nuova configurazione.")
+        except OSError as e:
+            print(f"Impossibile rinominare il file di configurazione corrotto: {e}")
+        return {}
 
 def save_config(data):
     """

@@ -3,6 +3,7 @@ import pytesseract
 from PIL import Image
 import os
 import shutil
+import time
 
 def process_pdf(pdf_path, odc, config, progress_callback=None):
     """
@@ -23,10 +24,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
     try:
         # Imposta il percorso di Tesseract se specificato
         tesseract_path = config.get("tesseract_path")
-        if tesseract_path and os.path.exists(tesseract_path):
+        if tesseract_path and os.path.isfile(tesseract_path):
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
         else:
-            raise ValueError("Il percorso di Tesseract non è configurato o non è valido.")
+            raise ValueError("Il percorso di Tesseract non è configurato o non è un file valido.")
 
         pdf_doc = fitz.open(pdf_path)
 
@@ -160,9 +161,30 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         # Per sicurezza, se esiste lo cancelliamo prima? O lasciamo che fallisca?
         # User said "devono essere spostati". Usually implies simple move.
         if os.path.exists(destination_path):
-            os.remove(destination_path)
+            try:
+                os.remove(destination_path)
+            except OSError as e:
+                if progress_callback:
+                    progress_callback(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI: {e}")
 
-        shutil.move(pdf_path, destination_path)
+        # Retry loop for file move (robustness against file locks)
+        moved = False
+        for attempt in range(3):
+            try:
+                shutil.move(pdf_path, destination_path)
+                moved = True
+                break
+            except PermissionError:
+                if progress_callback:
+                    progress_callback(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...")
+                time.sleep(1.0)
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(f"Errore durante lo spostamento: {e}")
+                break
+
+        if not moved:
+             raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
 
         if progress_callback:
             progress_callback("Elaborazione completata.")
