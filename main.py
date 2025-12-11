@@ -16,6 +16,233 @@ from PIL import Image, ImageTk
 # Un file semplice usato come segnale per comunicare tra l'utility e l'app principale
 SIGNAL_FILE = ".update_signal"
 
+class UnknownFilesReviewDialog(tk.Toplevel):
+    def __init__(self, parent, files, odc, on_close_callback):
+        super().__init__(parent)
+        self.title("Revisione File Sconosciuti")
+        self.state('zoomed')
+        self.files = files
+        self.odc = odc
+        self.callback = on_close_callback
+        self.current_index = 0
+        self.zoom_level = 1.0
+        self.image_ref = None # Keep reference to avoid GC
+
+        # Track renamed status to avoid re-processing or confusion
+        # Map path -> new_name (if renamed)
+        self.renamed_map = {}
+
+        # UI Setup
+        self.create_widgets()
+        self.load_current_file()
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def create_widgets(self):
+        # Main container with 2 rows: Preview (expanded) and Controls (fixed)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        # --- Preview Area ---
+        self.preview_frame = ttk.Frame(self)
+        self.preview_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+
+        self.canvas = tk.Canvas(self.preview_frame, bg='gray')
+        self.v_scroll = ttk.Scrollbar(self.preview_frame, orient='vertical', command=self.canvas.yview)
+        self.h_scroll = ttk.Scrollbar(self.preview_frame, orient='horizontal', command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=self.v_scroll.set, xscrollcommand=self.h_scroll.set)
+
+        self.v_scroll.pack(side='right', fill='y')
+        self.h_scroll.pack(side='bottom', fill='x')
+        self.canvas.pack(side='left', fill='both', expand=True)
+
+        # Events
+        self.canvas.bind('<MouseWheel>', self.on_mouse_wheel)
+        self.preview_frame.bind('<Configure>', self.on_resize) # Auto-fit on resize
+
+        # --- Controls Area ---
+        controls_frame = ttk.LabelFrame(self, text="Controlli File")
+        controls_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=10)
+
+        # Navigation
+        nav_frame = ttk.Frame(controls_frame)
+        nav_frame.pack(side='top', fill='x', pady=5)
+
+        self.btn_prev = ttk.Button(nav_frame, text="<< Precedente", command=self.go_prev)
+        self.btn_prev.pack(side='left', padx=5)
+
+        self.lbl_counter = ttk.Label(nav_frame, text="File 1 di N", font=('Arial', 10, 'bold'))
+        self.lbl_counter.pack(side='left', padx=20) # Centered visually via packing order
+
+        self.btn_next = ttk.Button(nav_frame, text="Successivo >>", command=self.go_next)
+        self.btn_next.pack(side='left', padx=5)
+
+        # Rename Input
+        rename_frame = ttk.Frame(controls_frame)
+        rename_frame.pack(side='top', fill='x', pady=10)
+
+        ttk.Label(rename_frame, text="Suffisso Nome:").pack(side='left', padx=5)
+
+        self.var_suffix = tk.StringVar()
+        self.var_suffix.trace("w", self.update_preview_label)
+        self.entry_suffix = ttk.Entry(rename_frame, textvariable=self.var_suffix, width=40)
+        self.entry_suffix.pack(side='left', padx=5)
+
+        self.lbl_preview_name = ttk.Label(rename_frame, text="Anteprima: ...")
+        self.lbl_preview_name.pack(side='left', padx=10)
+
+        ttk.Button(rename_frame, text="Rinomina e Salva", command=self.rename_current).pack(side='right', padx=20)
+
+        # Status
+        self.lbl_status = ttk.Label(controls_frame, text="", foreground="blue")
+        self.lbl_status.pack(side='bottom', anchor='w', padx=5)
+
+    def load_current_file(self):
+        file_path = self.files[self.current_index]
+        filename = os.path.basename(file_path)
+
+        # Update Controls
+        self.lbl_counter.config(text=f"File {self.current_index + 1} di {len(self.files)}: {filename}")
+        self.btn_prev.config(state='normal' if self.current_index > 0 else 'disabled')
+        self.btn_next.config(state='normal' if self.current_index < len(self.files) - 1 else 'disabled')
+
+        # Reset rename field
+        self.var_suffix.set("")
+        self.update_preview_label()
+        self.entry_suffix.focus_set()
+
+        if file_path in self.renamed_map:
+            self.lbl_status.config(text=f"File già rinominato in: {os.path.basename(self.renamed_map[file_path])}")
+            self.entry_suffix.config(state='disabled')
+        else:
+            self.lbl_status.config(text="File in attesa di revisione.")
+            self.entry_suffix.config(state='normal')
+
+        # Render PDF
+        self.render_pdf(file_path)
+
+    def render_pdf(self, path):
+        try:
+            doc = fitz.open(path)
+            page = doc[0]
+
+            # Calculate zoom to fit window width/height with some padding
+            canvas_w = self.canvas.winfo_width()
+            canvas_h = self.canvas.winfo_height()
+
+            if canvas_w <= 1 or canvas_h <= 1:
+                # Initial load, widget might not be sized yet. Use defaults.
+                canvas_w = 800
+                canvas_h = 600
+
+            page_rect = page.rect
+            scale_w = (canvas_w - 40) / page_rect.width
+            scale_h = (canvas_h - 40) / page_rect.height
+
+            # Use the smaller scale to fit entirely, or larger if we want width fit
+            # Default to fit page
+            base_scale = min(scale_w, scale_h) * self.zoom_level
+
+            if base_scale <= 0: base_scale = 1.0 # Safety
+
+            mat = fitz.Matrix(base_scale, base_scale)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            self.image_ref = ImageTk.PhotoImage(img)
+            self.canvas.delete("all")
+            self.canvas.create_image(canvas_w//2, canvas_h//2, anchor='center', image=self.image_ref)
+            self.canvas.config(scrollregion=self.canvas.bbox("all"))
+
+            doc.close()
+        except Exception as e:
+            self.canvas.delete("all")
+            self.canvas.create_text(100, 100, text=f"Errore anteprima: {e}", fill="red")
+
+    def on_resize(self, event):
+        # Debounce or just redraw? Redrawing fitz on every pixel change is heavy.
+        # Just re-centering for now, or reload if significant change?
+        # For simplicity, we just let it be, but ideally we re-render if size changes drastically.
+        # Let's rely on manual zoom or prev/next for full re-render to avoid lag.
+        pass
+
+    def on_mouse_wheel(self, event):
+        # Zoom logic
+        if event.delta > 0:
+            self.zoom_level *= 1.1
+        else:
+            self.zoom_level /= 1.1
+        self.render_pdf(self.files[self.current_index])
+
+    def go_prev(self):
+        if self.current_index > 0:
+            self.current_index -= 1
+            self.zoom_level = 1.0 # Reset zoom on page change
+            self.load_current_file()
+
+    def go_next(self):
+        if self.current_index < len(self.files) - 1:
+            self.current_index += 1
+            self.zoom_level = 1.0
+            self.load_current_file()
+
+    def update_preview_label(self, *args):
+        suffix = self.var_suffix.get()
+        if suffix:
+            self.lbl_preview_name.config(text=f"Anteprima: {self.odc}_{suffix}.pdf")
+        else:
+            self.lbl_preview_name.config(text="Anteprima: ...")
+
+    def rename_current(self):
+        current_path = self.files[self.current_index]
+        suffix = self.var_suffix.get().strip()
+
+        if not suffix:
+            messagebox.showwarning("Attenzione", "Inserire un suffisso.", parent=self)
+            return
+
+        new_name = f"{self.odc}_{suffix}.pdf"
+        dir_path = os.path.dirname(current_path)
+        new_path = os.path.join(dir_path, new_name)
+
+        if os.path.abspath(new_path) == os.path.abspath(current_path):
+             messagebox.showinfo("Info", "Nessun cambiamento nel nome.", parent=self)
+             return
+
+        if os.path.exists(new_path):
+            if not messagebox.askyesno("Sovrascrivi", f"Il file {new_name} esiste già. Sovrascrivere?", parent=self):
+                return
+            try:
+                os.remove(new_path)
+            except OSError as e:
+                messagebox.showerror("Errore", f"Impossibile rimuovere file esistente: {e}", parent=self)
+                return
+
+        try:
+            os.rename(current_path, new_path)
+            self.renamed_map[current_path] = new_path
+            # Update the list logic so we track the NEW path?
+            # Or just mark as done. The file on disk changed.
+            # If we go back/forward, `load_current_file` will look for `current_path`.
+            # But `current_path` no longer exists!
+            # We must update `self.files` list.
+            self.files[self.current_index] = new_path
+
+            self.load_current_file()
+            # Auto-advance if not last
+            if self.current_index < len(self.files) - 1:
+                self.go_next()
+            else:
+                messagebox.showinfo("Completato", "Ultimo file rinominato.", parent=self)
+
+        except Exception as e:
+            messagebox.showerror("Errore Rinomina", f"{e}", parent=self)
+
+    def on_close(self):
+        self.destroy()
+        if self.callback:
+            self.callback()
+
 class MainApp:
     """
     Applicazione principale per la divisione di file PDF basata su regole OCR.
@@ -283,121 +510,14 @@ class MainApp:
         self.root.after(0, lambda: self.odc_var.set("5400"))
 
     def show_unknown_dialog(self, files, odc):
-        # Handle one by one or all? Request: "darmi un anteprima ... alla fine ... inserire il nome"
-        # Since files can be multiple, we probably need a wizard or a list.
-        # Let's do one dialog per file or a dialog with next/prev?
-        # Simpler: Loop through them using a recursive function or managing state.
-
         if not files:
             return
 
-        def process_next_unknown(index):
-            if index >= len(files):
-                self.add_log_message("Tutti i file sconosciuti sono stati gestiti.", "INFO")
-                return
+        def on_close():
+            self.add_log_message("Revisione file sconosciuti completata.", "INFO")
 
-            file_path = files[index]
-            self.create_rename_dialog(file_path, odc, lambda: process_next_unknown(index + 1))
-
-        process_next_unknown(0)
-
-    def create_rename_dialog(self, file_path, odc, on_close_callback):
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"Rinomina File Sconosciuto ({os.path.basename(file_path)})")
-        dialog.attributes('-topmost', True)
-        dialog.grab_set() # Modal
-
-        # Layout
-        main_frame = ttk.Frame(dialog, padding="10")
-        main_frame.pack(fill='both', expand=True)
-
-        # Preview
-        preview_label = ttk.Label(main_frame, text="Caricamento anteprima...")
-        preview_label.pack(pady=5)
-
-        try:
-            doc = fitz.open(file_path)
-            if len(doc) > 0:
-                page = doc[0]
-                pix = page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5)) # Scale down
-                img_data = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                # Resize for display if too big
-                max_height = 400
-                if img_data.height > max_height:
-                    ratio = max_height / img_data.height
-                    img_data = img_data.resize((int(img_data.width * ratio), int(img_data.height * ratio)))
-
-                tk_img = ImageTk.PhotoImage(img_data)
-                preview_label.config(image=tk_img, text="")
-                preview_label.image = tk_img # Keep ref
-            doc.close()
-        except Exception as e:
-            preview_label.config(text=f"Impossibile caricare anteprima: {e}")
-
-        # Input
-        input_frame = ttk.Frame(main_frame)
-        input_frame.pack(fill='x', pady=10)
-
-        ttk.Label(input_frame, text="Nome file finale:").pack(anchor='w')
-
-        name_var = tk.StringVar()
-
-        # Display preview of full name
-        preview_name_label = ttk.Label(input_frame, text=f"Anteprima: {odc}_[SUFFIX].pdf")
-        preview_name_label.pack(anchor='w')
-
-        def update_preview(*args):
-            suffix = name_var.get()
-            preview_name_label.config(text=f"Anteprima: {odc}_{suffix}.pdf")
-
-        name_var.trace('w', update_preview)
-
-        entry = ttk.Entry(input_frame, textvariable=name_var)
-        entry.pack(fill='x', pady=5)
-        entry.focus_set()
-
-        def on_confirm():
-            suffix = name_var.get().strip()
-            if not suffix:
-                messagebox.showerror("Errore", "Inserisci un nome.", parent=dialog)
-                return
-
-            new_name = f"{odc}_{suffix}.pdf"
-            dir_path = os.path.dirname(file_path)
-            new_path = os.path.join(dir_path, new_name)
-
-            try:
-                # Prevent self-overwrite if suffix results in same name
-                if os.path.abspath(new_path) == os.path.abspath(file_path):
-                    messagebox.showinfo("Nessuna Modifica", "Il nome del file non è cambiato.", parent=dialog)
-                    dialog.destroy()
-                    on_close_callback()
-                    return
-
-                # Close fitz doc before renaming? Already closed above.
-                if os.path.exists(new_path):
-                     if not messagebox.askyesno("File Esistente", f"Il file {new_name} esiste già. Sovrascrivere?", parent=dialog):
-                         return
-                     os.remove(new_path)
-
-                os.rename(file_path, new_path)
-                self.add_log_message(f"Rinominato sconosciuto in: {new_path}", "INFO")
-                dialog.destroy()
-                on_close_callback()
-            except Exception as e:
-                messagebox.showerror("Errore", f"Errore rinomina: {e}", parent=dialog)
-
-        def on_cancel():
-            # Keep as is
-            dialog.destroy()
-            on_close_callback()
-
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill='x', pady=10)
-        ttk.Button(btn_frame, text="Conferma Rinomina", command=on_confirm).pack(side='right', padx=5)
-        ttk.Button(btn_frame, text="Salta (Mantieni)", command=on_cancel).pack(side='right', padx=5)
-
-        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        # Open the new full-featured dialog
+        UnknownFilesReviewDialog(self.root, files, odc, on_close)
 
     # REMOVED: unused create_color_swatch
 

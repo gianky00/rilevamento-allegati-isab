@@ -43,7 +43,8 @@ class TestMainLogic(unittest.TestCase):
             patch("main.license_validator.get_license_info", return_value={}),
             patch("os.path.exists", return_value=False),
             patch("license_validator.verify_license", return_value=(True, "OK")),
-            patch("main.MainApp.load_settings")
+            patch("main.MainApp.load_settings"),
+            patch("main.UnknownFilesReviewDialog") # Mock new dialog
         ]
 
         for p in self.patchers:
@@ -120,7 +121,7 @@ class TestMainLogic(unittest.TestCase):
 
     def test_process_log_queue_dialog(self):
         # Test queue processing triggers show_unknown_dialog
-        self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': [], 'odc': '123'})
+        self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': ['a.pdf'], 'odc': '123'})
 
         with patch.object(self.app, 'show_unknown_dialog') as mock_show:
             self.app.process_log_queue()
