@@ -83,33 +83,8 @@ class MainApp:
 
     def display_license_info(self):
         try:
-            # Recupera informazioni dalla licenza crittografata
-            if getattr(sys, 'frozen', False):
-                base_dir = os.path.dirname(sys.executable)
-            else:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-
-            license_dir = os.path.join(base_dir, "Licenza")
-            config_path = os.path.join(license_dir, "config.dat")
-
-            if os.path.exists(config_path):
-                # Usa license_validator per decifrare (riusiamo la logica interna se possibile,
-                # ma qui importiamo e decifriamo manualmente per semplicità o usiamo una funzione helper se esistesse)
-                # Poiché license_validator ha la chiave, usiamo Fernet direttamente qui copiando la chiave?
-                # Meglio: espandiamo license_validator per restituire i dati info.
-
-                # Importiamo la chiave da license_validator
-                from license_validator import LICENSE_SECRET_KEY
-                from cryptography.fernet import Fernet
-                import json
-
-                with open(config_path, "rb") as f:
-                    encrypted_data = f.read()
-
-                cipher = Fernet(LICENSE_SECRET_KEY)
-                decrypted_data = cipher.decrypt(encrypted_data)
-                payload = json.loads(decrypted_data.decode('utf-8'))
-
+            payload = license_validator.get_license_info()
+            if payload:
                 cliente = payload.get('Cliente', 'N/A')
                 scadenza = payload.get('Scadenza Licenza', 'N/A')
                 hw_id = payload.get('Hardware ID', 'N/A')
@@ -121,7 +96,7 @@ class MainApp:
                              f"====================")
                 self.add_log_message(info_text)
             else:
-                self.add_log_message("File licenza 'config.dat' non trovato.")
+                self.add_log_message("File licenza 'config.dat' non trovato o illeggibile.")
 
         except Exception as e:
             self.add_log_message(f"Errore nel caricamento info licenza: {e}")

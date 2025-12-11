@@ -14,7 +14,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 ENTRY_SCRIPT = "main.py"
 APP_NAME = "PDF-Splitter"
-DIST_DIR = "dist"
+DIST_DIR = os.path.join(ROOT_DIR, "dist")
 OBF_DIR = os.path.join(DIST_DIR, "obfuscated")
 BUILD_LOG = "build_log.txt"
 
@@ -38,9 +38,13 @@ def log_and_print(message, level="INFO"):
     elif level == "WARNING":
         logger.warning(message)
 
-def run_command(cmd, cwd=None):
+def run_command(cmd, cwd=None, shell=False, env=None):
     """Esegue un comando shell stampandolo a video in tempo reale."""
-    log_and_print(f"Running: {' '.join(cmd)}")
+    log_and_print(f"Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
+
+    # Use passed env or default to system env
+    if env is None:
+        env = os.environ.copy()
 
     process = subprocess.Popen(
         cmd,
@@ -49,7 +53,9 @@ def run_command(cmd, cwd=None):
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        universal_newlines=True
+        universal_newlines=True,
+        shell=shell,
+        env=env
     )
 
     while True:
@@ -84,13 +90,13 @@ def verify_environment():
     log_and_print("--- Step 1/7: Environment Diagnostics ---")
     log_and_print(f"Running with Python: {sys.executable}")
 
-    # Verify PyInstaller availability
+    # Verify Nuitka availability
     try:
-        import PyInstaller
-        log_and_print(f"PyInstaller verified at: {os.path.dirname(PyInstaller.__file__)}")
+        import nuitka
+        log_and_print(f"Nuitka verified at: {os.path.dirname(nuitka.__file__)}")
     except ImportError:
-        log_and_print("CRITICAL: PyInstaller module not found in this environment!", "ERROR")
-        log_and_print("Please run: pip install pyinstaller", "ERROR")
+        log_and_print("CRITICAL: Nuitka module not found in this environment!", "ERROR")
+        log_and_print("Please run: pip install nuitka zstandard", "ERROR")
         sys.exit(1)
 
     iscc_path = shutil.which("ISCC.exe")
@@ -108,16 +114,13 @@ def verify_environment():
     if iscc_path:
         log_and_print(f"Inno Setup Compiler found: {iscc_path}")
     else:
-        log_and_print("CRITICAL: Inno Setup Compiler (ISCC.exe) not found!", "ERROR")
-        if os.name == 'nt':
-            log_and_print("Please install Inno Setup 6.", "ERROR")
-            sys.exit(1)
+        log_and_print("WARNING: Inno Setup Compiler (ISCC.exe) not found! Installer step will be skipped.", "WARNING")
 
     return iscc_path
 
 def build():
     try:
-        log_and_print("Starting Build Process...")
+        log_and_print("Starting Build Process with Nuitka...")
 
         kill_existing_process()
 
@@ -164,79 +167,115 @@ def build():
         if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
              shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
 
-        log_and_print("\n--- Step 5/7: Packaging with PyInstaller ---")
-        sep = ";" if os.name == 'nt' else ":"
+        log_and_print("\n--- Step 5/7: Packaging with Nuitka ---")
+
+        # Identify PyArmor runtime
         runtime_dir = None
         for name in os.listdir(OBF_DIR):
             if name.startswith("pyarmor_runtime_") and os.path.isdir(os.path.join(OBF_DIR, name)):
                 runtime_dir = name
                 break
+
         if not runtime_dir:
             log_and_print("ERROR: PyArmor runtime folder not found inside obfuscated dir!", "ERROR")
             sys.exit(1)
 
-        # PyInstaller Command
-        cmd_pyinstaller = [
-            sys.executable, "-m", "PyInstaller",
-            "--name", APP_NAME,
-            "--onedir",
-            "--console", # Keep console for debugging initially, switch to --windowed for release
-            "--clean",
-            "--noconfirm",
-            "--distpath", DIST_DIR,
-            "--workpath", os.path.join(DIST_DIR, "build"),
-            f"--paths={OBF_DIR}",
+        # Build output directory
+        # nuitka_output_dir = os.path.join(DIST_DIR, f"{APP_NAME}.dist") # Not directly used in command
+
+        # Nuitka Command
+        cmd_nuitka = [
+            sys.executable, "-m", "nuitka",
+            "--standalone",
+            f"--output-dir={DIST_DIR}",
+            "--enable-plugin=tk-inter",
+            # Include the pyarmor runtime package
+            f"--include-package={runtime_dir}",
+            # Point to the entry script in the OBFUSCATED directory
+            os.path.join(OBF_DIR, ENTRY_SCRIPT)
         ]
 
-        # Add PyArmor runtime
-        cmd_pyinstaller.extend(["--add-data", f"{os.path.join(OBF_DIR, runtime_dir)}{sep}{runtime_dir}"])
+        # Windows-specific options
+        if os.name == 'nt':
+             cmd_nuitka.append("--disable-console")
 
-        # Hidden imports relevant to this project
-        hidden_imports = [
-            "tkinter", "tkinter.ttk", "tkinter.messagebox", "tkinter.filedialog",
-            "tkinter.scrolledtext", "tkinter.colorchooser", "tkinter.simpledialog",
-            "PIL", "fitz", "pytesseract", "cffi",
-            "cryptography", "cryptography.fernet", "cryptography.hazmat.backends",
-            "cryptography.hazmat.bindings", "cryptography.hazmat.primitives",
-            "config_manager", "pdf_processor", "license_validator"
+        # --- Fix for Hidden Imports ---
+        # Since code is obfuscated, Nuitka cannot scan imports. We must explicitly include them.
+        # Based on previous PyInstaller hidden_imports list.
+        explicit_modules = [
+            "fitz", # PyMuPDF (might be 'pymupdf' or 'fitz' depending on install, but 'fitz' is the import)
+            "PIL", # Pillow
+            "pytesseract",
+            "cffi",
+            "cryptography",
+            # Internal modules (obfuscated ones) should be found via PYTHONPATH, but
+            # explicit inclusion ensures they are treated as modules if not imported by entry point (entry imports them though).
+            # "config_manager", "pdf_processor", "license_validator" -> these are in OBF_DIR and imported by main.py.
+            # However, Nuitka might need help if PyArmor runtime hides the import structure.
+            # Safest is to rely on PYTHONPATH for local modules, but force external packages.
         ]
 
-        for imp in hidden_imports:
-            cmd_pyinstaller.extend(["--hidden-import", imp])
+        for mod in explicit_modules:
+            cmd_nuitka.append(f"--include-package={mod}")
 
-        # Point to the obfuscated entry script
-        cmd_pyinstaller.append(os.path.join(OBF_DIR, ENTRY_SCRIPT))
+        # Add PYTHONPATH to include OBF_DIR so Nuitka finds the modules there
+        env = os.environ.copy()
+        env["PYTHONPATH"] = OBF_DIR + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
 
-        run_command(cmd_pyinstaller)
+        # Important: Run from OBF_DIR so that `import config_manager` works relative to current dir
+        # if Nuitka uses cwd for resolution.
+        run_command(cmd_nuitka, cwd=OBF_DIR, env=env)
+
+        # Rename/Move the output folder
+        default_dist_name = "main.dist"
+        final_dist_path = os.path.join(DIST_DIR, APP_NAME)
+
+        if os.path.exists(final_dist_path):
+            shutil.rmtree(final_dist_path)
+
+        generated_dist = os.path.join(DIST_DIR, default_dist_name)
+        if os.path.exists(generated_dist):
+            shutil.move(generated_dist, final_dist_path)
+        else:
+            log_and_print(f"ERROR: Nuitka output directory '{generated_dist}' not found.", "ERROR")
+            sys.exit(1)
+
+        # Rename the executable
+        default_exe = os.path.join(final_dist_path, "main.exe" if os.name == 'nt' else "main.bin")
+        final_exe = os.path.join(final_dist_path, f"{APP_NAME}.exe" if os.name == 'nt' else APP_NAME)
+        if os.path.exists(default_exe):
+            shutil.move(default_exe, final_exe)
 
         log_and_print("\n--- Step 6/7: Post-Build Cleanup & License Setup ---")
 
-        output_folder = os.path.abspath(os.path.join(DIST_DIR, APP_NAME))
-
-        # Ensure 'Licenza' folder exists in output (empty is fine, it will be populated by user or admin)
-        lic_dest_dir = os.path.join(output_folder, "Licenza")
+        # Ensure 'Licenza' folder exists in output
+        lic_dest_dir = os.path.join(final_dist_path, "Licenza")
         os.makedirs(lic_dest_dir, exist_ok=True)
 
         # Also copy config.json to output root if needed
         if os.path.exists(os.path.join(OBF_DIR, "config.json")):
-             shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(output_folder, "config.json"))
+             shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
 
         log_and_print("\n--- Step 7/7: Compiling Installer with Inno Setup ---")
 
-        iss_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "setup_script.iss"))
+        if iscc_exe:
+            iss_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "setup_script.iss"))
 
-        if not os.path.exists(iss_path):
-            log_and_print(f"Setup script not found at: {iss_path}", "ERROR")
-            sys.exit(1)
+            if not os.path.exists(iss_path):
+                log_and_print(f"Setup script not found at: {iss_path}", "ERROR")
+                sys.exit(1)
 
-        cmd_iscc = [
-            iscc_exe,
-            f"/DMyAppVersion=1.0.0",
-            f"/DBuildDir={output_folder}",
-            iss_path
-        ]
+            # Inno Setup expects build dir passed as define
+            cmd_iscc = [
+                iscc_exe,
+                f"/DMyAppVersion=1.0.0",
+                f"/DBuildDir={final_dist_path}",
+                iss_path
+            ]
 
-        run_command(cmd_iscc)
+            run_command(cmd_iscc, env=env) # Passing env just in case
+        else:
+             log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
         log_and_print("="*60)
         log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
