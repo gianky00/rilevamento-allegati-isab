@@ -138,11 +138,7 @@ class TestMainLogic(unittest.TestCase):
 
     # --- New Tests for UnknownFilesReviewDialog Logic ---
 
-    # We test the dialog class in isolation by patching Toplevel and other tk widgets in setUp
-    # But since UnknownFilesReviewDialog is in main.py, we can instantiate it if dependencies are mocked.
-
     def test_unknown_dialog_empty_files(self):
-        # Verify show_unknown_dialog handles empty list
         with patch("main.UnknownFilesReviewDialog") as mock_dialog_class:
             self.app.show_unknown_dialog([], "ODC")
             mock_dialog_class.assert_not_called()
