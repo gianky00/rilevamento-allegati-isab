@@ -3,6 +3,7 @@ import pytesseract
 from PIL import Image
 import os
 import shutil
+import time
 
 def process_pdf(pdf_path, odc, config, progress_callback=None):
     """
@@ -23,10 +24,10 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
     try:
         # Imposta il percorso di Tesseract se specificato
         tesseract_path = config.get("tesseract_path")
-        if tesseract_path and os.path.exists(tesseract_path):
+        if tesseract_path and os.path.isfile(tesseract_path):
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
         else:
-            raise ValueError("Il percorso di Tesseract non è configurato o non è valido.")
+            raise ValueError("Il percorso di Tesseract non è configurato o non è un file valido.")
 
         pdf_doc = fitz.open(pdf_path)
 
@@ -38,11 +39,8 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if progress_callback:
                 progress_callback(f"Elaborazione pagina {i + 1}/{total_pages}...")
 
-            # Renderizza la pagina come immagine ad alta risoluzione
-            pix = page.get_pixmap(dpi=300)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
             page_category = "sconosciuto"
+            page_rect = page.rect
 
             # Itera attraverso ogni regola di classificazione
             for rule in config.get("classification_rules", []):
@@ -55,13 +53,28 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
                         continue
 
-                    factor = 300 / 72
-                    crop_box = [int(c * factor) for c in roi]
+                    # Crea un rettangolo per la ROI (coordinate PDF originali)
+                    roi_rect = fitz.Rect(roi)
 
-                    if crop_box[2] > img.width or crop_box[3] > img.height:
+                    # Verifica che la ROI sia all'interno della pagina
+                    if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
                         continue
 
-                    cropped_img = img.crop(crop_box)
+                    # Renderizza SOLO l'area definita dalla ROI
+                    # Matrix(300/72, 300/72) scala da 72 DPI (default PDF) a 300 DPI
+                    mat = fitz.Matrix(300/72, 300/72)
+                    try:
+                        pix = page.get_pixmap(matrix=mat, clip=roi_rect)
+
+                        # Verifica validità pixmap
+                        if pix.width < 1 or pix.height < 1:
+                            continue
+
+                        cropped_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    except Exception as e:
+                        if progress_callback:
+                            progress_callback(f"Errore rendering ROI per '{category_name}': {e}")
+                        continue
 
                     # Tenta l'OCR sull'immagine originale e poi ruotata
                     for angle in [0, -90]: # 0 = nessuna rotazione, -90 = 90 gradi orario
@@ -148,9 +161,30 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         # Per sicurezza, se esiste lo cancelliamo prima? O lasciamo che fallisca?
         # User said "devono essere spostati". Usually implies simple move.
         if os.path.exists(destination_path):
-            os.remove(destination_path)
+            try:
+                os.remove(destination_path)
+            except OSError as e:
+                if progress_callback:
+                    progress_callback(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI: {e}")
 
-        shutil.move(pdf_path, destination_path)
+        # Retry loop for file move (robustness against file locks)
+        moved = False
+        for attempt in range(3):
+            try:
+                shutil.move(pdf_path, destination_path)
+                moved = True
+                break
+            except PermissionError:
+                if progress_callback:
+                    progress_callback(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...")
+                time.sleep(1.0)
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(f"Errore durante lo spostamento: {e}")
+                break
+
+        if not moved:
+             raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
 
         if progress_callback:
             progress_callback("Elaborazione completata.")

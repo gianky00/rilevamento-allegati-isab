@@ -53,6 +53,10 @@ class ROIDrawingApp:
         self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
 
+        # Keyboard Navigation
+        self.root.bind("<Left>", lambda e: self.prev_page())
+        self.root.bind("<Right>", lambda e: self.next_page())
+
         self.rect = None
         self.start_x = None
         self.start_y = None
@@ -67,13 +71,20 @@ class ROIDrawingApp:
         filepath = filedialog.askopenfilename(title="Seleziona PDF", filetypes=[("PDF Files", "*.pdf")])
         if not filepath: return
         try:
-            self.pdf_doc = fitz.open(filepath)
+            try:
+                self.pdf_doc = fitz.open(filepath)
+            except Exception as e:
+                messagebox.showerror("Errore", f"File non valido o corrotto:\n{e}")
+                return
+
             if self.pdf_doc.page_count > 0:
                 self.current_page_index = 0
                 self.nav_frame.pack(side=tk.LEFT, padx=20)
                 self.render_page(self.current_page_index)
+            else:
+                messagebox.showwarning("Attenzione", "Il PDF selezionato non contiene pagine.")
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile aprire il PDF: {e}")
+            messagebox.showerror("Errore Imprevisto", f"Impossibile aprire il PDF: {e}")
 
     def render_page(self, page_index):
         if not self.pdf_doc or not (0 <= page_index < self.pdf_doc.page_count):
@@ -105,7 +116,7 @@ class ROIDrawingApp:
                 x0, y0, x1, y1 = [c * factor for c in roi]
 
                 # Creazione degli elementi grafici
-                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags="roi", fill="", stipple="gray12")
+                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, activewidth=4, dash=(5, 3), tags="roi", fill="", stipple="gray12")
                 text_id = self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags="roi")
 
                 # Popolamento della mappa

@@ -1,0 +1,57 @@
+2025-12-11 15:34:21,996 - INFO - Starting Build Process with Nuitka...
+2025-12-11 15:34:21,996 - INFO - --- Step 0/7: Cleaning active processes ---
+2025-12-11 15:34:22,215 - INFO - Killed active PDF-Splitter.exe instances (if any).
+2025-12-11 15:34:23,216 - INFO - --- Step 1/7: Environment Diagnostics ---
+2025-12-11 15:34:23,216 - INFO - Running with Python: C:\Program Files\Python312\python.exe
+2025-12-11 15:34:23,218 - INFO - Nuitka verified at: C:\Users\Coemi\AppData\Roaming\Python\Python312\site-packages\nuitka
+2025-12-11 15:34:23,226 - INFO - Inno Setup Compiler found: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
+2025-12-11 15:34:23,228 - INFO - 
+--- Step 3/7: Obfuscating with PyArmor ---
+2025-12-11 15:34:23,228 - INFO - Running: C:\Program Files\Python312\python.exe -m pyarmor.cli gen -O C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\main.py C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\pdf_processor.py C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\config_manager.py C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\roi_utility.py C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\license_validator.py
+2025-12-11 15:34:23,382 - INFO - [CMD] INFO     Python 3.12.10
+2025-12-11 15:34:23,383 - INFO - [CMD] INFO     Pyarmor 9.2.0 (basic), 009329, licenza_armor_basic
+2025-12-11 15:34:23,437 - INFO - [CMD] INFO     Platform windows.x86_64
+2025-12-11 15:34:23,438 - INFO - [CMD] INFO     search inputs ...
+2025-12-11 15:34:23,438 - INFO - [CMD] INFO     find script C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\main.py
+2025-12-11 15:34:23,438 - INFO - [CMD] INFO     find script C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\pdf_processor.py
+2025-12-11 15:34:23,438 - INFO - [CMD] INFO     find script C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\config_manager.py
+2025-12-11 15:34:23,439 - INFO - [CMD] INFO     find script C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\roi_utility.py
+2025-12-11 15:34:23,439 - INFO - [CMD] INFO     find script C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\license_validator.py
+2025-12-11 15:34:23,439 - INFO - [CMD] INFO     find 5 top resources
+2025-12-11 15:34:31,889 - INFO - [CMD] INFO     start to generate runtime files
+2025-12-11 15:34:31,890 - INFO - [CMD] INFO     target platforms {'windows.amd64'}
+2025-12-11 15:34:31,893 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\pyarmor_runtime_009329\pyarmor_runtime.pyd
+2025-12-11 15:34:31,897 - INFO - [CMD] INFO     generate runtime files OK
+2025-12-11 15:34:31,897 - INFO - [CMD] INFO     start to obfuscate scripts
+2025-12-11 15:34:31,897 - INFO - [CMD] INFO     process resource "main"
+2025-12-11 15:34:31,898 - INFO - [CMD] INFO     obfuscating file main.py
+2025-12-11 15:34:31,995 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\main.py
+2025-12-11 15:34:31,996 - INFO - [CMD] INFO     process resource "pdf_processor"
+2025-12-11 15:34:31,997 - INFO - [CMD] INFO     obfuscating file pdf_processor.py
+2025-12-11 15:34:32,017 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\pdf_processor.py
+2025-12-11 15:34:32,017 - INFO - [CMD] INFO     process resource "config_manager"
+2025-12-11 15:34:32,018 - INFO - [CMD] INFO     obfuscating file config_manager.py
+2025-12-11 15:34:32,031 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\config_manager.py
+2025-12-11 15:34:32,031 - INFO - [CMD] INFO     process resource "roi_utility"
+2025-12-11 15:34:32,032 - INFO - [CMD] INFO     obfuscating file roi_utility.py
+2025-12-11 15:34:32,089 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\roi_utility.py
+2025-12-11 15:34:32,090 - INFO - [CMD] INFO     process resource "license_validator"
+2025-12-11 15:34:32,091 - INFO - [CMD] INFO     obfuscating file license_validator.py
+2025-12-11 15:34:32,120 - INFO - [CMD] INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\license_validator.py
+2025-12-11 15:34:32,120 - INFO - [CMD] INFO     obfuscate scripts OK
+2025-12-11 15:34:32,159 - INFO - 
+--- Step 4/7: Preparing Assets for Packaging ---
+2025-12-11 15:34:32,162 - INFO - 
+--- Step 5/7: Packaging with Nuitka ---
+2025-12-11 15:34:32,162 - INFO - Running: C:\Program Files\Python312\python.exe -m nuitka --standalone --output-dir=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist --enable-plugin=tk-inter --include-package=pyarmor_runtime_009329 C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\main.py --disable-console --include-package=fitz --include-package=PIL --include-package=pytesseract --include-package=cffi --include-package=cryptography
+2025-12-11 15:34:32,513 - INFO - [CMD] Nuitka-Options: Used command line options:
+2025-12-11 15:34:32,513 - INFO - [CMD] Nuitka-Options:   --standalone --output-dir=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist --enable-plugin=tk-inter --include-package=pyarmor_runtime_009329 ~\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\main.py --disable-console --include-package=fitz --include-package=PIL --include-package=pytesseract --include-package=cffi --include-package=cryptography
+2025-12-11 15:34:32,544 - INFO - [CMD] Nuitka:WARNING: The old console option '--disable-console' should not be given anymore, use '--windows-console-mode=disable' instead. It also has the extra mode 'attach' to consider.
+2025-12-11 15:34:34,177 - INFO - [CMD] Nuitka: Starting Python compilation with:
+2025-12-11 15:34:34,177 - INFO - [CMD] Nuitka:   Version '2.8.9' on Python 3.12 (flavor 'CPython Official') commercial grade 'not installed'.
+2025-12-11 15:36:13,052 - INFO - [CMD] Nuitka-Plugins:WARNING: anti-bloat: Undesirable import of 'setuptools' in 'cffi.setuptools_ext' (at '~\AppData\Roaming\Python\Python312\site-packages\cffi\setuptools_ext.py:96') encountered. It may slow down compilation.
+2025-12-11 15:36:13,052 - INFO - [CMD] Nuitka-Plugins:WARNING:     Complex topic! More information can be found at https://nuitka.net/info/unwanted-module.html
+2025-12-11 15:36:13,086 - INFO - [CMD] Nuitka-Plugins:WARNING: anti-bloat: Undesirable import of 'setuptools' in 'cffi.setuptools_ext' (at '~\AppData\Roaming\Python\Python312\site-packages\cffi\setuptools_ext.py:121') encountered. It may slow down compilation.
+2025-12-11 15:36:13,087 - INFO - [CMD] Nuitka-Plugins:WARNING:     Complex topic! More information can be found at https://nuitka.net/info/unwanted-module.html
+2025-12-11 15:36:13,155 - INFO - [CMD] Nuitka-Plugins:WARNING: anti-bloat: Undesirable import of 'setuptools' in 'cffi.setuptools_ext' (at '~\AppData\Roaming\Python\Python312\site-packages\cffi\setuptools_ext.py:164') encountered. It may slow down compilation.
+2025-12-11 15:36:13,155 - INFO - [CMD] Nuitka-Plugins:WARNING:     Complex topic! More information can be found at https://nuitka.net/info/unwanted-module.html
