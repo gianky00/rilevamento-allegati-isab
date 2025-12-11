@@ -5,3 +5,4 @@ cryptography
 pyarmor
 nuitka
 zstandard
+tkinterdnd2
