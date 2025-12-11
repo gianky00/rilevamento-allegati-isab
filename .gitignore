@@ -117,13 +117,11 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
+/dist
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
+config.json
 # Pyre type checker
 .pyre/
-src/config.json
-infoLicense.txt
