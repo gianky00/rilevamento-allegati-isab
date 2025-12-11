@@ -53,6 +53,10 @@ class ROIDrawingApp:
         self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
 
+        # Keyboard Navigation
+        self.root.bind("<Left>", lambda e: self.prev_page())
+        self.root.bind("<Right>", lambda e: self.next_page())
+
         self.rect = None
         self.start_x = None
         self.start_y = None
@@ -105,7 +109,7 @@ class ROIDrawingApp:
                 x0, y0, x1, y1 = [c * factor for c in roi]
 
                 # Creazione degli elementi grafici
-                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, dash=(5, 3), tags="roi", fill="", stipple="gray12")
+                rect_id = self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2, activewidth=4, dash=(5, 3), tags="roi", fill="", stipple="gray12")
                 text_id = self.canvas.create_text(x0 + 5, y0 + 5, text=category_name, fill=color, font=("Arial", 10, "bold"), anchor="nw", tags="roi")
 
                 # Popolamento della mappa
