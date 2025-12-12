@@ -47,7 +47,7 @@ def update_grace_timestamp():
         cipher = Fernet(GRACE_PERIOD_KEY)
         encrypted_time = cipher.encrypt(current_time.encode('utf-8'))
 
-        # Ensure dir exists (it should, but safety first)
+        # Ensure dir exists
         os.makedirs(os.path.dirname(token_path), exist_ok=True)
 
         with open(token_path, "wb") as f:
@@ -101,7 +101,8 @@ def check_grace_period():
 def run_update():
     """
     Checks for license updates on GitHub matching the Hardware ID.
-    - Syncs files: Downloads if 200, Deletes local if 404 (Revocation).
+    - Syncs files: Downloads ONLY if ALL required files are available (200 OK).
+    - If any file is missing (404), NO changes are made to local files (Prevent deletion).
     - Handles Offline: Checks grace period.
     """
     print("Controllo aggiornamenti licenza in corso...")
@@ -123,52 +124,61 @@ def run_update():
         "Accept": "application/vnd.github.v3.raw"
     }
 
+    # Files we absolutely need to consider it a valid update
     files_map = {
         "config.dat": "config.dat",
         "pyarmor.rkey": "pyarmor.rkey",
         "manifest": "manifest.json"
     }
 
+    downloaded_content = {}
+    incomplete_update = False
     network_error_occurred = False
 
+    # 1. Attempt to download all files into memory
     for remote_name, local_name in files_map.items():
         url = f"{base_url}/{remote_name}"
-        full_local_path = os.path.join(license_dir, local_name)
 
         try:
             response = requests.get(url, headers=headers, timeout=10)
 
             if response.status_code == 200:
-                # Found: Update local
-                with open(full_local_path, "wb") as f:
-                    f.write(response.content)
-                # print(f"Scaricato: {local_name}")
-
+                downloaded_content[local_name] = response.content
             elif response.status_code == 404:
-                # Not Found (Revoked?): Delete local
-                if os.path.exists(full_local_path):
-                    try:
-                        os.remove(full_local_path)
-                        print(f"Rimosso (Revocato): {local_name}")
-                    except OSError as e:
-                        print(f"Errore rimozione {local_name}: {e}")
+                print(f"File remoto mancante: {remote_name} (Status: 404)")
+                incomplete_update = True
             else:
-                # Server Error or other: Log and ignore
                 print(f"Risposta imprevista per {remote_name}: {response.status_code}")
+                incomplete_update = True
 
         except requests.RequestException as e:
-            print(f"Errore connessione: {e}")
+            print(f"Errore connessione per {remote_name}: {e}")
             network_error_occurred = True
-            break # Stop trying other files if network is down
+            break
 
     if network_error_occurred:
-        # Fallback to Grace Period Logic
+        # Fallback to Grace Period Logic (Offline)
         print("Impossibile contattare server licenze. Controllo validità offline...")
-        check_grace_period() # Will raise exception if expired
+        check_grace_period()
     else:
-        # Success (Online): Update timestamp
-        update_grace_timestamp()
-        print("Aggiornamento licenza completato.")
+        # Network is UP.
+        # Check if we have a complete update set.
+        if incomplete_update:
+            print("Aggiornamento saltato: Set di file remoti incompleto. Vengono mantenuti i file locali.")
+            # Even if incomplete, we are Online, so we update the grace timestamp.
+            # This means "We checked, and you are allowed to continue using what you have (if valid)".
+            update_grace_timestamp()
+        else:
+            # Complete update available. Write to disk.
+            try:
+                for local_name, content in downloaded_content.items():
+                    full_path = os.path.join(license_dir, local_name)
+                    with open(full_path, "wb") as f:
+                        f.write(content)
+                print("Aggiornamento licenza completato.")
+                update_grace_timestamp()
+            except OSError as e:
+                print(f"Errore scrittura file licenza: {e}")
 
 if __name__ == "__main__":
     try:

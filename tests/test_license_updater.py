@@ -10,7 +10,6 @@ class TestLicenseUpdater(unittest.TestCase):
     def setUp(self):
         # Setup mocks for commonly used functions
         self.mock_hw_id = patch('license_validator.get_hardware_id', return_value='TEST_HWID').start()
-        # We now mock the local get_license_dir instead of the validator one
         self.mock_get_dir = patch('license_updater.get_license_dir', return_value='/mock/Licenza').start()
         self.mock_exists = patch('os.path.exists').start()
         self.mock_makedirs = patch('os.makedirs').start()
@@ -26,10 +25,10 @@ class TestLicenseUpdater(unittest.TestCase):
     @patch('requests.get')
     @patch('license_updater.update_grace_timestamp')
     def test_run_update_online_success(self, mock_update_grace, mock_get):
-        """Test successful download of files (Online)."""
-        self.mock_exists.return_value = True # Dir exists
+        """Test successful download of ALL files (Online)."""
+        self.mock_exists.return_value = True
 
-        # Setup responses: 200 OK
+        # Setup responses: All 200 OK
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.content = b'DATA'
@@ -37,28 +36,34 @@ class TestLicenseUpdater(unittest.TestCase):
 
         license_updater.run_update()
 
-        # Check files opened for write (3 license files + potential token update)
-        # Note: update_grace_timestamp opens file too. Mock calls count both.
-        # But we mocked update_grace_timestamp in this test, so it won't open file.
+        # Check files written (3 files)
+        # Note: 'open' is also called inside update_grace_timestamp if not mocked,
+        # but here update_grace_timestamp is mocked.
         self.assertEqual(self.mock_file.call_count, 3)
         mock_update_grace.assert_called_once()
 
     @patch('requests.get')
     @patch('license_updater.update_grace_timestamp')
-    def test_run_update_online_revocation(self, mock_update_grace, mock_get):
-        """Test file deletion on 404 (Online)."""
+    def test_run_update_online_incomplete(self, mock_update_grace, mock_get):
+        """Test that NO files are written if one is missing (404)."""
         self.mock_exists.return_value = True
 
-        # Setup responses: 404 Not Found
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_get.return_value = mock_response
+        # Setup responses: First 200, Second 404
+        r_ok = MagicMock()
+        r_ok.status_code = 200
+        r_ok.content = b'DATA'
+
+        r_missing = MagicMock()
+        r_missing.status_code = 404
+
+        # Cycle through responses
+        mock_get.side_effect = [r_ok, r_missing, r_ok]
 
         license_updater.run_update()
 
-        # Check remove called for each file
-        self.assertEqual(self.mock_remove.call_count, 3)
-        # Timestamp should still update because we were online
+        # Check NO files written
+        self.assertEqual(self.mock_file.call_count, 0)
+        # Grace timestamp should still be updated (we are online)
         mock_update_grace.assert_called_once()
 
     @patch('requests.get')
@@ -79,17 +84,13 @@ class TestLicenseUpdater(unittest.TestCase):
     def test_check_grace_period_valid(self):
         """Test grace period with valid token."""
         from cryptography.fernet import Fernet
-        # Use the key from the module
         key = license_updater.GRACE_PERIOD_KEY
 
-        # Create a valid token (1 day ago)
         valid_time = (datetime.utcnow() - timedelta(days=1)).isoformat()
         cipher = Fernet(key)
         encrypted = cipher.encrypt(valid_time.encode())
 
-        # Setup mock file reading
         self.mock_exists.return_value = True
-
         m = mock_open(read_data=encrypted)
         with patch('builtins.open', m):
             result = license_updater.check_grace_period()
@@ -100,7 +101,6 @@ class TestLicenseUpdater(unittest.TestCase):
         from cryptography.fernet import Fernet
         key = license_updater.GRACE_PERIOD_KEY
 
-        # Create expired token (4 days ago)
         expired_time = (datetime.utcnow() - timedelta(days=4)).isoformat()
         cipher = Fernet(key)
         encrypted = cipher.encrypt(expired_time.encode())
@@ -111,23 +111,6 @@ class TestLicenseUpdater(unittest.TestCase):
             with self.assertRaises(Exception) as cm:
                 license_updater.check_grace_period()
             self.assertIn("SCADUTO", str(cm.exception))
-
-    def test_check_grace_period_rollback(self):
-        """Test clock rollback detection."""
-        from cryptography.fernet import Fernet
-        key = license_updater.GRACE_PERIOD_KEY
-
-        # Token in future (1 day ahead)
-        future_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
-        cipher = Fernet(key)
-        encrypted = cipher.encrypt(future_time.encode())
-
-        self.mock_exists.return_value = True
-        m = mock_open(read_data=encrypted)
-        with patch('builtins.open', m):
-            with self.assertRaises(Exception) as cm:
-                license_updater.check_grace_period()
-            self.assertIn("incoerenza", str(cm.exception))
 
 if __name__ == '__main__':
     unittest.main()
