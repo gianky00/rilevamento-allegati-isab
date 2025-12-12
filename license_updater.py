@@ -108,7 +108,8 @@ def run_update():
     """
     print("Controllo aggiornamenti licenza in corso...")
 
-    hw_id = license_validator.get_hardware_id()
+    # Get HWID and strip potential trailing dots/whitespace (common in WMIC output)
+    hw_id = license_validator.get_hardware_id().strip().rstrip('.')
     license_dir = get_license_dir()
 
     if not os.path.exists(license_dir):
