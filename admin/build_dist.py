@@ -13,7 +13,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 ENTRY_SCRIPT = "main.py"
-APP_NAME = "PDF-Splitter"
+APP_NAME = "Intelleo PDF Splitter"
 DIST_DIR = os.path.join(ROOT_DIR, "dist")
 OBF_DIR = os.path.join(DIST_DIR, "obfuscated")
 BUILD_LOG = "build_log.txt"

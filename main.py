@@ -424,7 +424,7 @@ class MainApp:
     """
     def __init__(self, root, auto_file_path=None):
         self.root = root
-        self.root.title("PDF Splitter")
+        self.root.title("Intelleo PDF Splitter")
         self.root.state('zoomed')
 
         # Configure Drag & Drop
