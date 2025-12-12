@@ -12,8 +12,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # Calcola la ROOT del progetto (due livelli sopra admin/build_dist.py -> root)
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+# Add root to path to import version
+sys.path.append(ROOT_DIR)
+import version
+
 ENTRY_SCRIPT = "main.py"
 APP_NAME = "Intelleo PDF Splitter"
+APP_VERSION = version.__version__
 DIST_DIR = os.path.join(ROOT_DIR, "dist")
 OBF_DIR = os.path.join(DIST_DIR, "obfuscated")
 BUILD_LOG = "build_log.txt"
@@ -144,7 +149,9 @@ def build():
             os.path.join(ROOT_DIR, "config_manager.py"),
             os.path.join(ROOT_DIR, "roi_utility.py"),
             os.path.join(ROOT_DIR, "license_validator.py"),
-            os.path.join(ROOT_DIR, "license_updater.py") # Ensure this is also obfuscated/included
+            os.path.join(ROOT_DIR, "license_updater.py"),
+            os.path.join(ROOT_DIR, "app_updater.py"),
+            os.path.join(ROOT_DIR, "version.py")
         ]
 
         # Check if files exist
@@ -288,7 +295,7 @@ def build():
             # Inno Setup expects build dir passed as define
             cmd_iscc = [
                 iscc_exe,
-                f"/DMyAppVersion=1.0.0",
+                f"/DMyAppVersion={APP_VERSION}",
                 f"/DBuildDir={final_dist_path}",
                 iss_path
             ]

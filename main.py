@@ -11,6 +11,8 @@ import threading
 import queue
 import license_validator
 import license_updater
+import app_updater
+import version
 import pymupdf as fitz
 from PIL import Image, ImageTk
 import shutil
@@ -430,7 +432,7 @@ class MainApp:
     """
     def __init__(self, root, auto_file_path=None):
         self.root = root
-        self.root.title("Intelleo PDF Splitter")
+        self.root.title(f"Intelleo PDF Splitter v{version.__version__}")
         self.root.state('zoomed')
 
         # Configure Drag & Drop
@@ -463,6 +465,9 @@ class MainApp:
         self.root.after(100, self.process_log_queue)
         # Avvia il controllo per gli aggiornamenti dalla utility ROI (intervallo ridotto a 200ms)
         self.root.after(200, self.check_for_updates)
+
+        # Check for app updates (silent)
+        self.root.after(2000, lambda: app_updater.check_for_updates(silent=True))
 
         # Gestione avvio automatico con file da CLI
         if auto_file_path and os.path.exists(auto_file_path):
