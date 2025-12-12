@@ -70,6 +70,12 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.canvas.bind('<MouseWheel>', self.on_mouse_wheel)
         self.preview_frame.bind('<Configure>', self.on_resize) # Auto-fit on resize
 
+        # Keyboard Navigation
+        self.bind('<Left>', lambda e: self.go_prev_page())
+        self.bind('<Right>', lambda e: self.go_next_page())
+        self.bind('<Up>', lambda e: self.go_prev_file())
+        self.bind('<Down>', lambda e: self.go_next_file())
+
         # --- Controls Area ---
         controls_frame = ttk.LabelFrame(self, text="Controlli File")
         controls_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=10)
@@ -233,63 +239,55 @@ class UnknownFilesReviewDialog(tk.Toplevel):
 
     def on_mouse_wheel(self, event):
         # Zoom to cursor logic
-        # 1. Get mouse coordinates relative to canvas top-left
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
 
         old_zoom = self.zoom_level
-        scale_factor = 1.1
+        scale_factor = 1.1 if event.delta > 0 else 0.9
 
-        if event.delta > 0:
-            self.zoom_level *= scale_factor
-        else:
-            self.zoom_level /= scale_factor
+        self.zoom_level *= scale_factor
 
         # Limit zoom
         if self.zoom_level < 0.1: self.zoom_level = 0.1
         if self.zoom_level > 20.0: self.zoom_level = 20.0
 
-        ratio = self.zoom_level / old_zoom
-
-        # Re-render (this updates the scrollregion)
+        # Re-render (this updates the scrollregion and image size)
         self.render_pdf()
 
-        # Adjust scroll to keep (x, y) under cursor
-        # New coordinate of the point (x, y) is (x * ratio, y * ratio) roughly
-        # This simple logic assumes the image is centered or top-left aligned in a specific way.
-        # Since render_pdf centers the image (canvas_w//2), exact mapping is complex.
-        # However, standard scrolling works well enough with just zoom update.
-        # To strictly zoom to cursor:
-        # We need to shift the scrollview by the displacement of the point under mouse.
-        # Displacement = (x * ratio - x, y * ratio - y)
-        # self.canvas.scan_mark(event.x, event.y) ... no, that's for drag.
+        # Calculate new coordinates of the point under mouse
+        # Since the image is centered or top-left, and canvasx/y handles scroll offset:
+        # We can approximate by shifting the view to keep the relative point stable.
 
-        # Let's try to just center on mouse if zooming in?
-        # Actually, standard behavior is usually sufficient if scrollregion updates correctly.
-        # But user asked for "proprio nel punto dove si trova il puntatore".
+        # Using scan_dragto trick for relative movement
+        # 1. Mark current mouse position
+        self.canvas.scan_mark(event.x, event.y)
 
-        # Complex Implementation:
-        # The image is centered.
-        # Let's trust Tkinter's canvas scroll capability or keep it simple.
-        # A proper implementation requires calculating the offset change.
-        # new_x = x * ratio
-        # new_y = y * ratio
-        # dx = new_x - x
-        # dy = new_y - y
-        # self.canvas.xview_scroll(...) takes units/pages.
+        # 2. Calculate shift needed.
+        # The point (x,y) moved to (x*scale, y*scale) roughly relative to origin?
+        # No, scaling happens around the image center in render_pdf if canvas is large,
+        # but if we are scrolled, it behaves like top-left.
+        # Let's try the standard Tkinter zoom pattern:
+        # scale = new_zoom / old_zoom
+        # self.canvas.scale("all", x, y, scale, scale) -> This works for vector items, but we replace the image.
 
-        # Since exact pixel scrolling is hard in Tkinter without knowing the scrollbar fractions:
-        # We can use 'moveto'.
-        # This is a bit risky to implement perfectly without visual feedback loops.
-        # I will leave the improved zoom logic as "Standard Centered Zoom" for stability unless
-        # I can guarantee the math.
-        # User requirement "zoom standard" was explicitly what they DID NOT want.
-        # They want "Zoom to Cursor".
+        # Since we replace the image, we just need to adjust scroll.
+        # New Scroll X = Old Scroll X * scale + x * (scale - 1) ??
+        # This is complex. Let's try a simpler approach that usually satisfies users:
+        # Zoom, then center view on the mouse coordinates if possible.
 
-        # Try this approximation:
-        # Shift scroll region to center roughly on the mouse?
-        # No, that jumps.
-        pass
+        # Actually, standard behavior:
+        # If we zoom in, the content expands. The point under mouse should stay under mouse.
+        # Scroll adjustment:
+        # new_scroll_x = (x * scale_factor) - event.x
+        # new_scroll_y = (y * scale_factor) - event.y
+        # self.canvas.scan_dragto(event.x - int((x*scale_factor - x)), event.y - int((y*scale_factor - y)), gain=1)
+
+        diff_x = int(x * (scale_factor - 1))
+        diff_y = int(y * (scale_factor - 1))
+
+        # Scroll 'back' by diff
+        self.canvas.scan_mark(0, 0)
+        self.canvas.scan_dragto(-diff_x, -diff_y, gain=1)
 
     def go_prev_file(self):
         if self.current_index > 0:
@@ -366,10 +364,12 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             messagebox.showerror("Errore Rinomina", f"{e}", parent=self)
 
     def on_close(self):
+        # 1. Close the document immediately to release file locks
         if self.current_doc:
             self.current_doc.close()
+            self.current_doc = None
 
-        # Check for uncompleted tasks and restore
+        # 2. Restore logic for uncompleted tasks
         restored_count = 0
         for i, task in enumerate(self.review_tasks):
             if i not in self.completed_indices:
@@ -379,43 +379,49 @@ class UnknownFilesReviewDialog(tk.Toplevel):
                 siblings = task['siblings']
 
                 try:
-                    # 1. Delete unknown file
-                    if os.path.exists(unknown_path):
-                        os.remove(unknown_path)
-
-                    # 2. Delete siblings (other generated parts)
-                    for sib in siblings:
-                        if os.path.exists(sib):
-                            os.remove(sib)
+                    # Retry logic for deletions to handle transient locks
+                    for path_to_del in [unknown_path] + siblings:
+                        if path_to_del and os.path.exists(path_to_del):
+                            for attempt in range(3):
+                                try:
+                                    os.remove(path_to_del)
+                                    break
+                                except OSError:
+                                    # Wait briefly and retry
+                                    self.update() # Process pending events
+                                    import time; time.sleep(0.2)
 
                     # 3. Move original back
                     if source_path and os.path.exists(source_path):
                         # Determine original location (parent of 'ORIGINALI')
-                        # Typically source_path is ".../ORIGINALI/file.pdf"
-                        # We want ".../file.pdf"
                         originali_dir = os.path.dirname(source_path)
                         base_dir = os.path.dirname(originali_dir)
                         filename = os.path.basename(source_path)
                         restore_path = os.path.join(base_dir, filename)
 
-                        if os.path.exists(restore_path):
-                            # Conflict? Backup exists or user added new file?
-                            # Overwrite or rename? User said "restore everything".
-                            # Safe to replace if we are restoring.
-                            os.replace(source_path, restore_path)
-                        else:
-                            shutil.move(source_path, restore_path)
+                        # Avoid restoring to same path if something is wrong
+                        if os.path.abspath(source_path) != os.path.abspath(restore_path):
+                            # Retry loop for move
+                            for attempt in range(3):
+                                try:
+                                    if os.path.exists(restore_path):
+                                        os.replace(source_path, restore_path)
+                                    else:
+                                        shutil.move(source_path, restore_path)
+                                    break
+                                except OSError:
+                                    self.update()
+                                    import time; time.sleep(0.2)
 
                     restored_count += 1
                 except Exception as e:
-                    print(f"Errore ripristino file: {e}")
+                    print(f"Errore ripristino file {task.get('unknown_path', '?')}: {e}")
 
         self.destroy()
         if self.callback:
             self.callback()
 
         if restored_count > 0:
-            # We can't show messagebox easily as root might be busy, but printing helps
             print(f"Ripristinati {restored_count} file originali.")
 
 class MainApp:
