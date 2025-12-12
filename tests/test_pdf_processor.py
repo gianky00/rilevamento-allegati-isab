@@ -62,7 +62,7 @@ class TestPdfProcessor(unittest.TestCase):
 
              mock_fitz_open.side_effect = fitz_side_effect
 
-             success, msg, files = pdf_processor.process_pdf("dummy.pdf", "5400123", self.config)
+             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "5400123", self.config)
 
              self.assertTrue(success)
              self.assertEqual(len(files), 1)
@@ -103,7 +103,7 @@ class TestPdfProcessor(unittest.TestCase):
         mock_fitz_open.side_effect = fitz_side_effect
 
         with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
-             success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ABC", self.config)
+             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ABC", self.config)
 
              self.assertTrue(success)
              self.assertEqual(len(files), 1)
@@ -114,7 +114,7 @@ class TestPdfProcessor(unittest.TestCase):
     def test_process_pdf_bad_tesseract_path(self, mock_fitz):
         config = {"tesseract_path": "invalid_path.exe"}
         with patch("os.path.isfile", return_value=False):
-            success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ODC", config)
+            success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", config)
             self.assertFalse(success)
             self.assertIn("Tesseract non è configurato", msg)
 
@@ -142,7 +142,7 @@ class TestPdfProcessor(unittest.TestCase):
 
         # Config with one rule
         with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
-            success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
+            success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
             # Should finish successfully (categorized as unknown because ROI failed)
             self.assertTrue(success)
@@ -161,7 +161,7 @@ class TestPdfProcessor(unittest.TestCase):
         with patch("os.makedirs"), patch("os.path.exists", return_value=False):
             with patch("shutil.move", side_effect=[PermissionError("Locked"), PermissionError("Locked"), None]) as mock_move:
                 with patch("time.sleep") as mock_sleep:
-                    success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
+                    success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
                     self.assertTrue(success)
                     self.assertEqual(mock_move.call_count, 3)
@@ -192,7 +192,7 @@ class TestPdfProcessor(unittest.TestCase):
         mock_fitz_open.side_effect = fitz_side_effect
 
         with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
-            success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
+            success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
             self.assertTrue(success)
             self.assertIn("Invoice", files[0]['category'])
@@ -215,7 +215,7 @@ class TestPdfProcessor(unittest.TestCase):
         mock_fitz_open.return_value = mock_doc
 
         with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
-            success, msg, files = pdf_processor.process_pdf("dummy.pdf", "ODC", bad_config)
+            success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", bad_config)
 
             # Should ignore invalid ROI and end up as unknown
             self.assertTrue(success)

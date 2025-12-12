@@ -17,10 +17,11 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             La signature attesa è `progress_callback(message, level="INFO")`.
 
     Returns:
-        tuple: (success (bool), message (str), generated_files (list))
+        tuple: (success (bool), message (str), generated_files (list), moved_original_path (str or None))
                generated_files è una lista di dict: {'category': str, 'path': str}
     """
     generated_files = []
+    moved_original_path = None
 
     def log(msg, level="INFO"):
         if progress_callback:
@@ -209,6 +210,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             try:
                 shutil.move(pdf_path, destination_path)
                 moved = True
+                moved_original_path = destination_path
                 break
             except PermissionError:
                 log(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...", "WARNING")
@@ -222,8 +224,8 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
         log("Elaborazione completata.", "INFO")
 
-        return True, "Successo", generated_files
+        return True, "Successo", generated_files, moved_original_path
 
     except Exception as e:
         log(f"Errore critico: {e}", "ERROR")
-        return False, str(e), generated_files
+        return False, str(e), generated_files, None
