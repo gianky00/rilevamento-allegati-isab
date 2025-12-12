@@ -4,6 +4,9 @@ import shutil
 import sys
 import time
 import logging
+import json
+import zipfile
+import requests
 
 # --- CONFIGURAZIONE ---
 # 1. FIX PORTABILITÀ: Directory corrente = cartella dello script
@@ -285,6 +288,7 @@ def build():
 
         log_and_print("\n--- Step 7/7: Compiling Installer with Inno Setup ---")
 
+        setup_filename = None
         if iscc_exe:
             iss_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "setup_script.iss"))
 
@@ -306,11 +310,19 @@ def build():
             setup_output_dir = os.path.join(DIST_DIR, "Setup")
             if os.path.exists(setup_output_dir):
                 log_and_print(f"Installer generated in: {setup_output_dir}")
-                # Optional: List files there
+                # Find the latest setup file
                 for f in os.listdir(setup_output_dir):
-                    log_and_print(f" - {f}")
+                    if f.endswith(".exe"):
+                        setup_filename = f
+                        log_and_print(f" - Found setup: {f}")
+                        break
         else:
              log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
+
+        # --- Step 8: Netlify Deployment Preparation & Upload ---
+        if setup_filename:
+            log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
+            prepare_and_deploy_netlify(setup_output_dir, setup_filename)
 
         log_and_print("="*60)
         log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
@@ -319,6 +331,93 @@ def build():
     except Exception as e:
         logger.exception("FATAL ERROR DURING BUILD:")
         sys.exit(1)
+
+def prepare_and_deploy_netlify(setup_dir, setup_filename):
+    """
+    Creates a deploy folder with version.json and the setup file,
+    then attempts to upload to Netlify using API if tokens are present.
+    """
+    deploy_dir = os.path.join(ROOT_DIR, "dist", "deploy")
+    if os.path.exists(deploy_dir):
+        shutil.rmtree(deploy_dir)
+    os.makedirs(deploy_dir)
+
+    # 1. Copy Setup File
+    src_setup = os.path.join(setup_dir, setup_filename)
+    dst_setup = os.path.join(deploy_dir, setup_filename)
+    shutil.copy(src_setup, dst_setup)
+    log_and_print(f"Copied setup to: {deploy_dir}")
+
+    # 2. Generate version.json
+    # Derive base URL from the configured UPDATE_URL in version.py
+    # Example: https://myapp.netlify.app/version.json -> Base: https://myapp.netlify.app
+    update_url = version.UPDATE_URL
+    if "example.com" in update_url:
+        log_and_print("WARNING: 'version.UPDATE_URL' is still using a placeholder.", "WARNING")
+        # We continue assuming the user will fix it later or env vars handle the real site
+
+    # We construct the download URL assuming the setup file is at the root of the site
+    # If UPDATE_URL is "https://site.com/ver.json", base is "https://site.com"
+    base_url = update_url.rsplit('/', 1)[0]
+    download_url = f"{base_url}/{setup_filename}"
+
+    version_data = {
+        "version": version.__version__,
+        "url": download_url
+    }
+
+    json_path = os.path.join(deploy_dir, "version.json")
+    with open(json_path, "w") as f:
+        json.dump(version_data, f, indent=4)
+    log_and_print(f"Generated version.json with version {version.__version__}")
+
+    # 3. Check for Netlify Credentials
+    # Users should set these in their environment
+    site_id = os.environ.get("NETLIFY_SITE_ID")
+    auth_token = os.environ.get("NETLIFY_AUTH_TOKEN")
+
+    if not site_id or not auth_token:
+        log_and_print("\n[INFO] NETLIFY_SITE_ID or NETLIFY_AUTH_TOKEN not found in environment.")
+        log_and_print(f"Ready for manual deploy. Contents of '{deploy_dir}':")
+        log_and_print(f"  - {setup_filename}")
+        log_and_print(f"  - version.json")
+        log_and_print("You can drag and drop this folder to Netlify Drop or run 'netlify deploy --prod' inside it.")
+        return
+
+    # 4. Automatic Upload via Netlify API (Zip Deploy)
+    log_and_print("Starting automatic upload to Netlify...")
+
+    zip_path = os.path.join(ROOT_DIR, "dist", "deploy.zip")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(deploy_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, deploy_dir)
+                zipf.write(file_path, arcname)
+
+    try:
+        with open(zip_path, 'rb') as f:
+            data = f.read()
+
+        url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
+        headers = {
+            "Content-Type": "application/zip",
+            "Authorization": f"Bearer {auth_token}"
+        }
+
+        response = requests.post(url, headers=headers, data=data, timeout=300)
+
+        if response.status_code == 200:
+            log_and_print("Upload Successful! New version is live.")
+            log_and_print(f"Deploy URL: {response.json().get('deploy_ssl_url')}")
+        else:
+            log_and_print(f"Upload Failed: {response.status_code} - {response.text}", "ERROR")
+
+    except Exception as e:
+        log_and_print(f"Error during Netlify upload: {e}", "ERROR")
+    finally:
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
 
 if __name__ == "__main__":
     build()
