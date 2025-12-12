@@ -1,9 +1,0 @@
-============================================
-          INFORMAZIONI LICENZA
-============================================
-Utenza:			Hardware ID Associato:
-  ISAB_SUD		   ACE4_2E00_951D_4DDA
-
-Data di Scadenza:		Data creazione:
-  31/12/2025		12/11/2025 17:50:31
-============================================

@@ -261,9 +261,11 @@ def build():
 
         log_and_print("\n--- Step 6/7: Post-Build Cleanup & License Setup ---")
 
-        # Ensure 'Licenza' folder exists in output
+        # Create empty 'Licenza' folder in output
+        # NOTE: We DO NOT copy files from source 'Licenza' because they are client-specific.
         lic_dest_dir = os.path.join(final_dist_path, "Licenza")
         os.makedirs(lic_dest_dir, exist_ok=True)
+        log_and_print("Created empty 'Licenza' folder structure.")
 
         # Also copy config.json to output root if needed
         if os.path.exists(os.path.join(OBF_DIR, "config.json")):
