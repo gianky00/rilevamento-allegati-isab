@@ -191,6 +191,8 @@ def build():
             "--enable-plugin=tk-inter",
             # Include the pyarmor runtime package
             f"--include-package={runtime_dir}",
+            # Include tkinterdnd2 package data (binaries)
+            "--include-package-data=tkinterdnd2",
             # Point to the entry script in the OBFUSCATED directory
             os.path.join(OBF_DIR, ENTRY_SCRIPT)
         ]
@@ -199,20 +201,31 @@ def build():
         if os.name == 'nt':
              cmd_nuitka.append("--disable-console")
 
+        # Check for Icon
+        icon_path = None
+        # Look for any .ico file in ROOT_DIR
+        for f in os.listdir(ROOT_DIR):
+            if f.lower().endswith(".ico"):
+                icon_path = os.path.join(ROOT_DIR, f)
+                break
+
+        if icon_path:
+            log_and_print(f"Using icon: {icon_path}")
+            cmd_nuitka.append(f"--windows-icon-from-ico={icon_path}")
+
         # --- Fix for Hidden Imports ---
         # Since code is obfuscated, Nuitka cannot scan imports. We must explicitly include them.
         # Based on previous PyInstaller hidden_imports list.
         explicit_modules = [
-            "fitz", # PyMuPDF (might be 'pymupdf' or 'fitz' depending on install, but 'fitz' is the import)
+            "fitz", # PyMuPDF
             "PIL", # Pillow
             "pytesseract",
             "cffi",
             "cryptography",
+            "numpy", # Required by pytesseract
+            "tkinterdnd2", # Required for Drag & Drop
             # Internal modules (obfuscated ones) should be found via PYTHONPATH, but
-            # explicit inclusion ensures they are treated as modules if not imported by entry point (entry imports them though).
-            # "config_manager", "pdf_processor", "license_validator" -> these are in OBF_DIR and imported by main.py.
-            # However, Nuitka might need help if PyArmor runtime hides the import structure.
-            # Safest is to rely on PYTHONPATH for local modules, but force external packages.
+            # explicit inclusion ensures they are treated as modules if not imported by entry point.
         ]
 
         for mod in explicit_modules:
@@ -255,6 +268,12 @@ def build():
         # Also copy config.json to output root if needed
         if os.path.exists(os.path.join(OBF_DIR, "config.json")):
              shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
+
+        # Copy Tesseract-OCR if exists locally (for portable builds)
+        local_tesseract = os.path.join(ROOT_DIR, "Tesseract-OCR")
+        if os.path.exists(local_tesseract):
+             log_and_print(f"Copying local Tesseract-OCR from {local_tesseract}...")
+             shutil.copytree(local_tesseract, os.path.join(final_dist_path, "Tesseract-OCR"), dirs_exist_ok=True)
 
         log_and_print("\n--- Step 7/7: Compiling Installer with Inno Setup ---")
 
