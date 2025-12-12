@@ -101,6 +101,7 @@ def check_grace_period():
 def run_update():
     """
     Checks for license updates on GitHub matching the Hardware ID.
+    - Uses GitHub API to ensure correct auth handling and file retrieval.
     - Syncs files: Downloads ONLY if ALL required files are available (200 OK).
     - If any file is missing (404), NO changes are made to local files (Prevent deletion).
     - Handles Offline: Checks grace period.
@@ -117,11 +118,13 @@ def run_update():
             print(f"Errore creazione cartella Licenza: {e}")
             return
 
-    base_url = f"https://raw.githubusercontent.com/gianky00/intelleo-licenses/main/licenses/{hw_id}"
+    # Use GitHub API endpoint instead of raw.githubusercontent.com
+    # This provides better error codes (401 vs 404) for private repos
+    base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
     token = get_github_token()
     headers = {
         "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.raw"
+        "Accept": "application/vnd.github.v3.raw" # Request raw content directly
     }
 
     # Files we absolutely need to consider it a valid update
@@ -138,6 +141,8 @@ def run_update():
     # 1. Attempt to download all files into memory
     for remote_name, local_name in files_map.items():
         url = f"{base_url}/{remote_name}"
+        # Debug print to help identify URL issues
+        # print(f"DEBUG: Checking {url}")
 
         try:
             response = requests.get(url, headers=headers, timeout=10)
@@ -145,8 +150,14 @@ def run_update():
             if response.status_code == 200:
                 downloaded_content[local_name] = response.content
             elif response.status_code == 404:
-                print(f"File remoto mancante: {remote_name} (Status: 404)")
+                print(f"File remoto mancante: {remote_name} (Status: 404) su URL: {url}")
                 incomplete_update = True
+            elif response.status_code == 401:
+                 print("Errore Autenticazione: Token non valido o scaduto.")
+                 incomplete_update = True
+                 # If token is bad, we probably can't get other files either, but we continue loop or break?
+                 # Let's break to avoid spamming
+                 break
             else:
                 print(f"Risposta imprevista per {remote_name}: {response.status_code}")
                 incomplete_update = True
@@ -162,11 +173,9 @@ def run_update():
         check_grace_period()
     else:
         # Network is UP.
-        # Check if we have a complete update set.
         if incomplete_update:
-            print("Aggiornamento saltato: Set di file remoti incompleto. Vengono mantenuti i file locali.")
+            print("Aggiornamento saltato: Set di file remoti incompleto o errore accesso. Vengono mantenuti i file locali.")
             # Even if incomplete, we are Online, so we update the grace timestamp.
-            # This means "We checked, and you are allowed to continue using what you have (if valid)".
             update_grace_timestamp()
         else:
             # Complete update available. Write to disk.
