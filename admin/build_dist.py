@@ -50,7 +50,7 @@ def run_command(cmd, cwd=None, shell=False, env=None):
         cmd,
         cwd=cwd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.STDOUT, # Redirect stderr to stdout to see errors in stream
         text=True,
         bufsize=1,
         universal_newlines=True,
@@ -143,7 +143,8 @@ def build():
             os.path.join(ROOT_DIR, "pdf_processor.py"),
             os.path.join(ROOT_DIR, "config_manager.py"),
             os.path.join(ROOT_DIR, "roi_utility.py"),
-            os.path.join(ROOT_DIR, "license_validator.py")
+            os.path.join(ROOT_DIR, "license_validator.py"),
+            os.path.join(ROOT_DIR, "license_updater.py") # Ensure this is also obfuscated/included
         ]
 
         # Check if files exist
@@ -180,15 +181,13 @@ def build():
             log_and_print("ERROR: PyArmor runtime folder not found inside obfuscated dir!", "ERROR")
             sys.exit(1)
 
-        # Build output directory
-        # nuitka_output_dir = os.path.join(DIST_DIR, f"{APP_NAME}.dist") # Not directly used in command
-
         # Nuitka Command
         cmd_nuitka = [
             sys.executable, "-m", "nuitka",
             "--standalone",
             f"--output-dir={DIST_DIR}",
             "--enable-plugin=tk-inter",
+            "--show-progress", # Show detailed progress
             # Include the pyarmor runtime package
             f"--include-package={runtime_dir}",
             # Include tkinterdnd2 package data (binaries)
@@ -199,7 +198,8 @@ def build():
 
         # Windows-specific options
         if os.name == 'nt':
-             cmd_nuitka.append("--disable-console")
+             # Explicitly disable console window for the final application
+             cmd_nuitka.append("--windows-disable-console")
 
         # Check for Icon
         icon_path = None
@@ -215,7 +215,6 @@ def build():
 
         # --- Fix for Hidden Imports ---
         # Since code is obfuscated, Nuitka cannot scan imports. We must explicitly include them.
-        # Based on previous PyInstaller hidden_imports list.
         explicit_modules = [
             "fitz", # PyMuPDF
             "PIL", # Pillow
@@ -224,8 +223,10 @@ def build():
             "cryptography",
             "numpy", # Required by pytesseract
             "tkinterdnd2", # Required for Drag & Drop
-            # Internal modules (obfuscated ones) should be found via PYTHONPATH, but
-            # explicit inclusion ensures they are treated as modules if not imported by entry point.
+            "requests", # Required for license updater
+            # Built-in modules are generally handled, but explicit inclusion is safer for key logic
+            # However, for built-ins Nuitka usually finds them unless obfuscation hides them completely.
+            # But standard library is linked in standalone mode.
         ]
 
         for mod in explicit_modules:
@@ -236,7 +237,6 @@ def build():
         env["PYTHONPATH"] = OBF_DIR + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
 
         # Important: Run from OBF_DIR so that `import config_manager` works relative to current dir
-        # if Nuitka uses cwd for resolution.
         run_command(cmd_nuitka, cwd=OBF_DIR, env=env)
 
         # Rename/Move the output folder
@@ -262,7 +262,6 @@ def build():
         log_and_print("\n--- Step 6/7: Post-Build Cleanup & License Setup ---")
 
         # Create empty 'Licenza' folder in output
-        # NOTE: We DO NOT copy files from source 'Licenza' because they are client-specific.
         lic_dest_dir = os.path.join(final_dist_path, "Licenza")
         os.makedirs(lic_dest_dir, exist_ok=True)
         log_and_print("Created empty 'Licenza' folder structure.")
@@ -295,6 +294,14 @@ def build():
             ]
 
             run_command(cmd_iscc, env=env) # Passing env just in case
+
+            # Locate the generated setup file
+            setup_output_dir = os.path.join(DIST_DIR, "Setup")
+            if os.path.exists(setup_output_dir):
+                log_and_print(f"Installer generated in: {setup_output_dir}")
+                # Optional: List files there
+                for f in os.listdir(setup_output_dir):
+                    log_and_print(f" - {f}")
         else:
              log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
