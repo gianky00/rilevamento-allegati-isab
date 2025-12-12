@@ -862,7 +862,9 @@ if __name__ == "__main__":
     try:
         license_updater.run_update()
     except Exception as e:
-        print(f"Errore durante l'aggiornamento licenza: {e}")
+        # Critical failure in update/grace period (e.g. Expired)
+        messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        sys.exit(1)
 
     is_valid, msg = license_validator.verify_license()
     if not is_valid:
