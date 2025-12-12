@@ -10,3 +10,4 @@ numpy
 pytest
 pytest-cov
 requests
+packaging
