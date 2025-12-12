@@ -10,6 +10,7 @@ import sys
 import threading
 import queue
 import license_validator
+import license_updater
 import pymupdf as fitz
 from PIL import Image, ImageTk
 
@@ -857,7 +858,14 @@ class MainApp:
             messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI: {e}")
 
 if __name__ == "__main__":
-    # --- LICENSE CHECK ---
+    # --- LICENSE UPDATE & CHECK ---
+    try:
+        license_updater.run_update()
+    except Exception as e:
+        # Critical failure in update/grace period (e.g. Expired)
+        messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        sys.exit(1)
+
     is_valid, msg = license_validator.verify_license()
     if not is_valid:
         # Mostra GUI minima per errore se Tk non è ancora avviato
