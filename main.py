@@ -511,10 +511,27 @@ class MainApp:
             # If multiple files, we should probably start processing them sequentially
             self.start_processing()
 
-    def handle_cli_start(self, file_path):
-        """Gestisce l'avvio con file passato da riga di comando."""
-        self.pdf_files = [file_path]
-        self.pdf_path_label.config(text=os.path.basename(file_path))
+    def handle_cli_start(self, path):
+        """Gestisce l'avvio con file o cartella passato da riga di comando."""
+        found_pdfs = []
+
+        if os.path.isfile(path) and path.lower().endswith('.pdf'):
+            found_pdfs.append(path)
+            display_text = os.path.basename(path)
+        elif os.path.isdir(path):
+            # Cerca ricorsivamente PDF nella cartella
+            for root, dirs, files in os.walk(path):
+                for name in files:
+                    if name.lower().endswith('.pdf'):
+                        found_pdfs.append(os.path.join(root, name))
+            display_text = f"{len(found_pdfs)} file trovati in {os.path.basename(path)}"
+
+        if not found_pdfs:
+            messagebox.showerror("Errore", "Nessun file PDF trovato nel percorso specificato.")
+            return
+
+        self.pdf_files = found_pdfs
+        self.pdf_path_label.config(text=display_text)
 
         # Chiedi ODC
         odc = simpledialog.askstring("Input ODC", "Inserisci il codice ODC (es. 5400xxxxxx):", parent=self.root)
@@ -1060,11 +1077,13 @@ if __name__ == "__main__":
         root = tk.Tk()
 
     # Check CLI args
-    cli_file_path = None
+    cli_path = None
     if len(sys.argv) > 1:
         potential_path = sys.argv[1]
-        if os.path.exists(potential_path) and potential_path.lower().endswith('.pdf'):
-            cli_file_path = potential_path
+        if os.path.exists(potential_path):
+            # Accetta sia file PDF che directory
+            if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
+                cli_path = potential_path
 
-    app = MainApp(root, auto_file_path=cli_file_path)
+    app = MainApp(root, auto_file_path=cli_path)
     root.mainloop()

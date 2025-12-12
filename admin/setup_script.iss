@@ -44,6 +44,11 @@ Root: HKCR; Subkey: "SystemFileAssociations\.pdf\shell\IntelleoPDFSplitter"; Val
 Root: HKCR; Subkey: "SystemFileAssociations\.pdf\shell\IntelleoPDFSplitter"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "SystemFileAssociations\.pdf\shell\IntelleoPDFSplitter\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
+; Menu contestuale per Cartelle
+Root: HKCR; Subkey: "Directory\shell\IntelleoPDFSplitter"; ValueType: string; ValueName: ""; ValueData: "Elabora cartella con Intelleo PDF Splitter"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "Directory\shell\IntelleoPDFSplitter"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "Directory\shell\IntelleoPDFSplitter\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
+
 [Files]
 ; === CONFIGURATION FILE (PRESERVE IF EXISTS) ===
 Source: "{#BuildDir}\config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
