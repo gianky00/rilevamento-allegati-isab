@@ -4,7 +4,14 @@ Gestisce la divisione di file PDF basata su regole OCR.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
-from tkinterdnd2 import DND_FILES, TkinterDnD
+
+# Safe import for tkinterdnd2
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except ImportError:
+    TkinterDnD = None
+    DND_FILES = None
+
 import config_manager
 import pdf_processor
 import subprocess
@@ -20,6 +27,7 @@ import pymupdf as fitz
 from PIL import Image, ImageTk
 import shutil
 from datetime import datetime
+import ctypes
 
 # Segnale per comunicazione tra utility ROI e app principale
 SIGNAL_FILE = ".update_signal"
@@ -1377,65 +1385,101 @@ class MainApp:
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
-    # Banner di avvio professionale
-    print("╔════════════════════════════════════════════════════════════════╗")
-    print("║           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE           ║")
-    print("╠════════════════════════════════════════════════════════════════╣")
-    print(f"║  Versione: {version.__version__:<52}║")
-    print(f"║  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S'):<56}║")
-    print("╚════════════════════════════════════════════════════════════════╝")
-    print()
-
-    # License Update & Check
-    print("[SISTEMA] Verifica licenza in corso...")
     try:
-        license_updater.run_update()
-        print("[SISTEMA] ✓ Aggiornamento licenza completato")
+        # Banner di avvio professionale
+        print("╔════════════════════════════════════════════════════════════════╗")
+        print("║           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE           ║")
+        print("╠════════════════════════════════════════════════════════════════╣")
+        print(f"║  Versione: {version.__version__:<52}║")
+        print(f"║  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S'):<56}║")
+        print("╚════════════════════════════════════════════════════════════════╝")
+        print()
+
+        # License Update & Check
+        print("[SISTEMA] Verifica licenza in corso...")
+        try:
+            license_updater.run_update()
+            print("[SISTEMA] ✓ Aggiornamento licenza completato")
+        except Exception as e:
+            print(f"[ERRORE] Verifica licenza fallita: {e}")
+            # Ensure root exists for messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+            sys.exit(1)
+
+        is_valid, msg = license_validator.verify_license()
+        if not is_valid:
+            root = tk.Tk()
+            root.withdraw()
+            hw_id = license_validator.get_hardware_id()
+            err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
+            root.clipboard_clear()
+            root.clipboard_append(hw_id)
+            messagebox.showerror("Licenza Non Valida", err_msg)
+            print(f"[ERRORE] Licenza non valida: {msg}")
+            sys.exit(1)
+
+        print("[SISTEMA] ✓ Licenza valida")
+        print("[SISTEMA] Inizializzazione interfaccia grafica...")
+        print()
+
+        # Pulizia signal file
+        if os.path.exists(SIGNAL_FILE):
+            os.remove(SIGNAL_FILE)
+
+        # Inizializzazione Tk con DnD
+        if TkinterDnD:
+            try:
+                root = TkinterDnD.Tk()
+                print("[SISTEMA] ✓ Drag & Drop abilitato")
+            except Exception as e:
+                print(f"[AVVISO] Errore inizializzazione Drag & Drop: {e}")
+                root = tk.Tk()
+        else:
+            print("[AVVISO] Modulo TkinterDnD non disponibile. Fallback a Tk standard.")
+            root = tk.Tk()
+
+        # Hide console on success (if running from a console window that isn't frozen, or if logic dictates)
+        # Note: In frozen apps with --windows-disable-console, there is no console.
+        # This logic is primarily for the 'launch.bat' user experience where we want to close the CMD on success.
+        try:
+            if sys.platform == "win32" and not getattr(sys, 'frozen', False):
+                # Detach console window if successful initialization
+                ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+        except Exception:
+            pass
+
+        # Check CLI args
+        cli_path = None
+        if len(sys.argv) > 1:
+            potential_path = sys.argv[1]
+            if os.path.exists(potential_path):
+                if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
+                    cli_path = potential_path
+                    print(f"[SISTEMA] Avvio con file: {potential_path}")
+
+        print("[SISTEMA] ✓ Applicazione pronta")
+        print("═" * 68)
+        print()
+
+        app = MainApp(root, auto_file_path=cli_path)
+        root.mainloop()
+
     except Exception as e:
-        print(f"[ERRORE] Verifica licenza fallita: {e}")
-        messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        # Global Error Handler
+        # Using ctypes directly to ensure a popup appears even if Tkinter failed completely.
+        error_msg = f"Errore Fatale all'avvio:\n\n{str(e)}"
+        print(f"[CRITICAL ERROR] {error_msg}")
+        try:
+            if sys.platform == "win32":
+                ctypes.windll.user32.MessageBoxW(0, error_msg, "Intelleo PDF Splitter - Errore", 0x10)
+            else:
+                # Fallback for non-Windows (unlikely given context, but good practice)
+                import tkinter
+                root = tkinter.Tk()
+                root.withdraw()
+                tkinter.messagebox.showerror("Errore Fatale", error_msg)
+        except:
+            pass # If even showing the error fails, we are in trouble.
         sys.exit(1)
-
-    is_valid, msg = license_validator.verify_license()
-    if not is_valid:
-        root = tk.Tk()
-        root.withdraw()
-        hw_id = license_validator.get_hardware_id()
-        err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
-        root.clipboard_clear()
-        root.clipboard_append(hw_id)
-        messagebox.showerror("Licenza Non Valida", err_msg)
-        print(f"[ERRORE] Licenza non valida: {msg}")
-        sys.exit(1)
-
-    print("[SISTEMA] ✓ Licenza valida")
-    print("[SISTEMA] Inizializzazione interfaccia grafica...")
-    print()
-
-    # Pulizia signal file
-    if os.path.exists(SIGNAL_FILE):
-        os.remove(SIGNAL_FILE)
-
-    # Inizializzazione Tk con DnD
-    try:
-        root = TkinterDnD.Tk()
-        print("[SISTEMA] ✓ Drag & Drop abilitato")
-    except Exception as e:
-        print(f"[AVVISO] Drag & Drop non disponibile: {e}")
-        root = tk.Tk()
-
-    # Check CLI args
-    cli_path = None
-    if len(sys.argv) > 1:
-        potential_path = sys.argv[1]
-        if os.path.exists(potential_path):
-            if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
-                cli_path = potential_path
-                print(f"[SISTEMA] Avvio con file: {potential_path}")
-
-    print("[SISTEMA] ✓ Applicazione pronta")
-    print("═" * 68)
-    print()
-
-    app = MainApp(root, auto_file_path=cli_path)
-    root.mainloop()
