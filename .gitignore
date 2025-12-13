@@ -199,3 +199,5 @@ site/
 *.onnx
 *.pt
 *.pth
+config.json
+/Licenza
