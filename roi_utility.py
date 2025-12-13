@@ -44,7 +44,7 @@ class ROIDrawingApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Intelleo - Utility Gestione ROI")
+        self.root.title("🎯 Intelleo - Utility Gestione ROI")
         self.root.geometry("1300x900")
         self.root.configure(bg=COLORS['bg_primary'])
         self.root.state('zoomed')

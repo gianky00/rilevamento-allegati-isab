@@ -5,35 +5,63 @@ cls
 
 echo.
 echo  +====================================================================+
-echo  ^|           INTELLEO PDF SPLITTER - RESET AMBIENTE                  ^|
+echo  ^|       INTELLEO PDF SPLITTER - RESET AMBIENTE VIRTUALE             ^|
 echo  +====================================================================+
 echo.
-echo  ATTENZIONE: Questo comando cancellera' e reinstallera' l'intero
-echo              ambiente Python dell'applicazione.
+echo  [!] ATTENZIONE: Questo script rimuovera' l'ambiente virtuale
+echo                  e lo ricreera' da zero.
 echo.
-echo  Utile se l'app non parte o ci sono errori di dipendenze.
-echo.
-echo  Premi un tasto per continuare o CTRL+C per annullare...
+echo  Premi un tasto per continuare o chiudi la finestra per annullare...
 pause >nul
 
 set VENV_DIR=.venv
 
-if exist %VENV_DIR% (
-    echo.
-    echo  [RESET] Rimozione ambiente esistente...
-    rmdir /s /q %VENV_DIR%
-    if %errorlevel% equ 0 (
-        echo  [RESET] [OK] Ambiente rimosso
-    ) else (
-        echo  [ERRORE] Impossibile rimuovere l'ambiente.
-        echo           Chiudi tutte le istanze dell'applicazione e riprova.
+echo.
+echo  [RESET] Rimozione ambiente virtuale esistente...
+
+if exist "%VENV_DIR%" (
+    rmdir /s /q "%VENV_DIR%"
+    if exist "%VENV_DIR%" (
+        echo  [ERRORE] Impossibile rimuovere la cartella %VENV_DIR%
+        echo           Chiudi eventuali programmi che la stanno usando.
         pause
         exit /b 1
     )
+    echo  [RESET] [OK] Ambiente virtuale rimosso
+) else (
+    echo  [RESET] [OK] Nessun ambiente virtuale esistente
 )
 
 echo.
-echo  [RESET] Riavvio procedura di installazione...
-echo  ======================================================================
+echo  [RESET] Creazione nuovo ambiente virtuale...
+python -m venv %VENV_DIR%
+
+if not exist "%VENV_DIR%\Scripts\activate.bat" (
+    echo  [ERRORE] Impossibile creare l'ambiente virtuale.
+    pause
+    exit /b 1
+)
+
+echo  [RESET] [OK] Ambiente virtuale creato
 echo.
-call launch.bat
+echo  [RESET] Attivazione ambiente virtuale...
+call "%VENV_DIR%\Scripts\activate.bat"
+
+echo  [RESET] Installazione dipendenze...
+pip install -r requirements.txt
+
+if %errorlevel% neq 0 (
+    echo.
+    echo  [ERRORE] Installazione dipendenze fallita.
+    pause
+    exit /b 1
+)
+
+echo.
+echo  +====================================================================+
+echo  [OK] Reset completato con successo!
+echo  +====================================================================+
+echo.
+echo  Usa launch.bat per avviare l'applicazione.
+echo.
+pause

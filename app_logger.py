@@ -2,6 +2,9 @@
 Intelleo PDF Splitter - Application Logger
 Sistema di logging robusto che scrive su file per diagnostica.
 DEVE essere importato PRIMA di qualsiasi altro modulo.
+
+IMPORTANTE: Questo modulo scrive IMMEDIATAMENTE su file per garantire
+la cattura di errori anche in caso di crash immediato.
 """
 import os
 import sys
@@ -9,36 +12,110 @@ import logging
 import traceback
 from datetime import datetime
 
-# Directory per i log
+# Costante per il nome dell'applicazione
+APP_NAME = "Intelleo PDF Splitter"
+
+# Variabile globale per tracciare lo stato
+_initialized = False
+_log_path = None
+_immediate_log_file = None
+
+
+def _safe_print(message):
+    """Print sicuro che non fallisce se stdout non è disponibile."""
+    try:
+        if sys.stdout is not None:
+            print(message, flush=True)
+    except Exception:
+        pass
+
+
+def _write_immediate(message):
+    """Scrive immediatamente su file senza buffering."""
+    global _immediate_log_file
+    if _immediate_log_file:
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            _immediate_log_file.write(f"{timestamp} | {message}\n")
+            _immediate_log_file.flush()
+            os.fsync(_immediate_log_file.fileno())
+        except Exception:
+            pass
+
+
 def get_log_directory():
     """Ottiene la directory dei log in base al sistema operativo."""
     if sys.platform == 'win32':
         # Windows: %APPDATA%\Intelleo PDF Splitter\Log
-        appdata = os.environ.get('APPDATA', os.path.expanduser('~'))
-        log_dir = os.path.join(appdata, 'Intelleo PDF Splitter', 'Log')
+        appdata = os.environ.get('APPDATA')
+        if not appdata:
+            appdata = os.path.expanduser('~')
+        log_dir = os.path.join(appdata, APP_NAME, 'Log')
     else:
         # Linux/Mac: ~/.intelleo-pdf-splitter/log
         log_dir = os.path.join(os.path.expanduser('~'), '.intelleo-pdf-splitter', 'log')
     
     return log_dir
 
+
+def get_app_directory():
+    """Ottiene la directory dell'applicazione."""
+    if getattr(sys, 'frozen', False):
+        # Eseguibile compilato (Nuitka/PyInstaller)
+        return os.path.dirname(sys.executable)
+    else:
+        # Script Python
+        return os.path.dirname(os.path.abspath(__file__))
+
+
 def setup_logging():
     """
     Configura il sistema di logging.
     Questa funzione DEVE essere chiamata PRIMA di qualsiasi altra operazione.
+    
+    Returns:
+        str: Percorso del file di log
     """
+    global _immediate_log_file, _log_path
+    
     log_dir = get_log_directory()
+    app_dir = get_app_directory()
     
-    # Crea la directory se non esiste
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-    except Exception as e:
-        # Se non riusciamo a creare la directory, proviamo nella directory corrente
-        log_dir = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, 'frozen', False) else os.path.dirname(sys.executable)
+    # Nome file log con formato Log_DD_MM_YYYY.log
+    log_filename = f"Log_{datetime.now().strftime('%d_%m_%Y')}.log"
     
-    # Nome file log con data
-    log_filename = f"intelleo_{datetime.now().strftime('%Y%m%d')}.log"
-    log_path = os.path.join(log_dir, log_filename)
+    # Lista di directory da provare in ordine
+    dirs_to_try = [log_dir, app_dir, os.path.expanduser('~'), os.getcwd()]
+    
+    actual_log_path = None
+    
+    # Prova a creare il file di log in una delle directory
+    for try_dir in dirs_to_try:
+        try:
+            os.makedirs(try_dir, exist_ok=True)
+            test_path = os.path.join(try_dir, log_filename)
+            # Prova ad aprire il file per verificare i permessi
+            _immediate_log_file = open(test_path, 'a', encoding='utf-8', buffering=1)
+            actual_log_path = test_path
+            _write_immediate(f"LOG FILE INIZIALIZZATO: {test_path}")
+            _write_immediate(f"Frozen: {getattr(sys, 'frozen', False)}")
+            _write_immediate(f"Executable: {sys.executable}")
+            break
+        except Exception as e:
+            continue
+    
+    if actual_log_path is None:
+        # Fallback estremo: scrivi nella temp
+        try:
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            actual_log_path = os.path.join(temp_dir, log_filename)
+            _immediate_log_file = open(actual_log_path, 'a', encoding='utf-8', buffering=1)
+            _write_immediate(f"LOG FILE (FALLBACK TEMP): {actual_log_path}")
+        except Exception:
+            pass
+    
+    _log_path = actual_log_path
     
     # Configura il logger root
     logger = logging.getLogger()
@@ -48,42 +125,44 @@ def setup_logging():
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     
-    # File handler con rotazione giornaliera
-    try:
-        file_handler = logging.FileHandler(log_path, encoding='utf-8', mode='a')
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
-    except Exception as e:
-        # Fallback: prova a scrivere accanto all'eseguibile
+    # Formatter comune
+    file_formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # File handler usando lo stesso path già aperto
+    if actual_log_path:
         try:
-            fallback_path = os.path.join(
-                os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__),
-                'error.log'
-            )
-            file_handler = logging.FileHandler(fallback_path, encoding='utf-8', mode='a')
+            file_handler = logging.FileHandler(actual_log_path, encoding='utf-8', mode='a')
             file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
-        except:
-            pass
+            _write_immediate("FileHandler logging configurato con successo")
+        except Exception as e:
+            _write_immediate(f"ERRORE FileHandler: {e}")
+            file_handler = None
+    else:
+        file_handler = None
     
-    # Console handler (solo se non frozen o se console disponibile)
-    if not getattr(sys, 'frozen', False) or sys.stdout is not None:
-        try:
+    # Se non siamo riusciti a creare un file handler, prova con NullHandler
+    if file_handler is None:
+        logger.addHandler(logging.NullHandler())
+        actual_log_path = None
+    
+    # Console handler - solo se stdout e' disponibile
+    try:
+        if sys.stdout is not None and hasattr(sys.stdout, 'write'):
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setLevel(logging.INFO)
             console_formatter = logging.Formatter('[%(levelname)s] %(message)s')
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
-        except:
-            pass
+    except Exception:
+        pass
     
-    return log_path
+    return actual_log_path
+
 
 def setup_exception_handler():
     """
@@ -96,6 +175,9 @@ def setup_exception_handler():
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
         
+        # Scrivi immediatamente su file aperto
+        _write_immediate(f"!!! CRASH !!! {exc_type.__name__}: {exc_value}")
+        
         logger = logging.getLogger('CRASH')
         logger.critical(
             "Eccezione non gestita!",
@@ -103,54 +185,85 @@ def setup_exception_handler():
         )
         
         # Scrivi anche su file dedicato per crash
-        try:
-            log_dir = get_log_directory()
-            crash_file = os.path.join(log_dir, f"crash_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-            with open(crash_file, 'w', encoding='utf-8') as f:
-                f.write(f"CRASH REPORT - Intelleo PDF Splitter\n")
-                f.write(f"{'='*60}\n")
-                f.write(f"Data/Ora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Python: {sys.version}\n")
-                f.write(f"Frozen: {getattr(sys, 'frozen', False)}\n")
-                f.write(f"Executable: {sys.executable}\n")
-                f.write(f"{'='*60}\n\n")
-                f.write("TRACEBACK:\n")
-                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-        except:
-            pass
+        crash_dirs = [get_log_directory(), get_app_directory(), os.path.expanduser('~')]
+        for crash_dir in crash_dirs:
+            try:
+                os.makedirs(crash_dir, exist_ok=True)
+                crash_file = os.path.join(crash_dir, f"Crash_{datetime.now().strftime('%d_%m_%Y_%H%M%S')}.log")
+                with open(crash_file, 'w', encoding='utf-8') as f:
+                    f.write(f"CRASH REPORT - {APP_NAME}\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"Data/Ora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+                    f.write(f"Python: {sys.version}\n")
+                    f.write(f"Frozen: {getattr(sys, 'frozen', False)}\n")
+                    f.write(f"Executable: {sys.executable}\n")
+                    f.write(f"Working Dir: {os.getcwd()}\n")
+                    f.write(f"{'='*60}\n\n")
+                    f.write("TRACEBACK:\n")
+                    traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+                _write_immediate(f"Crash file scritto: {crash_file}")
+                break
+            except Exception:
+                continue
     
     sys.excepthook = exception_handler
+
 
 def log_startup_info():
     """Logga informazioni di avvio per diagnostica."""
     logger = logging.getLogger('STARTUP')
     logger.info("="*60)
-    logger.info("INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
+    logger.info(f"{APP_NAME} - AVVIO APPLICAZIONE")
     logger.info("="*60)
     logger.info(f"Python Version: {sys.version}")
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
     logger.info(f"Executable: {sys.executable}")
     logger.info(f"Working Directory: {os.getcwd()}")
+    logger.info(f"App Directory: {get_app_directory()}")
     logger.info(f"Log Directory: {get_log_directory()}")
     
     # Log delle variabili d'ambiente rilevanti
-    logger.debug(f"PATH: {os.environ.get('PATH', 'N/A')[:200]}...")
     logger.debug(f"APPDATA: {os.environ.get('APPDATA', 'N/A')}")
+    logger.debug(f"PATH (first 200 chars): {os.environ.get('PATH', 'N/A')[:200]}...")
     
     logger.info("-"*60)
 
-# Inizializzazione automatica quando il modulo viene importato
-_log_path = None
 
 def initialize():
-    """Inizializza il sistema di logging. Chiamare all'inizio di main.py."""
+    """
+    Inizializza il sistema di logging. 
+    Chiamare all'inizio di main.py PRIMA di qualsiasi altro import.
+    
+    Returns:
+        str: Percorso del file di log (o None se non disponibile)
+    """
     global _log_path
     _log_path = setup_logging()
     setup_exception_handler()
     log_startup_info()
+    
+    # Log il percorso del file di log
+    logger = logging.getLogger('STARTUP')
+    if _log_path:
+        logger.info(f"Log file: {_log_path}")
+    else:
+        logger.warning("Impossibile creare file di log")
+    
     return _log_path
+
 
 def get_log_path():
     """Restituisce il percorso del file di log corrente."""
     return _log_path
+
+
+# Test standalone
+if __name__ == "__main__":
+    log_path = initialize()
+    logger = logging.getLogger('TEST')
+    logger.info("Test del sistema di logging")
+    logger.debug("Messaggio di debug")
+    logger.warning("Messaggio di warning")
+    logger.error("Messaggio di errore")
+    print(f"\nLog scritto in: {log_path}")
