@@ -118,14 +118,18 @@ class TestMainLogic(unittest.TestCase):
         odc = "123"
         config = {}
         with patch("pdf_processor.process_pdf") as mock_process:
-            mock_process.return_value = (True, "OK", [{'category': 'sconosciuto', 'path': 'out.pdf'}])
+            mock_process.return_value = (True, "OK", [{'category': 'sconosciuto', 'path': 'out.pdf'}], 'orig/test.pdf')
             self.app.processing_worker(files, odc, config)
             item = self.app.log_queue.get()
             self.assertIsInstance(item, tuple)
             while not self.app.log_queue.empty():
                 item = self.app.log_queue.get()
                 if isinstance(item, dict) and item.get('action') == 'show_unknown_dialog':
-                    self.assertEqual(item['files'], ['out.pdf'])
+                    # Verify structure of review tasks
+                    self.assertEqual(len(item['files']), 1)
+                    task = item['files'][0]
+                    self.assertEqual(task['unknown_path'], 'out.pdf')
+                    self.assertEqual(task['source_path'], 'orig/test.pdf')
                     return
             self.fail("Did not find show_unknown_dialog action in queue")
 

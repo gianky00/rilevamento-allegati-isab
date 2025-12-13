@@ -17,10 +17,11 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             La signature attesa è `progress_callback(message, level="INFO")`.
 
     Returns:
-        tuple: (success (bool), message (str), generated_files (list))
+        tuple: (success (bool), message (str), generated_files (list), moved_original_path (str or None))
                generated_files è una lista di dict: {'category': str, 'path': str}
     """
     generated_files = []
+    moved_original_path = None
 
     def log(msg, level="INFO"):
         if progress_callback:
@@ -192,38 +193,57 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         # Sposta il file originale nella cartella ORIGINALI
         log("Spostamento file originale...", "INFO")
 
-        originali_dir = os.path.join(base_output_dir, "ORIGINALI")
-        os.makedirs(originali_dir, exist_ok=True)
+        # Check if we are already in an ORIGINALI directory to avoid nesting
+        if os.path.basename(base_output_dir) == "ORIGINALI":
+            originali_dir = base_output_dir
+        else:
+            originali_dir = os.path.join(base_output_dir, "ORIGINALI")
+            os.makedirs(originali_dir, exist_ok=True)
 
         destination_path = os.path.join(originali_dir, os.path.basename(pdf_path))
 
-        if os.path.exists(destination_path):
-            try:
-                os.remove(destination_path)
-            except OSError as e:
-                log(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI: {e}", "WARNING")
+        # Check if destination is the same as source (e.g. processed inside ORIGINALI)
+        if os.path.abspath(destination_path) == os.path.abspath(pdf_path):
+            log("Il file è già nella cartella ORIGINALI. Nessuno spostamento necessario.", "INFO")
+            moved_original_path = pdf_path
+        else:
+            # Handle overwrite with retry logic for deletion
+            if os.path.exists(destination_path):
+                removed = False
+                for attempt in range(3):
+                    try:
+                        os.remove(destination_path)
+                        removed = True
+                        break
+                    except OSError as e:
+                        log(f"Tentativo rimozione destinazione {attempt+1}/3 fallito: {e}. Riprovo...", "WARNING")
+                        time.sleep(1.0)
+                if not removed:
+                    log(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI dopo 3 tentativi.", "WARNING")
+                    # Move might fail if remove failed, but we try anyway
 
-        # Retry loop for file move (robustness against file locks)
-        moved = False
-        for attempt in range(3):
-            try:
-                shutil.move(pdf_path, destination_path)
-                moved = True
-                break
-            except PermissionError:
-                log(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...", "WARNING")
-                time.sleep(1.0)
-            except Exception as e:
-                log(f"Errore durante lo spostamento: {e}", "ERROR")
-                break
+            # Retry loop for file move (robustness against file locks)
+            moved = False
+            for attempt in range(3):
+                try:
+                    shutil.move(pdf_path, destination_path)
+                    moved = True
+                    moved_original_path = destination_path
+                    break
+                except PermissionError:
+                    log(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...", "WARNING")
+                    time.sleep(1.0)
+                except Exception as e:
+                    log(f"Errore durante lo spostamento: {e}", "ERROR")
+                    break
 
-        if not moved:
-             raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
+            if not moved:
+                 raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
 
         log("Elaborazione completata.", "INFO")
 
-        return True, "Successo", generated_files
+        return True, "Successo", generated_files, moved_original_path
 
     except Exception as e:
         log(f"Errore critico: {e}", "ERROR")
-        return False, str(e), generated_files
+        return False, str(e), generated_files, None

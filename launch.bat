@@ -1,57 +1,35 @@
 @echo off
-TITLE PDF Splitter Launcher
+TITLE Intelleo PDF Splitter Launcher
+set VENV_DIR=.venv
 
-REM Controlla se Python è nel PATH
-python --version >nul 2>nul
-if %errorlevel% neq 0 (
-    echo Python non trovato nel PATH.
-    echo Assicurati che Python sia installato e aggiunto alle variabili d'ambiente.
-    pause
-    exit /b
+:: 1. Check/Create Virtual Environment
+if not exist %VENV_DIR% (
+    echo Creazione ambiente virtuale in %VENV_DIR%...
+    python -m venv %VENV_DIR%
 )
 
-REM Controlla se pip è installato
-pip --version >nul 2>nul
+:: 2. Activate Virtual Environment
+call %VENV_DIR%\Scripts\activate.bat
+
+:: 3. Install Dependencies (Quietly update)
+echo Verifica dipendenze...
+pip install -r requirements.txt >nul 2>&1
 if %errorlevel% neq 0 (
-    echo pip non è installato o non è nel PATH.
-    pause
-    exit /b
+    echo Errore installazione dipendenze. Tentativo verbose...
+    pip install -r requirements.txt
+    if %errorlevel% neq 0 (
+        echo Errore critico dipendenze.
+        pause
+        exit /b
+    )
 )
 
-echo.
-echo ===================================
-echo  Installazione dipendenze in corso...
-echo ===================================
-echo.
-pip install -r requirements.txt
-if %errorlevel% neq 0 (
-    echo.
-    echo ERRORE durante l'installazione delle dipendenze.
-    pause
-    exit /b
-)
-
-echo.
-echo ===================================
-echo  Avvio dell'applicazione...
-echo ===================================
-echo.
-
-REM Avvia main.py usando python standard (non pythonw) per vedere i log in questa finestra
+:: 4. Launch App
+echo Avvio Intelleo PDF Splitter...
 python main.py
 
-REM Se python termina con errore, metti in pausa
 if %errorlevel% neq 0 (
     echo.
-    echo ===================================
-    echo  L'applicazione si è chiusa con un ERRORE.
-    echo  Leggi i messaggi sopra per capire il problema.
-    echo ===================================
+    echo L'applicazione si e' chiusa con un errore.
     pause
-) else (
-    echo.
-    echo Applicazione chiusa correttamente.
-    REM Opzionale: pause se vuoi vedere anche la chiusura corretta, altrimenti rimuovi
-    REM pause
 )
-exit /b
