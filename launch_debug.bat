@@ -1,12 +1,14 @@
 @echo off
-TITLE Intelleo PDF Splitter v2.0
-COLOR 0B
+TITLE Intelleo PDF Splitter v2.0 - DEBUG MODE
+COLOR 0E
 cls
 
 echo.
 echo  +====================================================================+
-echo  ^|           INTELLEO PDF SPLITTER - LAUNCHER                        ^|
+echo  ^|       INTELLEO PDF SPLITTER - LAUNCHER (DEBUG MODE)               ^|
 echo  +====================================================================+
+echo.
+echo  [DEBUG] Questa modalita' mantiene il CMD aperto per vedere gli errori.
 echo.
 
 set VENV_DIR=.venv
@@ -50,15 +52,24 @@ if %errorlevel% neq 0 (
 echo  [SETUP] [OK] Dipendenze verificate
 echo.
 
-:: 4. Launch App using pythonw (no console) and exit
+:: 4. Launch App in DEBUG mode (console stays open)
 echo  ======================================================================
-echo  [AVVIO] Avvio applicazione...
+echo  [DEBUG] Avvio applicazione con console visibile...
 echo  ======================================================================
 echo.
 
-:: Use START with pythonw to launch GUI without keeping console open
-:: pythonw runs Python without a console window
-start "" "%VENV_DIR%\Scripts\pythonw.exe" main.py %*
+python main.py %*
+set APP_EXIT_CODE=%errorlevel%
 
-:: Exit immediately - the app runs independently
-exit /b 0
+echo.
+echo  ======================================================================
+if %APP_EXIT_CODE% equ 0 (
+    echo  [DEBUG] Applicazione chiusa normalmente (codice: 0)
+) else (
+    echo  [ERRORE] Applicazione chiusa con errore (codice: %APP_EXIT_CODE%)
+)
+echo  ======================================================================
+echo.
+echo  Premi un tasto per chiudere...
+pause >nul
+exit /b %APP_EXIT_CODE%

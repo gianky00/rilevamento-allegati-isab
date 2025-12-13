@@ -415,11 +415,9 @@ class MainApp:
         self.pages_processed_count = 0
 
         logger.info("Configurazione stili...")
-        # Configura stili
         self._setup_styles()
 
         logger.info("Configurazione Drag & Drop...")
-        # Configura Drag & Drop
         self._setup_drag_drop()
 
         logger.info("Creazione interfaccia...")
@@ -445,7 +443,6 @@ class MainApp:
         self._setup_help_tab()
 
         logger.info("Caricamento impostazioni...")
-        # Carica impostazioni e avvia loop
         self.load_settings()
         self._display_license_info()
         self.root.after(100, self._process_log_queue)
@@ -835,10 +832,8 @@ class MainApp:
                 scadenza = payload.get('Scadenza Licenza', 'N/A')
                 hw_id = payload.get('Hardware ID', 'N/A')
 
-                # Aggiorna card
                 self.license_status_label.config(text="[OK] Valida", fg=COLORS['success'])
                 
-                # Aggiorna text area
                 info_text = f"""+==================================================================+
 |  Cliente:      {cliente:<50}|
 |  Scadenza:     {scadenza:<50}|
@@ -872,7 +867,6 @@ class MainApp:
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_area.config(state='normal')
 
-        # Gestione progress inline
         if level == "PROGRESS":
             last_idx = self.log_area.index("end-2l")
             last_line = self.log_area.get(last_idx, "end-1c")
@@ -893,7 +887,6 @@ class MainApp:
         self.log_area.config(state='disabled')
         self.log_area.see('end')
 
-        # Aggiorna anche il log recente nella dashboard
         if level in ["SUCCESS", "ERROR", "WARNING"]:
             self._add_recent_log(message, level)
 
@@ -956,7 +949,6 @@ class MainApp:
             else:
                 self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
             
-            # Switch alla tab elaborazione e avvia
             self.notebook.select(self.processing_tab)
             self._start_processing()
 
@@ -1011,14 +1003,12 @@ class MainApp:
             messagebox.showerror("Errore", "Seleziona almeno un file PDF.")
             return
 
-        # Reset log e progress
         self.log_area.config(state='normal')
         self.log_area.delete('1.0', 'end')
         self.log_area.config(state='disabled')
         self.progress_var.set(0)
         self.progress_label.config(text="Inizializzazione...")
 
-        # Logging professionale
         self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
         self._add_log_message(f"Codice ODC: {odc_input}", "INFO")
         self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
@@ -1041,7 +1031,6 @@ class MainApp:
             def progress_callback(message, level="INFO"):
                 self.log_queue.put((message, level))
                 
-                # Aggiorna progress bar
                 if "Elaborazione pagina" in message:
                     try:
                         parts = message.split()
@@ -1069,11 +1058,9 @@ class MainApp:
             if not success:
                 self.log_queue.put((f"Errore: {message}", "ERROR"))
             else:
-                # Conta pagine e file
                 self.files_processed_count += 1
                 self.log_queue.put((f"File completato con successo", "SUCCESS"))
 
-                # Check file sconosciuti
                 has_unknown = any(f['category'] == 'sconosciuto' for f in generated)
                 if has_unknown:
                     unknown_paths = [f['path'] for f in generated if f['category'] == 'sconosciuto']
@@ -1086,7 +1073,6 @@ class MainApp:
                             'siblings': siblings
                         })
 
-        # Completamento
         self.log_queue.put({'action': 'update_progress', 'value': 100, 'text': 'Completato!'})
         
         elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
@@ -1099,7 +1085,6 @@ class MainApp:
         if unknown_files:
             self.log_queue.put({'action': 'show_unknown_dialog', 'files': unknown_files, 'odc': odc})
 
-        # Aggiorna statistiche dashboard
         self.root.after(0, lambda: self.files_count_label.config(text=str(self.files_processed_count)))
         self.root.after(0, lambda: self.odc_var.set("5400"))
 
@@ -1117,7 +1102,6 @@ class MainApp:
         """Carica le impostazioni."""
         self.config = config_manager.load_config()
         
-        # Aggiorna Tesseract path
         if hasattr(self, 'tesseract_path_var'):
             try:
                 for trace in self.tesseract_path_var.trace_info():
@@ -1130,7 +1114,6 @@ class MainApp:
 
         self._populate_rules_tree()
         
-        # Aggiorna conteggio regole
         rules_count = len(self.config.get("classification_rules", []))
         if hasattr(self, 'rules_count_label'):
             self.rules_count_label.config(text=str(rules_count))
@@ -1157,7 +1140,6 @@ class MainApp:
             suffix = rule.get("filename_suffix", rule["category_name"])
             tag_name = f"color_{color}"
 
-            # Calcola contrasto testo
             h = color.lstrip('#')
             try:
                 rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
@@ -1262,7 +1244,6 @@ class MainApp:
             self._populate_rules_tree()
             self._auto_save_settings()
             
-            # Aggiorna conteggio
             self.rules_count_label.config(
                 text=str(len(self.config.get("classification_rules", []))))
 
@@ -1279,7 +1260,6 @@ class MainApp:
         main_frame = ttk.Frame(dialog, padding=20)
         main_frame.pack(fill='both', expand=True)
 
-        # Variabili
         category_var = tk.StringVar(value=rule["category_name"] if rule else "")
         suffix_var = tk.StringVar(value=rule.get("filename_suffix", "") if rule else "")
         keywords_var = tk.StringVar(value=", ".join(rule.get("keywords", [])) if rule else "")
@@ -1287,7 +1267,6 @@ class MainApp:
 
         row = 0
         
-        # Categoria
         ttk.Label(main_frame, text="Nome Categoria:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         cat_entry = ttk.Entry(main_frame, textvariable=category_var, width=35)
@@ -1297,7 +1276,6 @@ class MainApp:
         
         row += 1
         
-        # Suffisso
         ttk.Label(main_frame, text="Suffisso File:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         ttk.Entry(main_frame, textvariable=suffix_var, width=35).grid(
@@ -1305,7 +1283,6 @@ class MainApp:
         
         row += 1
         
-        # Keywords
         ttk.Label(main_frame, text="Keywords:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         ttk.Entry(main_frame, textvariable=keywords_var, width=35).grid(
@@ -1315,7 +1292,6 @@ class MainApp:
         
         row += 2
         
-        # Colore
         ttk.Label(main_frame, text="Colore:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         
@@ -1335,7 +1311,6 @@ class MainApp:
         
         row += 1
         
-        # ROI info
         ttk.Label(main_frame, text="Aree ROI:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         roi_count = len(rule.get("rois", [])) if rule else 0
@@ -1402,7 +1377,6 @@ class MainApp:
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
-    # Banner di avvio (senza caratteri Unicode)
     logger.info("="*68)
     logger.info("           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
     logger.info("="*68)
@@ -1410,25 +1384,13 @@ if __name__ == "__main__":
     logger.info(f"  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     logger.info("="*68)
 
-    # Print anche su console se disponibile
-    print("+====================================================================+")
-    print("|           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE               |")
-    print("+====================================================================+")
-    print(f"|  Versione: {version.__version__}")
-    print(f"|  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print("+====================================================================+")
-    print()
-
     # License Update & Check
     logger.info("Verifica licenza in corso...")
-    print("[SISTEMA] Verifica licenza in corso...")
     try:
         license_updater.run_update()
         logger.info("Aggiornamento licenza completato")
-        print("[SISTEMA] [OK] Aggiornamento licenza completato")
     except Exception as e:
         logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
-        print(f"[ERRORE] Verifica licenza fallita: {e}")
         messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
         sys.exit(1)
 
@@ -1442,14 +1404,10 @@ if __name__ == "__main__":
         root.clipboard_clear()
         root.clipboard_append(hw_id)
         messagebox.showerror("Licenza Non Valida", err_msg)
-        print(f"[ERRORE] Licenza non valida: {msg}")
         sys.exit(1)
 
     logger.info("Licenza valida")
-    print("[SISTEMA] [OK] Licenza valida")
     logger.info("Inizializzazione interfaccia grafica...")
-    print("[SISTEMA] Inizializzazione interfaccia grafica...")
-    print()
 
     # Pulizia signal file
     if os.path.exists(SIGNAL_FILE):
@@ -1459,10 +1417,8 @@ if __name__ == "__main__":
     try:
         root = TkinterDnD.Tk()
         logger.info("Drag & Drop abilitato")
-        print("[SISTEMA] [OK] Drag & Drop abilitato")
     except Exception as e:
         logger.warning(f"Drag & Drop non disponibile: {e}")
-        print(f"[AVVISO] Drag & Drop non disponibile: {e}")
         root = tk.Tk()
 
     # Check CLI args
@@ -1473,12 +1429,8 @@ if __name__ == "__main__":
             if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
                 cli_path = potential_path
                 logger.info(f"Avvio con file: {potential_path}")
-                print(f"[SISTEMA] Avvio con file: {potential_path}")
 
     logger.info("Applicazione pronta")
-    print("[SISTEMA] [OK] Applicazione pronta")
-    print("="*68)
-    print()
 
     app = MainApp(root, auto_file_path=cli_path)
     
