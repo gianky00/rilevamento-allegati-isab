@@ -116,7 +116,7 @@ class TestPdfProcessor(unittest.TestCase):
         with patch("os.path.isfile", return_value=False):
             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", config)
             self.assertFalse(success)
-            self.assertIn("Tesseract non è configurato", msg)
+            self.assertIn("Percorso Tesseract non configurato o non valido", msg)
 
     @patch("pdf_processor.fitz.open")
     @patch("pdf_processor.pytesseract.image_to_string")

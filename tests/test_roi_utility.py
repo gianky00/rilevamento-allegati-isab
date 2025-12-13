@@ -26,6 +26,7 @@ class TestROIUtility(unittest.TestCase):
             "tkinter.ttk.Checkbutton",
             "tkinter.ttk.Scrollbar",
             "tkinter.ttk.Combobox",
+            "tkinter.ttk.Style",
             "roi_utility.config_manager.load_config",
             "roi_utility.config_manager.save_config",
             "roi_utility.fitz" # Patch whole module
@@ -54,7 +55,7 @@ class TestROIUtility(unittest.TestCase):
 
     def test_init(self):
         self.assertIsNotNone(self.app)
-        self.assertEqual(self.app.root.title.call_args[0][0], "Utility di Gestione ROI")
+        self.assertEqual(self.app.root.title.call_args[0][0], "🎯 Intelleo - Utility Gestione ROI")
 
     def test_draw_existing_rois(self):
         config = {
@@ -90,6 +91,10 @@ class TestROIUtility(unittest.TestCase):
             mock_render.assert_called_with(3)
 
     def test_prompt_and_save_roi(self):
+        # Must have at least one category to open the dialog
+        self.app.config = {
+            "classification_rules": [{"category_name": "Test"}]
+        }
         self.app.prompt_and_save_roi([0,0,10,10])
         self.patches['tkinter.Toplevel'].assert_called()
 
