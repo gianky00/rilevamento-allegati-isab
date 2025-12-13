@@ -34,12 +34,20 @@ SIGNAL_FILE = ".update_signal"
 
 # Setup logging file
 try:
-    if getattr(sys, 'frozen', False):
-        BASE_DIR = os.path.dirname(sys.executable)
+    if sys.platform == "win32":
+        # Use %APPDATA% for logs to ensure write permissions on Windows
+        app_data = os.environ.get('APPDATA')
+        if not app_data:
+            app_data = os.path.expanduser("~")
+        LOG_DIR = os.path.join(app_data, "Intelleo PDF Splitter", "Log")
     else:
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        # Fallback for Linux/Dev environment
+        if getattr(sys, 'frozen', False):
+            BASE_DIR = os.path.dirname(sys.executable)
+        else:
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        LOG_DIR = os.path.join(BASE_DIR, "Log")
 
-    LOG_DIR = os.path.join(BASE_DIR, "Log")
     os.makedirs(LOG_DIR, exist_ok=True)
     LOG_FILE = os.path.join(LOG_DIR, "error_log.txt")
 

@@ -60,6 +60,8 @@ Source: "{#BuildDir}\*"; DestDir: "{app}"; Excludes: "config.json,admin"; Flags:
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Shortcut to AppData folder for Logs & Data
+Name: "{app}\AppData"; Filename: "{userappdata}\Intelleo PDF Splitter"; IconFilename: "explorer.exe"
 
 [Run]
 ; Avvia l'app dopo l'installazione
