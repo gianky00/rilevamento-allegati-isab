@@ -24,16 +24,12 @@ class TestAppLogger(unittest.TestCase):
         
     def tearDown(self):
         """Cleanup dopo ogni test."""
+        # Usa la nuova funzione di shutdown per pulire tutto
+        app_logger.shutdown_logging()
+
         # Ripristina lo stato originale del logger
         logging.root.handlers = self.original_handlers
         logging.root.level = self.original_level
-        # Chiudi eventual file aperti
-        if app_logger._immediate_log_file:
-            try:
-                app_logger._immediate_log_file.close()
-            except:
-                pass
-            app_logger._immediate_log_file = None
         
     def test_get_log_directory_windows(self):
         """Test che get_log_directory restituisce il percorso corretto su Windows."""
@@ -67,15 +63,22 @@ class TestAppLogger(unittest.TestCase):
     
     def test_setup_logging_creates_file(self):
         """Test che setup_logging crea un file di log."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        # NOTA: Usiamo try-finally per garantire che shutdown_logging venga chiamato
+        # PRIMA che tempfile provi a pulire la directory
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 log_path = app_logger.setup_logging()
                 self.assertIsNotNone(log_path)
                 self.assertTrue(os.path.exists(log_path))
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_setup_logging_filename_format(self):
         """Test che il nome del file di log ha il formato Log_DD_MM_YYYY.log."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 log_path = app_logger.setup_logging()
                 filename = os.path.basename(log_path)
@@ -84,6 +87,9 @@ class TestAppLogger(unittest.TestCase):
                 # Verifica formato DD_MM_YYYY
                 parts = filename[4:-4].split('_')  # Rimuove "Log_" e ".log"
                 self.assertEqual(len(parts), 3, f"Expected 3 parts in date, got: {parts}")
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_setup_exception_handler(self):
         """Test che setup_exception_handler configura sys.excepthook."""
@@ -95,23 +101,32 @@ class TestAppLogger(unittest.TestCase):
     
     def test_log_startup_info(self):
         """Test che log_startup_info non solleva eccezioni."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 app_logger.setup_logging()
                 # Non deve sollevare eccezioni
                 app_logger.log_startup_info()
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_initialize(self):
         """Test che initialize restituisce un percorso valido."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 log_path = app_logger.initialize()
                 self.assertIsNotNone(log_path)
                 self.assertEqual(app_logger.get_log_path(), log_path)
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_logging_writes_to_file(self):
         """Test che il logging scrive effettivamente sul file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 log_path = app_logger.setup_logging()
                 
@@ -129,10 +144,14 @@ class TestAppLogger(unittest.TestCase):
                 with open(log_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     self.assertIn(test_message, content)
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_immediate_write(self):
         """Test che _write_immediate scrive immediatamente sul file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 log_path = app_logger.setup_logging()
                 
@@ -143,6 +162,9 @@ class TestAppLogger(unittest.TestCase):
                 with open(log_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     self.assertIn(test_message, content)
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
     
     def test_safe_print_no_exception(self):
         """Test che _safe_print non solleva eccezioni anche se stdout è None."""
@@ -165,13 +187,8 @@ class TestAppLoggerExceptionHandler(unittest.TestCase):
     
     def tearDown(self):
         """Cleanup dopo ogni test."""
+        app_logger.shutdown_logging()
         logging.root.handlers = self.original_handlers
-        if app_logger._immediate_log_file:
-            try:
-                app_logger._immediate_log_file.close()
-            except:
-                pass
-            app_logger._immediate_log_file = None
     
     def test_exception_handler_keyboard_interrupt(self):
         """Test che KeyboardInterrupt non viene loggato."""
@@ -187,7 +204,8 @@ class TestAppLoggerExceptionHandler(unittest.TestCase):
     
     def test_exception_handler_logs_error(self):
         """Test che le eccezioni vengono loggate."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = tempfile.mkdtemp()
+        try:
             with patch.object(app_logger, 'get_log_directory', return_value=tmpdir):
                 app_logger.setup_logging()
                 app_logger.setup_exception_handler()
@@ -198,6 +216,9 @@ class TestAppLoggerExceptionHandler(unittest.TestCase):
                 except ValueError:
                     exc_type, exc_value, exc_tb = sys.exc_info()
                     sys.excepthook(exc_type, exc_value, exc_tb)
+        finally:
+            app_logger.shutdown_logging()
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == '__main__':
