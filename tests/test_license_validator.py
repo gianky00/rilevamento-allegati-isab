@@ -26,7 +26,7 @@ class TestLicenseValidator(unittest.TestCase):
          with patch("os.path.exists", side_effect=exists_side_effect):
              is_valid, msg = license_validator.verify_license()
              self.assertFalse(is_valid)
-             self.assertIn("File di licenza danneggiati", msg)
+             self.assertIn("File di licenza mancanti o danneggiati", msg)
 
     def test_get_license_info_no_file(self):
         with patch("builtins.open", side_effect=FileNotFoundError):
@@ -106,7 +106,7 @@ class TestLicenseValidator(unittest.TestCase):
         }
         is_valid, msg = license_validator.verify_license()
         self.assertTrue(is_valid)
-        self.assertIn("Licenza Valida", msg)
+        self.assertIn("Licenza valida per: TestUser", msg)
 
 if __name__ == "__main__":
     unittest.main()
