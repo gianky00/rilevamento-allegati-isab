@@ -3,13 +3,24 @@ TITLE Intelleo PDF Splitter Launcher
 set VENV_DIR=.venv
 
 :: 1. Check/Create Virtual Environment
-if not exist %VENV_DIR% (
+if not exist "%VENV_DIR%\Scripts\activate.bat" (
+    if exist "%VENV_DIR%" (
+        echo Ambiente virtuale corrotto rilevato. Rimozione...
+        rmdir /s /q "%VENV_DIR%"
+    )
     echo Creazione ambiente virtuale in %VENV_DIR%...
     python -m venv %VENV_DIR%
+
+    if not exist "%VENV_DIR%\Scripts\activate.bat" (
+        echo ERRORE: Impossibile creare il virtual environment.
+        echo Assicurati che Python sia installato correttamente e aggiunto al PATH.
+        pause
+        exit /b 1
+    )
 )
 
 :: 2. Activate Virtual Environment
-call %VENV_DIR%\Scripts\activate.bat
+call "%VENV_DIR%\Scripts\activate.bat"
 
 :: 3. Install Dependencies (Quietly update)
 echo Verifica dipendenze...

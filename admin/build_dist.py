@@ -201,6 +201,11 @@ def build():
             f"--output-dir={DIST_DIR}",
             "--enable-plugin=tk-inter",
             "--show-progress", # Show detailed progress
+            # Optimization: Use low memory to avoid exhaustion
+            "--low-memory",
+            # PREVENT COMPILATION OF PyMuPDF to avoid C1002 (Heap Space) error
+            "--nofollow-import-to=fitz",
+            "--nofollow-import-to=pymupdf",
             # Include the pyarmor runtime package
             f"--include-package={runtime_dir}",
             # Include tkinterdnd2 package data (binaries)
@@ -505,9 +510,6 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     finally:
         if os.path.exists(zip_path):
             os.remove(zip_path)
-
-if __name__ == "__main__":
-    build()
 
 if __name__ == "__main__":
     build()
