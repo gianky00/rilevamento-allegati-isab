@@ -3,8 +3,7 @@ Pillow
 pytesseract
 cryptography
 pyarmor
-nuitka
-zstandard
+pyinstaller
 tkinterdnd2
 numpy
 pytest
