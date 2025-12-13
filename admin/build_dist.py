@@ -198,6 +198,7 @@ def build():
         cmd_nuitka = [
             sys.executable, "-m", "nuitka",
             "--standalone",
+            "--mingw64", # Enforce MinGW64 compiler
             f"--output-dir={DIST_DIR}",
             "--enable-plugin=tk-inter",
             "--show-progress", # Show detailed progress
