@@ -1,9 +1,15 @@
-import pymupdf as fitz  # PyMuPDF
+"""
+Intelleo PDF Splitter - Processore PDF
+Gestisce l'elaborazione e la divisione dei file PDF basata su regole OCR.
+"""
+import pymupdf as fitz
 import pytesseract
 from PIL import Image
 import os
 import shutil
 import time
+from datetime import datetime
+
 
 def process_pdf(pdf_path, odc, config, progress_callback=None):
     """
@@ -13,106 +19,134 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         pdf_path (str): Il percorso del file PDF da elaborare.
         odc (str): Il numero ODC da utilizzare nel nome del file di output.
         config (dict): Il dizionario di configurazione contenente le impostazioni.
-        progress_callback (function, optional): Una funzione da chiamare per riportare i progressi.
-            La signature attesa è `progress_callback(message, level="INFO")`.
+        progress_callback (function, optional): Funzione per riportare i progressi.
+            Signature: progress_callback(message, level="INFO")
 
     Returns:
-        tuple: (success (bool), message (str), generated_files (list), moved_original_path (str or None))
-               generated_files è una lista di dict: {'category': str, 'path': str}
+        tuple: (success, message, generated_files, moved_original_path)
+               generated_files: lista di dict {'category': str, 'path': str}
     """
     generated_files = []
     moved_original_path = None
+    start_time = datetime.now()
 
     def log(msg, level="INFO"):
+        """Log interno con timestamp."""
         if progress_callback:
             progress_callback(msg, level)
 
-    log(f"Avvio dell'elaborazione del PDF: {os.path.basename(pdf_path)}", "INFO")
+    def log_separator():
+        """Stampa un separatore visivo."""
+        log("─" * 50, "INFO")
+
+    # ========================================================================
+    # FASE 1: INIZIALIZZAZIONE
+    # ========================================================================
+    log(f"📄 File: {os.path.basename(pdf_path)}", "INFO")
+    log(f"📁 Percorso: {os.path.dirname(pdf_path)}", "INFO")
+    log_separator()
 
     try:
-        # Imposta il percorso di Tesseract se specificato
+        # Verifica Tesseract
         tesseract_path = config.get("tesseract_path")
         if tesseract_path and os.path.isfile(tesseract_path):
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            log("✓ Tesseract OCR configurato", "INFO")
         else:
-            raise ValueError("Il percorso di Tesseract non è configurato o non è un file valido.")
+            raise ValueError("Percorso Tesseract non configurato o non valido")
 
+        # Apertura PDF
         pdf_doc = fitz.open(pdf_path)
-
-        page_groups = {}
         total_pages = len(pdf_doc)
+        log(f"✓ PDF aperto: {total_pages} pagine", "INFO")
+        log_separator()
 
-        # Itera su ogni pagina del PDF
+        # ====================================================================
+        # FASE 2: ANALISI OCR DELLE PAGINE
+        # ====================================================================
+        log("🔍 ANALISI OCR IN CORSO...", "INFO")
+        
+        page_groups = {}
+        rules = config.get("classification_rules", [])
+        rules_count = len(rules)
+        
+        log(f"   Regole di classificazione: {rules_count}", "INFO")
+
         for i, page in enumerate(pdf_doc):
-            # Dynamic log update format implied by repeated calls with same prefix?
-            # The UI handles the "Elaborazione pagina X/Y..." logic if we send a specific message format.
             log(f"Elaborazione pagina {i + 1}/{total_pages}...", "PROGRESS")
 
             page_category = "sconosciuto"
             page_rect = page.rect
 
-            # Itera attraverso ogni regola di classificazione
-            for rule in config.get("classification_rules", []):
+            # Itera attraverso ogni regola
+            for rule in rules:
                 rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
 
-                # Cicla attraverso ogni ROI definita per la regola
+                # Cicla attraverso ogni ROI definita
                 for roi in rois:
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
                         continue
 
-                    # Crea un rettangolo per la ROI (coordinate PDF originali)
                     roi_rect = fitz.Rect(roi)
 
                     # Verifica che la ROI sia all'interno della pagina
                     if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
                         continue
 
-                    # Renderizza SOLO l'area definita dalla ROI
-                    # Matrix(300/72, 300/72) scala da 72 DPI (default PDF) a 300 DPI
+                    # Renderizza l'area ROI a 300 DPI in scala di grigi
                     mat = fitz.Matrix(300/72, 300/72)
                     try:
-                        # Optimization: Use grayscale (csGRAY) directly from MuPDF to reduce memory and processing
                         pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
-
-                        # Verifica validità pixmap
+                        
                         if pix.width < 1 or pix.height < 1:
                             continue
 
                         cropped_img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                     except Exception as e:
-                        log(f"Errore rendering ROI per '{category_name}': {e}", "WARNING")
+                        log(f"⚠ Rendering ROI '{category_name}': {e}", "WARNING")
                         continue
 
-                    # Tenta l'OCR sull'immagine originale e poi ruotata
-                    for angle in [0, -90]: # 0 = nessuna rotazione, -90 = 90 gradi orario
+                    # OCR con rotazione automatica
+                    for angle in [0, -90]:
                         img_to_scan = cropped_img
                         if angle != 0:
                             img_to_scan = cropped_img.rotate(angle, expand=True)
 
                         try:
-                            # Add timeout to prevent indefinite hangs
-                            ocr_text = pytesseract.image_to_string(img_to_scan, lang='ita', timeout=30).lower()
-                            # print(f"DEBUG OCR (angle={angle}): '{ocr_text}'")
+                            ocr_text = pytesseract.image_to_string(
+                                img_to_scan, lang='ita', timeout=30).lower()
+                            
                             if any(keyword in ocr_text for keyword in keywords):
                                 page_category = category_name
-                                break  # Keyword trovata, esce dal ciclo di rotazione
+                                break
                         except Exception as ocr_error:
-                            log(f"Avviso OCR per '{category_name}': {ocr_error}", "WARNING")
+                            log(f"⚠ OCR '{category_name}': {ocr_error}", "WARNING")
 
                     if page_category == category_name:
-                        break  # Regola trovata, interrompe il ciclo delle ROI
+                        break
 
                 if page_category == category_name:
-                    break  # Regola trovata, interrompe il ciclo delle regole
+                    break
 
-            # Aggiunge l'indice della pagina al gruppo corrispondente
+            # Aggiunge la pagina al gruppo
             if page_category not in page_groups:
                 page_groups[page_category] = []
             page_groups[page_category].append(i)
 
-        log("Raggruppamento e salvataggio dei PDF...", "INFO")
+        # Sommario classificazione
+        log_separator()
+        log("📊 RISULTATO CLASSIFICAZIONE:", "INFO")
+        for cat, pages in page_groups.items():
+            icon = "✓" if cat != "sconosciuto" else "?"
+            log(f"   {icon} {cat}: {len(pages)} pagine", "INFO")
+
+        # ====================================================================
+        # FASE 3: SALVATAGGIO DEI PDF DIVISI
+        # ====================================================================
+        log_separator()
+        log("💾 SALVATAGGIO FILE...", "INFO")
 
         base_output_dir = os.path.dirname(pdf_path)
 
@@ -121,12 +155,12 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                 continue
 
             # Determina il suffisso del file
-            suffix = category # Default
+            suffix = category
             if category != "sconosciuto":
-                for rule in config.get("classification_rules", []):
+                for rule in rules:
                     if rule["category_name"] == category:
                         suffix = rule.get("filename_suffix", category)
-                        if not suffix: # Handle empty string case if present
+                        if not suffix:
                             suffix = category
                         break
 
@@ -137,30 +171,32 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
             output_path = os.path.join(base_output_dir, output_filename)
 
+            # Crea nuovo PDF
             new_pdf = fitz.open()
 
-            # Optimization: Insert contiguous page ranges instead of single pages
+            # Inserisci pagine per range contigui (ottimizzazione)
             if pages:
                 pages.sort()
                 ranges = []
-                if pages:
-                    start = pages[0]
-                    end = pages[0]
-                    for p in pages[1:]:
-                        if p == end + 1:
-                            end = p
-                        else:
-                            ranges.append((start, end))
-                            start = p
-                            end = p
-                    ranges.append((start, end))
+                start = pages[0]
+                end = pages[0]
+                
+                for p in pages[1:]:
+                    if p == end + 1:
+                        end = p
+                    else:
+                        ranges.append((start, end))
+                        start = p
+                        end = p
+                ranges.append((start, end))
 
                 for start, end in ranges:
                     new_pdf.insert_pdf(pdf_doc, from_page=start, to_page=end)
 
-            # Retry loop for saving file (robustness against locks)
+            # Salvataggio con retry
             saved = False
             save_error = None
+            
             for attempt in range(3):
                 try:
                     new_pdf.save(output_path)
@@ -168,7 +204,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     break
                 except PermissionError as e:
                     save_error = e
-                    log(f"Tentativo salvataggio {attempt+1}/3 fallito (file bloccato): {output_filename}. Riprovo...", "WARNING")
+                    log(f"⚠ Tentativo {attempt+1}/3: file bloccato", "WARNING")
                     time.sleep(1.0)
                 except Exception as e:
                     save_error = e
@@ -177,11 +213,11 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             new_pdf.close()
 
             if not saved:
-                log(f"Errore: Impossibile salvare {output_filename}: {save_error}", "ERROR")
+                log(f"✗ Errore salvataggio {output_filename}: {save_error}", "ERROR")
                 continue
 
             abs_path = os.path.abspath(output_path)
-            log(f"Salvato: {abs_path}", "INFO")
+            log(f"   ✓ {output_filename}", "INFO")
 
             generated_files.append({
                 'category': category,
@@ -190,10 +226,12 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
         pdf_doc.close()
 
-        # Sposta il file originale nella cartella ORIGINALI
-        log("Spostamento file originale...", "INFO")
+        # ====================================================================
+        # FASE 4: SPOSTAMENTO FILE ORIGINALE
+        # ====================================================================
+        log_separator()
+        log("📦 ARCHIVIAZIONE ORIGINALE...", "INFO")
 
-        # Check if we are already in an ORIGINALI directory to avoid nesting
         if os.path.basename(base_output_dir) == "ORIGINALI":
             originali_dir = base_output_dir
         else:
@@ -202,27 +240,20 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
 
         destination_path = os.path.join(originali_dir, os.path.basename(pdf_path))
 
-        # Check if destination is the same as source (e.g. processed inside ORIGINALI)
         if os.path.abspath(destination_path) == os.path.abspath(pdf_path):
-            log("Il file è già nella cartella ORIGINALI. Nessuno spostamento necessario.", "INFO")
+            log("   ℹ File già in ORIGINALI", "INFO")
             moved_original_path = pdf_path
         else:
-            # Handle overwrite with retry logic for deletion
+            # Gestione sovrascrittura
             if os.path.exists(destination_path):
-                removed = False
                 for attempt in range(3):
                     try:
                         os.remove(destination_path)
-                        removed = True
                         break
-                    except OSError as e:
-                        log(f"Tentativo rimozione destinazione {attempt+1}/3 fallito: {e}. Riprovo...", "WARNING")
+                    except OSError:
                         time.sleep(1.0)
-                if not removed:
-                    log(f"Avviso: Impossibile rimuovere il file esistente in ORIGINALI dopo 3 tentativi.", "WARNING")
-                    # Move might fail if remove failed, but we try anyway
 
-            # Retry loop for file move (robustness against file locks)
+            # Spostamento con retry
             moved = False
             for attempt in range(3):
                 try:
@@ -231,19 +262,29 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     moved_original_path = destination_path
                     break
                 except PermissionError:
-                    log(f"Tentativo spostamento {attempt+1}/3 fallito (file bloccato). Riprovo...", "WARNING")
+                    log(f"⚠ Tentativo spostamento {attempt+1}/3", "WARNING")
                     time.sleep(1.0)
                 except Exception as e:
-                    log(f"Errore durante lo spostamento: {e}", "ERROR")
+                    log(f"✗ Errore spostamento: {e}", "ERROR")
                     break
 
             if not moved:
-                 raise OSError(f"Impossibile spostare il file '{os.path.basename(pdf_path)}' dopo 3 tentativi.")
+                raise OSError(f"Impossibile spostare '{os.path.basename(pdf_path)}'")
 
-        log("Elaborazione completata.", "INFO")
+            log(f"   ✓ Spostato in ORIGINALI", "INFO")
+
+        # ====================================================================
+        # FASE 5: COMPLETAMENTO
+        # ====================================================================
+        elapsed = datetime.now() - start_time
+        elapsed_str = str(elapsed).split('.')[0]
+
+        log_separator()
+        log(f"✅ COMPLETATO in {elapsed_str}", "SUCCESS")
+        log(f"   File generati: {len(generated_files)}", "INFO")
 
         return True, "Successo", generated_files, moved_original_path
 
     except Exception as e:
-        log(f"Errore critico: {e}", "ERROR")
+        log(f"❌ ERRORE CRITICO: {e}", "ERROR")
         return False, str(e), generated_files, None

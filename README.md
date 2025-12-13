@@ -1,40 +1,161 @@
-# PDF Splitter and ROI Selector
+# Intelleo PDF Splitter v2.0
 
-This project contains two Python desktop applications for splitting scanned PDF files based on OCR rules and for selecting the Region of Interest (ROI) for OCR.
+<div align="center">
 
-## Main Application
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8+-green.svg)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-A GUI application that allows the user to:
-- Select a scanned PDF file.
-- Enter an ODC number.
-- Split the file into multiple PDFs based on user-defined OCR classification rules.
+**Applicazione professionale per la divisione automatica di PDF basata su OCR**
 
-## ROI Setup Utility
+</div>
 
-A separate GUI tool that allows the user to:
-- Open a sample PDF file.
-- Visually draw areas (ROIs).
-- Save the coordinates for the main application.
+---
 
-## Configuration
+## 📋 Descrizione
 
-The system uses a single external `config.json` file to store all settings, which is shared between the main application and the ROI utility.
+Intelleo PDF Splitter è un'applicazione desktop Windows che permette di dividere automaticamente documenti PDF multipagina in base al contenuto riconosciuto tramite OCR (Optical Character Recognition).
 
-The configuration file stores:
-- The path to the Tesseract-OCR executable.
-- A template for the output file name (e.g., `{ODC}_{category}.pdf`).
-- A list of "Classification Rules".
+### Funzionalità Principali
 
-Each classification rule contains:
-- `category_name`: (e.g., "consuntivo", "pdl", "rapportini")
-- `keyword`: The exact text (case-insensitive) to search for via OCR (e.g., "Riepilogo", "PDL").
-- `roi`: The coordinates (x0, y0, x1, y1) where to search for the keyword.
+- 🔍 **Riconoscimento OCR** - Analisi automatica del contenuto delle pagine
+- 📂 **Classificazione Intelligente** - Smistamento pagine in base a regole configurabili
+- 🎯 **Aree ROI Personalizzabili** - Definizione visuale delle zone di ricerca
+- 📊 **Dashboard Integrata** - Monitoraggio stato, statistiche e attività
+- 🔄 **Drag & Drop** - Trascinamento diretto di file e cartelle
+- 📝 **Revisione Manuale** - Interfaccia per gestire file non riconosciuti
 
-## Dependencies
+---
 
-- tkinter
-- PyMuPDF (fitz)
-- Pillow (PIL)
-- pytesseract
-- Tesseract-OCR
-- json or configparser
+## 🚀 Installazione
+
+### Requisiti
+
+- **Windows 10/11**
+- **Python 3.8+**
+- **Tesseract OCR** - [Download](https://github.com/UB-Mannheim/tesseract/wiki)
+
+### Setup Rapido
+
+1. **Clona il repository**
+   ```bash
+   git clone <repository-url>
+   cd rilevamento-allegati-isab
+   ```
+
+2. **Avvia l'applicazione**
+   ```bash
+   launch.bat
+   ```
+   Questo script creerà automaticamente l'ambiente virtuale e installerà le dipendenze.
+
+### Configurazione Tesseract
+
+Al primo avvio, configura il percorso di Tesseract:
+1. Vai nella tab **Configurazione**
+2. Clicca su **Auto-Rileva** o **Sfoglia**
+3. Seleziona `tesseract.exe` (di solito in `C:\Program Files\Tesseract-OCR\`)
+
+---
+
+## 📖 Guida all'Uso
+
+### 1️⃣ Configurazione Regole
+
+Ogni regola di classificazione definisce:
+- **Nome Categoria** - Es. "consuntivo", "rapportini"
+- **Suffisso File** - Aggiunto al nome del file generato
+- **Keywords** - Parole chiave da cercare via OCR
+- **Colore** - Per identificazione visiva
+- **Aree ROI** - Zone della pagina dove cercare
+
+### 2️⃣ Definizione ROI
+
+1. Clicca su **Utility ROI** nella tab Configurazione
+2. Apri un PDF di esempio
+3. **Disegna un rettangolo** sull'area di interesse
+4. Associa la ROI a una categoria
+5. Le modifiche vengono salvate automaticamente
+
+### 3️⃣ Elaborazione PDF
+
+1. Vai nella tab **Elaborazione**
+2. Inserisci il **Codice ODC**
+3. **Trascina** i file PDF oppure clicca su **Seleziona PDF**
+4. L'elaborazione parte automaticamente
+
+### 4️⃣ Output
+
+- I PDF vengono divisi nella **stessa cartella** del file originale
+- I file originali vengono spostati in una sottocartella `ORIGINALI`
+- I file non riconosciuti possono essere rinominati manualmente
+
+---
+
+## ⌨️ Scorciatoie
+
+| Tasto | Azione |
+|-------|--------|
+| `←` `→` | Navigazione pagine |
+| `↑` `↓` | Navigazione file (revisione) |
+| `Rotella mouse` | Zoom anteprima |
+| `Ctrl + Rotella` | Zoom ROI Utility |
+
+---
+
+## 📁 Struttura Progetto
+
+```
+rilevamento-allegati-isab/
+├── main.py              # Applicazione principale
+├── roi_utility.py       # Utility gestione ROI
+├── pdf_processor.py     # Logica elaborazione PDF
+├── config_manager.py    # Gestione configurazione
+├── license_validator.py # Validazione licenza
+├── license_updater.py   # Aggiornamento licenza
+├── app_updater.py       # Controllo aggiornamenti app
+├── version.py           # Versione applicazione
+├── config.json          # Configurazione utente
+├── requirements.txt     # Dipendenze Python
+├── launch.bat           # Script avvio
+├── restart.bat          # Reset ambiente
+├── Licenza/             # File licenza (non in git)
+└── tests/               # Test automatizzati
+```
+
+---
+
+## 🔧 Dipendenze
+
+| Pacchetto | Descrizione |
+|-----------|-------------|
+| `PyMuPDF` | Elaborazione PDF |
+| `Pillow` | Manipolazione immagini |
+| `pytesseract` | Wrapper Tesseract OCR |
+| `tkinterdnd2` | Drag & Drop per Tkinter |
+| `cryptography` | Gestione licenze |
+| `requests` | Comunicazione HTTP |
+| `packaging` | Gestione versioni |
+
+---
+
+## 🔐 Licenza
+
+Questo software richiede una licenza valida per funzionare.
+La licenza è vincolata all'Hardware ID della macchina.
+
+Per richiedere una licenza, contattare il supporto tecnico Intelleo.
+
+---
+
+## 📞 Supporto
+
+Per assistenza tecnica o segnalazione bug:
+- Email: supporto@intelleo.it
+- Telefono: [Inserire numero]
+
+---
+
+<div align="center">
+<sub>© 2024 Intelleo - Tutti i diritti riservati</sub>
+</div>

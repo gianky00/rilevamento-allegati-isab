@@ -1,46 +1,64 @@
 @echo off
-TITLE Intelleo PDF Splitter Launcher
+TITLE Intelleo PDF Splitter v2.0
+COLOR 0B
+cls
+
+echo.
+echo  ╔════════════════════════════════════════════════════════════════╗
+echo  ║           INTELLEO PDF SPLITTER - LAUNCHER                     ║
+echo  ╚════════════════════════════════════════════════════════════════╝
+echo.
+
 set VENV_DIR=.venv
 
 :: 1. Check/Create Virtual Environment
 if not exist "%VENV_DIR%\Scripts\activate.bat" (
     if exist "%VENV_DIR%" (
-        echo Ambiente virtuale corrotto rilevato. Rimozione...
+        echo  [SETUP] Ambiente virtuale corrotto rilevato. Rimozione...
         rmdir /s /q "%VENV_DIR%"
     )
-    echo Creazione ambiente virtuale in %VENV_DIR%...
+    echo  [SETUP] Creazione ambiente virtuale Python...
     python -m venv %VENV_DIR%
 
     if not exist "%VENV_DIR%\Scripts\activate.bat" (
-        echo ERRORE: Impossibile creare il virtual environment.
-        echo Assicurati che Python sia installato correttamente e aggiunto al PATH.
+        echo.
+        echo  [ERRORE] Impossibile creare l'ambiente virtuale.
+        echo           Assicurati che Python sia installato correttamente.
+        pause
+        exit /b 1
+    )
+    echo  [SETUP] ✓ Ambiente virtuale creato
+)
+
+:: 2. Activate Virtual Environment
+echo  [SETUP] Attivazione ambiente virtuale...
+call "%VENV_DIR%\Scripts\activate.bat"
+
+:: 3. Install/Update Dependencies
+echo  [SETUP] Verifica dipendenze...
+pip install -r requirements.txt --quiet --disable-pip-version-check >nul 2>&1
+if %errorlevel% neq 0 (
+    echo  [SETUP] Installazione dipendenze in corso...
+    pip install -r requirements.txt
+    if %errorlevel% neq 0 (
+        echo.
+        echo  [ERRORE] Impossibile installare le dipendenze.
         pause
         exit /b 1
     )
 )
-
-:: 2. Activate Virtual Environment
-call "%VENV_DIR%\Scripts\activate.bat"
-
-:: 3. Install Dependencies (Quietly update)
-echo Verifica dipendenze...
-pip install -r requirements.txt >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Errore installazione dipendenze. Tentativo verbose...
-    pip install -r requirements.txt
-    if %errorlevel% neq 0 (
-        echo Errore critico dipendenze.
-        pause
-        exit /b
-    )
-)
+echo  [SETUP] ✓ Dipendenze verificate
+echo.
 
 :: 4. Launch App
-echo Avvio Intelleo PDF Splitter...
+echo  ══════════════════════════════════════════════════════════════════
+echo.
 python main.py
 
 if %errorlevel% neq 0 (
     echo.
-    echo L'applicazione si e' chiusa con un errore.
+    echo  ══════════════════════════════════════════════════════════════════
+    echo  [ERRORE] L'applicazione si e' chiusa con un errore.
+    echo  ══════════════════════════════════════════════════════════════════
     pause
 )

@@ -1,20 +1,21 @@
+"""
+Intelleo PDF Splitter - License Updater
+Gestisce l'aggiornamento e la validazione della licenza.
+"""
 import os
 import requests
 import json
 import sys
 from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
-import license_validator  # Keep for get_hardware_id
+import license_validator
 
-# Unique key for grace period token encryption. 
-# Independent from license_validator to avoid import issues.
+# Chiave per cifratura token grace period
 GRACE_PERIOD_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
 
+
 def get_github_token():
-    """
-    Reconstructs the obfuscated GitHub token.
-    """
-    # Obfuscated via ASCII integers to prevent static analysis detection
+    """Ricostruisce il token GitHub offuscato."""
     chars = [
         103, 104, 112, 95, 50, 98, 75, 119, 107, 75, 87, 118, 115, 70, 99, 99,
         52, 82, 66, 79, 79, 71, 65, 110, 111, 118, 80, 114, 67, 70, 53, 75, 72,
@@ -22,58 +23,60 @@ def get_github_token():
     ]
     return "".join(chr(c) for c in chars)
 
+
 def get_license_dir():
-    """
-    Returns the absolute path to the 'Licenza' directory.
-    Handles both frozen (executable) and script environments.
-    """
+    """Restituisce il percorso della cartella Licenza."""
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, "Licenza")
 
+
 def _get_validity_token_path():
-    """Returns the path for the validity token file."""
+    """Restituisce il percorso del token di validità."""
     return os.path.join(get_license_dir(), "validity.token")
 
+
 def update_grace_timestamp():
-    """
-    Saves the current UTC timestamp encrypted to 'validity.token'.
-    This marks the last successful online check.
-    """
+    """Salva il timestamp corrente cifrato per il periodo di grazia."""
     try:
         token_path = _get_validity_token_path()
-        # Use simple isoformat for UTC time
         current_time = datetime.now(timezone.utc).isoformat()
         
         cipher = Fernet(GRACE_PERIOD_KEY)
         encrypted_time = cipher.encrypt(current_time.encode('utf-8'))
         
-        # Ensure dir exists
         os.makedirs(os.path.dirname(token_path), exist_ok=True)
         
         with open(token_path, "wb") as f:
             f.write(encrypted_time)
-        # print("Timestamp di validità aggiornato.")
     except Exception as e:
-        print(f"Errore aggiornamento timestamp validità: {e}")
+        print(f"[AVVISO] Errore aggiornamento timestamp: {e}")
+
 
 def check_grace_period():
     """
-    Checks if the application is allowed to run offline.
-    Allowed if:
-    1. 'validity.token' exists and is decryptable.
-    2. Last online check was less than 3 days ago.
-    3. System clock hasn't been tampered with (current time < saved time check).
+    Verifica se l'applicazione può funzionare offline.
     
-    Returns: True if allowed.
-    Raises: Exception if grace period expired or tampering detected.
+    Condizioni:
+    1. Il file 'validity.token' deve esistere e essere decifrabile
+    2. L'ultimo controllo online deve essere < 3 giorni fa
+    3. L'orologio di sistema non deve essere stato modificato
+    
+    Returns:
+        True se consentito
+    
+    Raises:
+        Exception se il periodo di grazia è scaduto
     """
     token_path = _get_validity_token_path()
     
     if not os.path.exists(token_path):
-        raise Exception("Nessuna validazione online precedente trovata.\nÈ necessaria una connessione internet per il primo avvio.")
+        raise Exception(
+            "Nessuna validazione online precedente.\n"
+            "Connessione internet richiesta per il primo avvio."
+        )
         
     try:
         with open(token_path, "rb") as f:
@@ -84,42 +87,51 @@ def check_grace_period():
         last_online = datetime.fromisoformat(decrypted_data)
         now = datetime.now(timezone.utc)
         
-        # Check for clock rollback (tolerance of 5 minutes for slight clock skews)
+        # Controllo rollback orologio
         if now < last_online - timedelta(minutes=5):
-            raise Exception("Rilevata incoerenza nell'orologio di sistema (Rollback detected).")
+            raise Exception("Rilevata incoerenza orologio di sistema.")
             
-        # Check 3 days limit
-        if now - last_online > timedelta(days=3):
-            raise Exception("Periodo di grazia offline (3 giorni) SCADUTO.\nConnettiti a internet per rinnovare la licenza.")
+        # Controllo 3 giorni
+        days_offline = (now - last_online).days
+        if days_offline >= 3:
+            raise Exception(
+                "Periodo di grazia offline (3 giorni) SCADUTO.\n"
+                "Connettiti a internet per rinnovare la licenza."
+            )
             
-        print(f"Modalità Offline: {3 - (now - last_online).days} giorni rimanenti.")
+        remaining_days = 3 - days_offline
+        print(f"[LICENZA] Modalità offline: {remaining_days} giorni rimanenti")
         return True
         
     except Exception as e:
-        # Re-raise known exceptions, wrap others
-        if "SCADUTO" in str(e) or "incoerenza" in str(e) or "Nessuna validazione" in str(e):
+        if any(x in str(e) for x in ["SCADUTO", "incoerenza", "Nessuna validazione"]):
             raise e
         raise Exception(f"Errore verifica periodo di grazia: {e}")
 
+
 def run_update():
     """
-    Checks for license updates on GitHub matching the Hardware ID.
-    - Uses GitHub API endpoint.
-    - Syncs files: Downloads ONLY if ALL required files are available (200 OK).
-    - If any file is missing (404), NO changes are made to local files.
-    - Handles Offline: Checks grace period.
-    """
-    print("Controllo aggiornamenti licenza in corso...")
+    Controlla e scarica aggiornamenti licenza da GitHub.
     
-    # Get HWID and strip potential trailing dots/whitespace
+    - Usa l'API GitHub per scaricare i file di licenza
+    - Se tutti i file sono disponibili (200 OK), li scarica
+    - Se qualche file manca (404), mantiene i file locali
+    - In caso di errore di rete, verifica il periodo di grazia
+    """
+    print("[LICENZA] ══════════════════════════════════════════════")
+    print("[LICENZA] Controllo aggiornamenti licenza...")
+    
     hw_id = license_validator.get_hardware_id().strip().rstrip('.')
     license_dir = get_license_dir()
+    
+    print(f"[LICENZA] Hardware ID: {hw_id[:20]}...")
     
     if not os.path.exists(license_dir):
         try:
             os.makedirs(license_dir)
+            print("[LICENZA] Cartella licenza creata")
         except OSError as e:
-            print(f"Errore creazione cartella Licenza: {e}")
+            print(f"[ERRORE] Creazione cartella licenza: {e}")
             return
 
     base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
@@ -129,8 +141,6 @@ def run_update():
         "Accept": "application/vnd.github.v3.raw"
     }
     
-    # Mapping Remote Filename -> Local Filename
-    # User confirmed remote 'manifest' is actually 'manifest.json'
     files_map = {
         "config.dat": "config.dat",
         "pyarmor.rkey": "pyarmor.rkey",
@@ -141,7 +151,7 @@ def run_update():
     incomplete_update = False
     network_error_occurred = False
     
-    # 1. Attempt to download all files into memory
+    # Tentativo download
     for remote_name, local_name in files_map.items():
         url = f"{base_url}/{remote_name}"
         
@@ -150,45 +160,46 @@ def run_update():
             
             if response.status_code == 200:
                 downloaded_content[local_name] = response.content
+                print(f"[LICENZA] ✓ {remote_name} scaricato")
             elif response.status_code == 404:
-                print(f"File remoto mancante: {remote_name} (Status: 404) su URL: {url}")
+                print(f"[LICENZA] ⚠ {remote_name} non trovato")
                 incomplete_update = True
             elif response.status_code == 401:
-                 print("Errore Autenticazione: Token non valido o scaduto.")
-                 incomplete_update = True
-                 break
+                print("[ERRORE] Token autenticazione non valido")
+                incomplete_update = True
+                break
             else:
-                print(f"Risposta imprevista per {remote_name}: {response.status_code}")
+                print(f"[AVVISO] {remote_name}: HTTP {response.status_code}")
                 incomplete_update = True
                 
         except requests.RequestException as e:
-            print(f"Errore connessione per {remote_name}: {e}")
+            print(f"[AVVISO] Connessione fallita: {e}")
             network_error_occurred = True
-            break 
+            break
             
     if network_error_occurred:
-        # Fallback to Grace Period Logic (Offline)
-        print("Impossibile contattare server licenze. Controllo validità offline...")
-        check_grace_period() 
+        print("[LICENZA] Modalità offline - verifica periodo di grazia...")
+        check_grace_period()
     else:
-        # Network is UP.
         if incomplete_update:
-            print("Aggiornamento saltato: Set di file remoti incompleto o errore accesso. Vengono mantenuti i file locali.")
+            print("[LICENZA] Aggiornamento parziale, file locali mantenuti")
             update_grace_timestamp()
         else:
-            # Complete update available. Write to disk.
             try:
                 for local_name, content in downloaded_content.items():
                     full_path = os.path.join(license_dir, local_name)
                     with open(full_path, "wb") as f:
                         f.write(content)
-                print("Aggiornamento licenza completato.")
+                print("[LICENZA] ✓ Aggiornamento completato")
                 update_grace_timestamp()
             except OSError as e:
-                print(f"Errore scrittura file licenza: {e}")
+                print(f"[ERRORE] Scrittura file licenza: {e}")
+
+    print("[LICENZA] ══════════════════════════════════════════════")
+
 
 if __name__ == "__main__":
     try:
         run_update()
     except Exception as e:
-        print(f"Errore Aggiornamento: {e}")
+        print(f"[ERRORE] Aggiornamento: {e}")

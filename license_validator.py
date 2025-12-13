@@ -1,3 +1,7 @@
+"""
+Intelleo PDF Splitter - License Validator
+Gestisce la validazione della licenza software.
+"""
 import os
 import sys
 import subprocess
@@ -8,86 +12,117 @@ import uuid
 from datetime import date
 from cryptography.fernet import Fernet
 
-# SECURITY WARNING: Keep this key secret!
+# Chiave segreta per decifratura licenza
 LICENSE_SECRET_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
 
+
 def _calculate_sha256(filepath):
-    """Calculates the SHA256 hash of a file."""
+    """Calcola l'hash SHA256 di un file."""
     sha256_hash = hashlib.sha256()
     with open(filepath, "rb") as f:
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
+
 def get_hardware_id():
-    """Retrieves a unique hardware ID for the machine with fallbacks."""
+    """
+    Ottiene un ID hardware univoco per la macchina.
+    
+    Strategia con fallback multipli:
+    1. WMIC (Windows Legacy)
+    2. PowerShell CIM (Windows Modern)
+    3. PowerShell UUID (Windows Fallback)
+    4. lsblk (Linux)
+    5. machine-id (Linux Fallback)
+    6. Python UUID (Universale)
+    """
     system = platform.system()
 
     if system == 'Windows':
         # 1. Try WMIC (Legacy)
         try:
             cmd = 'wmic diskdrive get serialnumber'
-            # Use shell=True and suppress stderr
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+            output = subprocess.check_output(
+                cmd, shell=True, stderr=subprocess.DEVNULL
+            ).decode()
             parts = output.strip().split('\n')
             if len(parts) > 1:
                 return parts[1].strip()
         except Exception:
-            pass # WMIC failed, try next
+            pass
 
         # 2. Try PowerShell (Disk Serial)
         try:
-            cmd = ["powershell", "-NoProfile", "-Command",
-                   "Get-CimInstance -Class Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber"]
-            # Create startupinfo to hide console window
+            cmd = [
+                "powershell", "-NoProfile", "-Command",
+                "Get-CimInstance -Class Win32_DiskDrive | "
+                "Select-Object -ExpandProperty SerialNumber"
+            ]
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+            output = subprocess.check_output(
+                cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            
             if output:
-                # If multiple disks, taking the first one (splitlines()[0]) is usually stable enough
                 return output.splitlines()[0].strip()
         except Exception:
             pass
 
-        # 3. Try PowerShell (System UUID) - Alternative stable ID
+        # 3. Try PowerShell (System UUID)
         try:
-            cmd = ["powershell", "-NoProfile", "-Command",
-                   "Get-CimInstance -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID"]
+            cmd = [
+                "powershell", "-NoProfile", "-Command",
+                "Get-CimInstance -Class Win32_ComputerSystemProduct | "
+                "Select-Object -ExpandProperty UUID"
+            ]
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+            
+            output = subprocess.check_output(
+                cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            
             if output:
                 return output
         except Exception:
             pass
 
     elif system == 'Linux':
-        # Use lsblk or machine-id as fallback
+        # Try lsblk
         try:
-            # Try getting root disk serial
-            cmd = "lsblk --nodeps -o name,serial | grep -v 'NAME' | head -n 1 | awk '{print $2}'"
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
+            cmd = (
+                "lsblk --nodeps -o name,serial | "
+                "grep -v 'NAME' | head -n 1 | awk '{print $2}'"
+            )
+            output = subprocess.check_output(
+                cmd, shell=True, stderr=subprocess.DEVNULL
+            ).decode().strip()
+            
             if output:
-                 return output
-        except: pass
+                return output
+        except Exception:
+            pass
 
         # Fallback to machine-id
         if os.path.exists('/etc/machine-id'):
             try:
                 with open('/etc/machine-id', 'r') as f:
                     return f.read().strip()
-            except: pass
+            except Exception:
+                pass
 
-    # 4. Final Fallback: Python UUID (MAC Address based)
-    # This works on all platforms and requires no external commands
+    # Fallback universale: UUID basato su MAC address
     try:
         return str(uuid.getnode())
     except Exception:
         return "ERROR_GETTING_ID"
 
+
 def _get_license_paths():
-    """Returns the paths for license files."""
+    """Restituisce i percorsi dei file di licenza."""
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:
@@ -101,10 +136,13 @@ def _get_license_paths():
         "manifest": os.path.join(license_dir, "manifest.json")
     }
 
+
 def get_license_info():
     """
-    Retrieves the decrypted license information without validation.
-    Returns a dictionary with license details or None if error.
+    Ottiene le informazioni della licenza decifrate.
+    
+    Returns:
+        dict: Dati della licenza o None in caso di errore
     """
     paths = _get_license_paths()
     config_path = paths["config"]
@@ -122,69 +160,83 @@ def get_license_info():
     except Exception:
         return None
 
+
 def verify_license():
     """
-    Verifies the license presence and validity.
-    Returns (True, message) if valid, (False, message) otherwise.
+    Verifica la validità della licenza.
+    
+    Controlli effettuati:
+    1. Esistenza cartella e file licenza
+    2. Integrità file tramite hash (manifest)
+    3. Decifratura dati licenza
+    4. Validazione Hardware ID
+    5. Verifica data di scadenza
+    
+    Returns:
+        tuple: (is_valid: bool, message: str)
     """
     paths = _get_license_paths()
 
-    # Check if directory exists
+    # Controllo cartella
     if not os.path.exists(paths["dir"]):
-        return False, "Cartella 'Licenza' mancante."
+        return False, "Cartella 'Licenza' mancante"
 
-    # Check files existence
+    # Controllo file
     if not os.path.exists(paths["config"]) or not os.path.exists(paths["manifest"]):
-         return False, "File di licenza danneggiati o mancanti."
+        return False, "File di licenza mancanti o danneggiati"
 
-    # 1. Verify Integrity via Manifest
+    # 1. Verifica integrità tramite manifest
     try:
         with open(paths["manifest"], "r") as f:
             manifest = json.load(f)
 
-        # Verify config.dat hash
+        # Verifica hash config.dat
         if _calculate_sha256(paths["config"]) != manifest.get("config.dat"):
-            return False, "Integrità licenza compromessa (config.dat)."
+            return False, "Integrità licenza compromessa (config.dat)"
 
-        # Verify pyarmor.rkey hash if present in manifest and on disk
+        # Verifica hash pyarmor.rkey se presente
         if "pyarmor.rkey" in manifest and os.path.exists(paths["rkey"]):
-             if _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
-                 return False, "Integrità licenza compromessa (pyarmor.rkey)."
+            if _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
+                return False, "Integrità licenza compromessa (pyarmor.rkey)"
 
     except Exception as e:
         return False, f"Errore lettura manifest: {e}"
 
-    # 2. Decrypt and Validate Config
+    # 2. Decifra e valida i dati
     try:
         payload = get_license_info()
         if not payload:
-             return False, "Impossibile leggere i dati della licenza."
+            return False, "Impossibile leggere i dati della licenza"
 
-        # Validate Hardware ID
+        # Validazione Hardware ID
         current_hw_id = get_hardware_id()
         license_hw_id = payload.get("Hardware ID", "")
 
-        # Normalize IDs: strip whitespace and trailing dots (common in wmic output)
+        # Normalizzazione ID
         norm_current = current_hw_id.strip().rstrip('.')
         norm_license = license_hw_id.strip().rstrip('.')
 
-        # Check against normalized values
         if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
-             return False, f"Hardware ID non valido.\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}"
+            return False, (
+                f"Hardware ID non valido\n"
+                f"Atteso: {license_hw_id}\n"
+                f"Rilevato: {current_hw_id}"
+            )
 
-        # Validate Expiry
+        # Validazione scadenza
         expiry_str = payload.get("Scadenza Licenza", "")
         if expiry_str:
             try:
-                # Format is DD/MM/YYYY
                 day, month, year = map(int, expiry_str.split('/'))
                 expiry_date = date(year, month, day)
+                
                 if date.today() > expiry_date:
                     return False, f"Licenza SCADUTA il {expiry_str}"
             except ValueError:
-                return False, "Formato data scadenza non valido."
+                return False, "Formato data scadenza non valido"
 
-        return True, f"Licenza Valida per: {payload.get('Cliente', 'Utente')}"
+        cliente = payload.get('Cliente', 'Utente')
+        return True, f"Licenza valida per: {cliente}"
 
     except Exception as e:
-        return False, f"Errore decifrazione licenza: {e}"
+        return False, f"Errore validazione licenza: {e}"
