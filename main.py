@@ -2,63 +2,45 @@
 Intelleo PDF Splitter - Applicazione principale
 Gestisce la divisione di file PDF basata su regole OCR.
 """
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
+# CRITICO: Inizializzare il logging PRIMA di tutto il resto
+import app_logger
+LOG_PATH = app_logger.initialize()
 
-# Safe import for tkinterdnd2
+import logging
+logger = logging.getLogger('MAIN')
+
+# Ora importa il resto
 try:
+    logger.info("Importazione moduli tkinter...")
+    import tkinter as tk
+    from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
+    logger.info("Importazione tkinterdnd2...")
     from tkinterdnd2 import DND_FILES, TkinterDnD
-except ImportError:
-    TkinterDnD = None
-    DND_FILES = None
-
-import config_manager
-import pdf_processor
-import subprocess
-import os
-import sys
-import threading
-import queue
-import license_validator
-import license_updater
-import app_updater
-import version
-import pymupdf as fitz
-from PIL import Image, ImageTk
-import shutil
-from datetime import datetime
-import ctypes
+    logger.info("Importazione moduli applicazione...")
+    import config_manager
+    import pdf_processor
+    import subprocess
+    import os
+    import sys
+    import threading
+    import queue
+    import license_validator
+    import license_updater
+    import app_updater
+    import version
+    logger.info("Importazione PyMuPDF...")
+    import pymupdf as fitz
+    logger.info("Importazione PIL...")
+    from PIL import Image, ImageTk
+    import shutil
+    from datetime import datetime
+    logger.info("Tutti i moduli importati con successo")
+except Exception as e:
+    logger.critical(f"Errore durante l'importazione dei moduli: {e}", exc_info=True)
+    raise
 
 # Segnale per comunicazione tra utility ROI e app principale
 SIGNAL_FILE = ".update_signal"
-
-# Setup logging file
-try:
-    if sys.platform == "win32":
-        # Use %APPDATA% for logs to ensure write permissions on Windows
-        app_data = os.environ.get('APPDATA')
-        if not app_data:
-            app_data = os.path.expanduser("~")
-        LOG_DIR = os.path.join(app_data, "Intelleo PDF Splitter", "Log")
-    else:
-        # Fallback for Linux/Dev environment
-        if getattr(sys, 'frozen', False):
-            BASE_DIR = os.path.dirname(sys.executable)
-        else:
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        LOG_DIR = os.path.join(BASE_DIR, "Log")
-
-    os.makedirs(LOG_DIR, exist_ok=True)
-    LOG_FILE = os.path.join(LOG_DIR, "error_log.txt")
-
-    # Redirect stderr to file to capture crash tracebacks
-    # We open in append mode to keep history, or 'w' to reset. 'a' is safer.
-    sys.stderr = open(LOG_FILE, 'a', buffering=1)
-    # Optionally redirect stdout too if debug info is needed
-    # sys.stdout = sys.stderr
-except Exception as e:
-    # If we can't set up logging, print to console (if exists) but proceed
-    print(f"Failed to setup logging: {e}")
 
 # ============================================================================
 # COSTANTI STILE - TEMA CHIARO PROFESSIONALE
@@ -95,7 +77,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
     
     def __init__(self, parent, review_tasks, odc, on_close_callback):
         super().__init__(parent)
-        self.title("📋 Revisione File Sconosciuti")
+        self.title("Revisione File Sconosciuti")
         self.state('zoomed')
         self.configure(bg=COLORS['bg_primary'])
 
@@ -149,31 +131,31 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.bind('<Down>', lambda e: self.go_next_file())
 
         # Area Controlli
-        controls_frame = ttk.LabelFrame(self, text=" 🎛️ Controlli ", padding=15)
+        controls_frame = ttk.LabelFrame(self, text=" Controlli ", padding=15)
         controls_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 10))
 
         # Navigazione File
         nav_frame = ttk.Frame(controls_frame)
         nav_frame.pack(fill='x', pady=(0, 10))
 
-        self.btn_prev_file = ttk.Button(nav_frame, text="◀◀ File Precedente", command=self.go_prev_file)
+        self.btn_prev_file = ttk.Button(nav_frame, text="<< File Precedente", command=self.go_prev_file)
         self.btn_prev_file.pack(side='left', padx=5)
 
         self.lbl_counter = ttk.Label(nav_frame, text="File 1 di N", font=FONTS['body_bold'])
         self.lbl_counter.pack(side='left', padx=20)
 
-        self.btn_next_file = ttk.Button(nav_frame, text="File Successivo ▶▶", command=self.go_next_file)
+        self.btn_next_file = ttk.Button(nav_frame, text="File Successivo >>", command=self.go_next_file)
         self.btn_next_file.pack(side='left', padx=5)
 
         ttk.Separator(nav_frame, orient='vertical').pack(side='left', fill='y', padx=20)
 
-        self.btn_prev_page = ttk.Button(nav_frame, text="◀ Pag. Prec.", command=self.go_prev_page)
+        self.btn_prev_page = ttk.Button(nav_frame, text="< Pag. Prec.", command=self.go_prev_page)
         self.btn_prev_page.pack(side='left', padx=5)
 
         self.lbl_page_counter = ttk.Label(nav_frame, text="Pagina 1 di M")
         self.lbl_page_counter.pack(side='left', padx=10)
 
-        self.btn_next_page = ttk.Button(nav_frame, text="Pag. Succ. ▶", command=self.go_next_page)
+        self.btn_next_page = ttk.Button(nav_frame, text="Pag. Succ. >", command=self.go_next_page)
         self.btn_next_page.pack(side='left', padx=5)
 
         # Rinomina
@@ -190,7 +172,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.lbl_preview_name = ttk.Label(rename_frame, text="Anteprima: ...", foreground=COLORS['text_secondary'])
         self.lbl_preview_name.pack(side='left', padx=15)
 
-        ttk.Button(rename_frame, text="✅ Rinomina e Salva", command=self.rename_current).pack(side='right', padx=10)
+        ttk.Button(rename_frame, text="[OK] Rinomina e Salva", command=self.rename_current).pack(side='right', padx=10)
 
         self.lbl_status = ttk.Label(controls_frame, text="", foreground=COLORS['accent'])
         self.lbl_status.pack(anchor='w', pady=(5, 0))
@@ -198,7 +180,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
     def load_current_file(self):
         """Carica il file corrente per la revisione."""
         if not self.review_tasks:
-            self.lbl_status.config(text="ℹ️ Nessun file da revisionare.")
+            self.lbl_status.config(text="[INFO] Nessun file da revisionare.")
             return
 
         if self.current_doc:
@@ -210,7 +192,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         filename = os.path.basename(file_path)
 
         self.current_page = 0
-        self.lbl_counter.config(text=f"📄 File {self.current_index + 1} di {len(self.review_tasks)}: {filename}")
+        self.lbl_counter.config(text=f"File {self.current_index + 1} di {len(self.review_tasks)}: {filename}")
         self.btn_prev_file.config(state='normal' if self.current_index > 0 else 'disabled')
         self.btn_next_file.config(state='normal' if self.current_index < len(self.review_tasks) - 1 else 'disabled')
 
@@ -219,10 +201,10 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.entry_suffix.focus_set()
 
         if self.current_index in self.completed_indices:
-            self.lbl_status.config(text="✅ File già completato.")
+            self.lbl_status.config(text="[OK] File gia' completato.")
             self.entry_suffix.config(state='disabled')
         else:
-            self.lbl_status.config(text="⏳ File in attesa di revisione.")
+            self.lbl_status.config(text="[...] File in attesa di revisione.")
             self.entry_suffix.config(state='normal')
 
         try:
@@ -233,7 +215,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self.canvas.delete("all")
             w = self.canvas.winfo_width() or 400
             h = self.canvas.winfo_height() or 300
-            self.canvas.create_text(w//2, h//2, text=f"❌ Errore apertura PDF:\n{e}", 
+            self.canvas.create_text(w//2, h//2, text=f"[ERRORE] Apertura PDF:\n{e}", 
                                    fill=COLORS['danger'], justify="center", font=FONTS['body'])
             self.lbl_page_counter.config(text="N/A")
             self.btn_prev_page.config(state='disabled')
@@ -316,9 +298,9 @@ class UnknownFilesReviewDialog(tk.Toplevel):
     def update_preview_label(self, *args):
         suffix = self.var_suffix.get()
         if suffix:
-            self.lbl_preview_name.config(text=f"📝 Anteprima: {self.odc}_{suffix}.pdf")
+            self.lbl_preview_name.config(text=f"Anteprima: {self.odc}_{suffix}.pdf")
         else:
-            self.lbl_preview_name.config(text="📝 Anteprima: ...")
+            self.lbl_preview_name.config(text="Anteprima: ...")
 
     def rename_current(self):
         """Rinomina il file corrente."""
@@ -327,7 +309,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         suffix = self.var_suffix.get().strip()
 
         if not suffix:
-            messagebox.showwarning("⚠️ Attenzione", "Inserire un suffisso per il nome file.", parent=self)
+            messagebox.showwarning("Attenzione", "Inserire un suffisso per il nome file.", parent=self)
             return
 
         new_name = f"{self.odc}_{suffix}.pdf"
@@ -335,16 +317,16 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         new_path = os.path.join(dir_path, new_name)
 
         if os.path.abspath(new_path) == os.path.abspath(current_path):
-            messagebox.showinfo("ℹ️ Info", "Nessun cambiamento nel nome.", parent=self)
+            messagebox.showinfo("Info", "Nessun cambiamento nel nome.", parent=self)
             return
 
         if os.path.exists(new_path):
-            if not messagebox.askyesno("⚠️ Sovrascrivi", f"Il file {new_name} esiste già. Sovrascrivere?", parent=self):
+            if not messagebox.askyesno("Sovrascrivi", f"Il file {new_name} esiste gia'. Sovrascrivere?", parent=self):
                 return
             try:
                 os.remove(new_path)
             except OSError as e:
-                messagebox.showerror("❌ Errore", f"Impossibile rimuovere file esistente: {e}", parent=self)
+                messagebox.showerror("Errore", f"Impossibile rimuovere file esistente: {e}", parent=self)
                 return
 
         try:
@@ -356,10 +338,10 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             if self.current_index < len(self.review_tasks) - 1:
                 self.go_next_file()
             else:
-                messagebox.showinfo("✅ Completato", "Ultimo file rinominato con successo!", parent=self)
+                messagebox.showinfo("Completato", "Ultimo file rinominato con successo!", parent=self)
 
         except Exception as e:
-            messagebox.showerror("❌ Errore Rinomina", str(e), parent=self)
+            messagebox.showerror("Errore Rinomina", str(e), parent=self)
 
     def on_close(self):
         """Gestisce la chiusura del dialog."""
@@ -407,7 +389,7 @@ class UnknownFilesReviewDialog(tk.Toplevel):
 
                     restored_count += 1
                 except Exception as e:
-                    print(f"[ERRORE] Ripristino file {task.get('unknown_path', '?')}: {e}")
+                    logger.error(f"Errore ripristino file {task.get('unknown_path', '?')}: {e}")
 
         self.destroy()
         if self.callback:
@@ -418,6 +400,7 @@ class MainApp:
     """Applicazione principale Intelleo PDF Splitter."""
 
     def __init__(self, root, auto_file_path=None):
+        logger.info("Inizializzazione MainApp...")
         self.root = root
         self.root.title(f"Intelleo PDF Splitter v{version.__version__}")
         self.root.state('zoomed')
@@ -431,12 +414,15 @@ class MainApp:
         self.files_processed_count = 0
         self.pages_processed_count = 0
 
+        logger.info("Configurazione stili...")
         # Configura stili
         self._setup_styles()
 
+        logger.info("Configurazione Drag & Drop...")
         # Configura Drag & Drop
         self._setup_drag_drop()
 
+        logger.info("Creazione interfaccia...")
         # Crea notebook principale
         self.notebook = ttk.Notebook(self.root, style='Main.TNotebook')
         self.notebook.pack(expand=True, fill='both', padx=15, pady=15)
@@ -447,10 +433,10 @@ class MainApp:
         self.config_tab = ttk.Frame(self.notebook, style='Card.TFrame')
         self.help_tab = ttk.Frame(self.notebook, style='Card.TFrame')
 
-        self.notebook.add(self.dashboard_tab, text=' 🏠 Dashboard ')
-        self.notebook.add(self.processing_tab, text=' ⚙️ Elaborazione ')
-        self.notebook.add(self.config_tab, text=' 🔧 Configurazione ')
-        self.notebook.add(self.help_tab, text=' ❓ Guida ')
+        self.notebook.add(self.dashboard_tab, text=' Dashboard ')
+        self.notebook.add(self.processing_tab, text=' Elaborazione ')
+        self.notebook.add(self.config_tab, text=' Configurazione ')
+        self.notebook.add(self.help_tab, text=' Guida ')
 
         # Setup delle singole tab
         self._setup_dashboard_tab()
@@ -458,6 +444,7 @@ class MainApp:
         self._setup_config_tab()
         self._setup_help_tab()
 
+        logger.info("Caricamento impostazioni...")
         # Carica impostazioni e avvia loop
         self.load_settings()
         self._display_license_info()
@@ -468,6 +455,8 @@ class MainApp:
         # Gestione avvio da CLI
         if auto_file_path and os.path.exists(auto_file_path):
             self.root.after(500, lambda: self._handle_cli_start(auto_file_path))
+
+        logger.info("MainApp inizializzata con successo")
 
     def _setup_styles(self):
         """Configura tutti gli stili ttk per il tema chiaro."""
@@ -529,7 +518,7 @@ class MainApp:
                 self.root.drop_target_register(DND_FILES)
                 self.root.dnd_bind('<<Drop>>', self._on_drop)
             except Exception as e:
-                print(f"[AVVISO] Drag & Drop non disponibile: {e}")
+                logger.warning(f"Drag & Drop non disponibile: {e}")
 
     def _setup_dashboard_tab(self):
         """Configura la tab Dashboard."""
@@ -540,7 +529,7 @@ class MainApp:
         header_frame = ttk.Frame(main_frame, style='Card.TFrame')
         header_frame.pack(fill='x', pady=(0, 20))
 
-        ttk.Label(header_frame, text="🏠 Dashboard", style='Header.TLabel').pack(side='left')
+        ttk.Label(header_frame, text="Dashboard", style='Header.TLabel').pack(side='left')
         
         self.clock_label = ttk.Label(header_frame, text="", style='Muted.TLabel')
         self.clock_label.pack(side='right')
@@ -552,35 +541,35 @@ class MainApp:
         cards_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform='card')
 
         # Card: Stato Licenza
-        self._create_stat_card(cards_frame, 0, "📋 Licenza", "license_status", "Verificando...")
+        self._create_stat_card(cards_frame, 0, "Licenza", "license_status", "Verificando...")
         
         # Card: File Elaborati (sessione)
-        self._create_stat_card(cards_frame, 1, "📄 File Elaborati", "files_count", "0")
+        self._create_stat_card(cards_frame, 1, "File Elaborati", "files_count", "0")
         
         # Card: Pagine Processate
-        self._create_stat_card(cards_frame, 2, "📑 Pagine Totali", "pages_count", "0")
+        self._create_stat_card(cards_frame, 2, "Pagine Totali", "pages_count", "0")
         
         # Card: Regole Attive
-        self._create_stat_card(cards_frame, 3, "🎯 Regole Attive", "rules_count", "0")
+        self._create_stat_card(cards_frame, 3, "Regole Attive", "rules_count", "0")
 
         # Quick Actions
-        actions_frame = ttk.LabelFrame(main_frame, text=" ⚡ Azioni Rapide ", padding=15)
+        actions_frame = ttk.LabelFrame(main_frame, text=" Azioni Rapide ", padding=15)
         actions_frame.pack(fill='x', pady=20)
 
         btn_frame = ttk.Frame(actions_frame)
         btn_frame.pack()
 
-        ttk.Button(btn_frame, text="📂 Seleziona PDF", 
+        ttk.Button(btn_frame, text="Seleziona PDF", 
                   command=self._quick_select_pdf).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="🔧 Configura Regole", 
+        ttk.Button(btn_frame, text="Configura Regole", 
                   command=lambda: self.notebook.select(self.config_tab)).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="🎯 Apri Utility ROI", 
+        ttk.Button(btn_frame, text="Apri Utility ROI", 
                   command=self._launch_roi_utility).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="🔄 Verifica Aggiornamenti", 
+        ttk.Button(btn_frame, text="Verifica Aggiornamenti", 
                   command=lambda: app_updater.check_for_updates(silent=False)).pack(side='left', padx=10)
 
         # Info Licenza dettagliata
-        license_frame = ttk.LabelFrame(main_frame, text=" 🔐 Informazioni Licenza ", padding=15)
+        license_frame = ttk.LabelFrame(main_frame, text=" Informazioni Licenza ", padding=15)
         license_frame.pack(fill='x', pady=10)
 
         self.license_info_text = tk.Text(license_frame, height=4, font=FONTS['mono'],
@@ -589,7 +578,7 @@ class MainApp:
         self.license_info_text.pack(fill='x')
 
         # Log Recente
-        recent_frame = ttk.LabelFrame(main_frame, text=" 📜 Attività Recente ", padding=15)
+        recent_frame = ttk.LabelFrame(main_frame, text=" Attivita' Recente ", padding=15)
         recent_frame.pack(fill='both', expand=True, pady=10)
 
         self.recent_log = scrolledtext.ScrolledText(recent_frame, height=8, font=FONTS['mono'],
@@ -619,7 +608,7 @@ class MainApp:
     def _update_clock(self):
         """Aggiorna l'orologio nella dashboard."""
         now = datetime.now().strftime("%d/%m/%Y  %H:%M:%S")
-        self.clock_label.config(text=f"🕐 {now}")
+        self.clock_label.config(text=now)
         self.root.after(1000, self._update_clock)
 
     def _quick_select_pdf(self):
@@ -633,10 +622,10 @@ class MainApp:
         main_frame.pack(fill='both', expand=True)
 
         # Header
-        ttk.Label(main_frame, text="⚙️ Elaborazione PDF", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
+        ttk.Label(main_frame, text="Elaborazione PDF", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
 
         # Input Frame
-        input_frame = ttk.LabelFrame(main_frame, text=" 📥 Input ", padding=15)
+        input_frame = ttk.LabelFrame(main_frame, text=" Input ", padding=15)
         input_frame.pack(fill='x', pady=(0, 15))
 
         # ODC
@@ -652,7 +641,7 @@ class MainApp:
         file_frame = ttk.Frame(input_frame)
         file_frame.pack(fill='x', pady=10)
 
-        ttk.Button(file_frame, text="📂 Seleziona PDF...", command=self._select_pdf).pack(side='left')
+        ttk.Button(file_frame, text="Seleziona PDF...", command=self._select_pdf).pack(side='left')
         
         self.pdf_path_label = ttk.Label(file_frame, text="Nessun file selezionato", 
                                         style='Muted.TLabel', font=FONTS['body'])
@@ -661,12 +650,12 @@ class MainApp:
         # Drag & Drop hint
         hint_frame = tk.Frame(input_frame, bg=COLORS['bg_tertiary'], relief='flat')
         hint_frame.pack(fill='x', pady=10)
-        tk.Label(hint_frame, text="📎 Trascina file o cartelle qui per avviare l'elaborazione automatica",
+        tk.Label(hint_frame, text="Trascina file o cartelle qui per avviare l'elaborazione automatica",
                 font=FONTS['small'], bg=COLORS['bg_tertiary'], fg=COLORS['text_secondary'],
                 pady=10).pack()
 
         # Progress
-        self.progress_frame = ttk.LabelFrame(main_frame, text=" 📊 Progresso ", padding=15)
+        self.progress_frame = ttk.LabelFrame(main_frame, text=" Progresso ", padding=15)
         self.progress_frame.pack(fill='x', pady=10)
 
         self.progress_var = tk.DoubleVar(value=0)
@@ -678,7 +667,7 @@ class MainApp:
         self.progress_label.pack()
 
         # Log
-        log_frame = ttk.LabelFrame(main_frame, text=" 📋 Log Elaborazione ", padding=15)
+        log_frame = ttk.LabelFrame(main_frame, text=" Log Elaborazione ", padding=15)
         log_frame.pack(fill='both', expand=True, pady=10)
 
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled',
@@ -700,10 +689,10 @@ class MainApp:
         main_frame.pack(fill='both', expand=True)
 
         # Header
-        ttk.Label(main_frame, text="🔧 Configurazione", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
+        ttk.Label(main_frame, text="Configurazione", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
 
         # Tesseract Path
-        path_frame = ttk.LabelFrame(main_frame, text=" 🔍 Tesseract OCR ", padding=15)
+        path_frame = ttk.LabelFrame(main_frame, text=" Tesseract OCR ", padding=15)
         path_frame.pack(fill='x', pady=(0, 15))
         path_frame.columnconfigure(1, weight=1)
 
@@ -717,11 +706,11 @@ class MainApp:
         
         btn_frame = ttk.Frame(path_frame)
         btn_frame.grid(row=0, column=2, padx=5)
-        ttk.Button(btn_frame, text="📁 Sfoglia", command=self._browse_tesseract).pack(side='left', padx=2)
-        ttk.Button(btn_frame, text="🔎 Auto-Rileva", command=self._auto_detect_tesseract).pack(side='left', padx=2)
+        ttk.Button(btn_frame, text="Sfoglia", command=self._browse_tesseract).pack(side='left', padx=2)
+        ttk.Button(btn_frame, text="Auto-Rileva", command=self._auto_detect_tesseract).pack(side='left', padx=2)
 
         # Regole
-        rules_frame = ttk.LabelFrame(main_frame, text=" 📜 Regole di Classificazione ", padding=15)
+        rules_frame = ttk.LabelFrame(main_frame, text=" Regole di Classificazione ", padding=15)
         rules_frame.pack(expand=True, fill='both', pady=10)
         rules_frame.columnconfigure(1, weight=1)
         rules_frame.rowconfigure(0, weight=1)
@@ -734,11 +723,11 @@ class MainApp:
 
         self.rules_tree = ttk.Treeview(tree_container, columns=("ColorCode", "Category", "Suffix"), 
                                        show='headings', height=12)
-        self.rules_tree.heading("ColorCode", text="🎨 Colore")
+        self.rules_tree.heading("ColorCode", text="Colore")
         self.rules_tree.column("ColorCode", width=80, anchor='center', stretch=False)
-        self.rules_tree.heading("Category", text="📂 Categoria")
+        self.rules_tree.heading("Category", text="Categoria")
         self.rules_tree.column("Category", width=150)
-        self.rules_tree.heading("Suffix", text="📝 Suffisso")
+        self.rules_tree.heading("Suffix", text="Suffisso")
         self.rules_tree.column("Suffix", width=100)
 
         self.rules_tree.grid(row=0, column=0, sticky='nsew')
@@ -750,7 +739,7 @@ class MainApp:
         self.rules_tree.bind("<<TreeviewSelect>>", self._update_rule_details_panel)
 
         # Dettagli Regola
-        self.rule_details_frame = ttk.LabelFrame(rules_frame, text=" 📋 Dettagli Regola ", padding=15)
+        self.rule_details_frame = ttk.LabelFrame(rules_frame, text=" Dettagli Regola ", padding=15)
         self.rule_details_frame.grid(row=0, column=1, sticky='nsew')
         self.rule_details_frame.columnconfigure(0, weight=1)
 
@@ -773,62 +762,62 @@ class MainApp:
         buttons_frame = ttk.Frame(rules_frame)
         buttons_frame.grid(row=0, column=2, sticky='n', padx=(10, 0))
 
-        ttk.Button(buttons_frame, text="➕ Aggiungi", command=self._add_rule).pack(fill='x', pady=3)
-        ttk.Button(buttons_frame, text="✏️ Modifica", command=self._modify_rule).pack(fill='x', pady=3)
-        ttk.Button(buttons_frame, text="🗑️ Rimuovi", command=self._remove_rule).pack(fill='x', pady=3)
+        ttk.Button(buttons_frame, text="Aggiungi", command=self._add_rule).pack(fill='x', pady=3)
+        ttk.Button(buttons_frame, text="Modifica", command=self._modify_rule).pack(fill='x', pady=3)
+        ttk.Button(buttons_frame, text="Rimuovi", command=self._remove_rule).pack(fill='x', pady=3)
         
         ttk.Separator(buttons_frame, orient='horizontal').pack(fill='x', pady=15)
         
-        ttk.Button(buttons_frame, text="🎯 Utility ROI", command=self._launch_roi_utility).pack(fill='x', pady=3)
+        ttk.Button(buttons_frame, text="Utility ROI", command=self._launch_roi_utility).pack(fill='x', pady=3)
 
     def _setup_help_tab(self):
         """Configura la tab Guida."""
         main_frame = ttk.Frame(self.help_tab, style='Card.TFrame', padding=20)
         main_frame.pack(fill='both', expand=True)
 
-        ttk.Label(main_frame, text="❓ Guida all'Uso", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
+        ttk.Label(main_frame, text="Guida all'Uso", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
 
         help_text = """
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                        INTELLEO PDF SPLITTER - GUIDA                          ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  📌 COME USARE L'APPLICAZIONE                                                ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
-║                                                                              ║
-║  1️⃣  CONFIGURAZIONE INIZIALE                                                 ║
-║      • Vai nella tab "Configurazione"                                        ║
-║      • Verifica che il percorso Tesseract sia corretto                       ║
-║      • Configura le regole di classificazione per i tuoi documenti           ║
-║                                                                              ║
-║  2️⃣  DEFINIZIONE REGOLE                                                      ║
-║      • Ogni regola ha un nome categoria (es. "consuntivo", "pdl")            ║
-║      • Definisci le keyword da cercare nel documento                         ║
-║      • Usa l'Utility ROI per selezionare le aree dove cercare                ║
-║                                                                              ║
-║  3️⃣  ELABORAZIONE                                                            ║
-║      • Vai nella tab "Elaborazione"                                          ║
-║      • Inserisci il codice ODC                                               ║
-║      • Seleziona o trascina i file PDF da elaborare                          ║
-║      • L'elaborazione parte automaticamente                                  ║
-║                                                                              ║
-║  4️⃣  OUTPUT                                                                  ║
-║      • I PDF vengono divisi per categoria nella stessa cartella              ║
-║      • I file originali vengono spostati in "ORIGINALI"                      ║
-║      • I file non riconosciuti possono essere rinominati manualmente         ║
-║                                                                              ║
-║  ⌨️  SCORCIATOIE                                                             ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
-║      • Trascina file/cartelle per elaborazione automatica                    ║
-║      • Frecce ←→ per navigare le pagine                                      ║
-║      • Frecce ↑↓ per navigare i file nella revisione                         ║
-║      • Rotella mouse per zoom nell'anteprima PDF                             ║
-║                                                                              ║
-║  ℹ️  SUPPORTO                                                                ║
-║  ─────────────────────────────────────────────────────────────────────────   ║
-║      Per assistenza contattare il supporto tecnico Intelleo.                 ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
++==============================================================================+
+|                        INTELLEO PDF SPLITTER - GUIDA                         |
++==============================================================================+
+|                                                                              |
+|  COME USARE L'APPLICAZIONE                                                   |
+|  ----------------------------------------------------------------------------+
+|                                                                              |
+|  1. CONFIGURAZIONE INIZIALE                                                  |
+|     - Vai nella tab "Configurazione"                                         |
+|     - Verifica che il percorso Tesseract sia corretto                        |
+|     - Configura le regole di classificazione per i tuoi documenti            |
+|                                                                              |
+|  2. DEFINIZIONE REGOLE                                                       |
+|     - Ogni regola ha un nome categoria (es. "consuntivo", "pdl")             |
+|     - Definisci le keyword da cercare nel documento                          |
+|     - Usa l'Utility ROI per selezionare le aree dove cercare                 |
+|                                                                              |
+|  3. ELABORAZIONE                                                             |
+|     - Vai nella tab "Elaborazione"                                           |
+|     - Inserisci il codice ODC                                                |
+|     - Seleziona o trascina i file PDF da elaborare                           |
+|     - L'elaborazione parte automaticamente                                   |
+|                                                                              |
+|  4. OUTPUT                                                                   |
+|     - I PDF vengono divisi per categoria nella stessa cartella               |
+|     - I file originali vengono spostati in "ORIGINALI"                       |
+|     - I file non riconosciuti possono essere rinominati manualmente          |
+|                                                                              |
+|  SCORCIATOIE                                                                 |
+|  ----------------------------------------------------------------------------+
+|     - Trascina file/cartelle per elaborazione automatica                     |
+|     - Frecce <- -> per navigare le pagine                                    |
+|     - Frecce Su/Giu per navigare i file nella revisione                      |
+|     - Rotella mouse per zoom nell'anteprima PDF                              |
+|                                                                              |
+|  SUPPORTO                                                                    |
+|  ----------------------------------------------------------------------------+
+|     Per assistenza contattare il supporto tecnico Intelleo.                  |
+|                                                                              |
++==============================================================================+
 """
         help_area = scrolledtext.ScrolledText(main_frame, wrap='word', font=FONTS['mono'],
                                               bg=COLORS['bg_secondary'], fg=COLORS['text_primary'],
@@ -847,14 +836,14 @@ class MainApp:
                 hw_id = payload.get('Hardware ID', 'N/A')
 
                 # Aggiorna card
-                self.license_status_label.config(text="✅ Valida", fg=COLORS['success'])
+                self.license_status_label.config(text="[OK] Valida", fg=COLORS['success'])
                 
                 # Aggiorna text area
-                info_text = f"""╔══════════════════════════════════════════════════════════════════╗
-║  Cliente:      {cliente:<50}║
-║  Scadenza:     {scadenza:<50}║
-║  Hardware ID:  {hw_id:<50}║
-╚══════════════════════════════════════════════════════════════════╝"""
+                info_text = f"""+==================================================================+
+|  Cliente:      {cliente:<50}|
+|  Scadenza:     {scadenza:<50}|
+|  Hardware ID:  {hw_id:<50}|
++==================================================================+"""
                 
                 self.license_info_text.config(state='normal')
                 self.license_info_text.delete('1.0', 'end')
@@ -863,11 +852,11 @@ class MainApp:
 
                 self._add_recent_log(f"Licenza valida per: {cliente}", "SUCCESS")
             else:
-                self.license_status_label.config(text="⚠️ Non trovata", fg=COLORS['warning'])
+                self.license_status_label.config(text="[!] Non trovata", fg=COLORS['warning'])
                 self._add_recent_log("File licenza non trovato", "WARNING")
 
         except Exception as e:
-            self.license_status_label.config(text="❌ Errore", fg=COLORS['danger'])
+            self.license_status_label.config(text="[X] Errore", fg=COLORS['danger'])
             self._add_recent_log(f"Errore licenza: {e}", "ERROR")
 
     def _add_recent_log(self, message, level="INFO"):
@@ -892,13 +881,13 @@ class MainApp:
 
         prefix = ""
         if level == "ERROR":
-            prefix = "❌ "
+            prefix = "[X] "
         elif level == "WARNING":
-            prefix = "⚠️  "
+            prefix = "[!] "
         elif level == "SUCCESS":
-            prefix = "✅ "
+            prefix = "[OK] "
         elif level == "HEADER":
-            prefix = "═══ "
+            prefix = "=== "
 
         self.log_area.insert('end', f"[{timestamp}] {prefix}{message}\n", level)
         self.log_area.config(state='disabled')
@@ -939,7 +928,7 @@ class MainApp:
                 self.load_settings()
                 self._add_log_message("Configurazione aggiornata dall'utility ROI", "SUCCESS")
             except OSError as e:
-                print(f"[ERRORE] Gestione signal file: {e}")
+                logger.error(f"Gestione signal file: {e}")
         self.root.after(150, self._check_for_updates)
 
     def _on_drop(self, event):
@@ -963,9 +952,9 @@ class MainApp:
         if files_to_add:
             self.pdf_files = files_to_add
             if len(self.pdf_files) == 1:
-                self.pdf_path_label.config(text=f"📄 {os.path.basename(self.pdf_files[0])}")
+                self.pdf_path_label.config(text=f"{os.path.basename(self.pdf_files[0])}")
             else:
-                self.pdf_path_label.config(text=f"📄 {len(self.pdf_files)} file selezionati")
+                self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
             
             # Switch alla tab elaborazione e avvia
             self.notebook.select(self.processing_tab)
@@ -984,13 +973,13 @@ class MainApp:
                         found_pdfs.append(os.path.join(root_dir, name))
 
         if not found_pdfs:
-            messagebox.showerror("❌ Errore", "Nessun file PDF trovato nel percorso specificato.")
+            messagebox.showerror("Errore", "Nessun file PDF trovato nel percorso specificato.")
             return
 
         self.pdf_files = found_pdfs
-        self.pdf_path_label.config(text=f"📄 {len(found_pdfs)} file trovati")
+        self.pdf_path_label.config(text=f"{len(found_pdfs)} file trovati")
 
-        odc = simpledialog.askstring("📋 Input ODC", 
+        odc = simpledialog.askstring("Input ODC", 
                                      "Inserisci il codice ODC:", 
                                      parent=self.root)
         if odc:
@@ -1005,9 +994,9 @@ class MainApp:
         if paths:
             self.pdf_files = list(paths)
             if len(self.pdf_files) == 1:
-                self.pdf_path_label.config(text=f"📄 {os.path.basename(self.pdf_files[0])}")
+                self.pdf_path_label.config(text=f"{os.path.basename(self.pdf_files[0])}")
             else:
-                self.pdf_path_label.config(text=f"📄 {len(self.pdf_files)} file selezionati")
+                self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
             self._start_processing()
 
     def _start_processing(self):
@@ -1015,11 +1004,11 @@ class MainApp:
         odc_input = self.odc_var.get().strip()
 
         if not odc_input:
-            messagebox.showerror("❌ Errore", "Inserire un codice ODC valido.")
+            messagebox.showerror("Errore", "Inserire un codice ODC valido.")
             return
 
         if not self.pdf_files:
-            messagebox.showerror("❌ Errore", "Seleziona almeno un file PDF.")
+            messagebox.showerror("Errore", "Seleziona almeno un file PDF.")
             return
 
         # Reset log e progress
@@ -1033,7 +1022,7 @@ class MainApp:
         self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
         self._add_log_message(f"Codice ODC: {odc_input}", "INFO")
         self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
-        self._add_log_message("─" * 60, "INFO")
+        self._add_log_message("-" * 60, "INFO")
 
         self.processing_start_time = datetime.now()
         files_to_process = list(self.pdf_files)
@@ -1072,7 +1061,7 @@ class MainApp:
                     except:
                         pass
 
-            self.log_queue.put((f"═══ FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ═══", "HEADER"))
+            self.log_queue.put((f"=== FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
 
             success, message, generated, moved_original_path = pdf_processor.process_pdf(
                 pdf_path, odc, config, progress_callback)
@@ -1103,7 +1092,7 @@ class MainApp:
         elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
         elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
         
-        self.log_queue.put(("─" * 60, "INFO"))
+        self.log_queue.put(("-" * 60, "INFO"))
         self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
         self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
 
@@ -1151,7 +1140,7 @@ class MainApp:
         try:
             config_manager.save_config(self.config)
         except Exception as e:
-            print(f"[ERRORE] Auto-Save: {e}")
+            logger.error(f"Auto-Save: {e}")
 
     def _populate_rules_tree(self):
         """Popola la treeview delle regole."""
@@ -1205,7 +1194,7 @@ class MainApp:
             self.keywords_text.insert('end', keywords_str)
             self.keywords_text.config(state='disabled')
 
-            self.roi_details_var.set(f"📍 {rois_count} aree ROI definite")
+            self.roi_details_var.set(f"{rois_count} aree ROI definite")
 
     def _on_tesseract_path_change(self, *args):
         """Gestisce il cambio del path Tesseract."""
@@ -1234,10 +1223,10 @@ class MainApp:
         for path in search_paths:
             if path and os.path.exists(path):
                 self.tesseract_path_var.set(path)
-                messagebox.showinfo("✅ Trovato", f"Tesseract trovato:\n{path}")
+                messagebox.showinfo("Trovato", f"Tesseract trovato:\n{path}")
                 return
         
-        messagebox.showwarning("⚠️ Non Trovato", 
+        messagebox.showwarning("Non Trovato", 
                               "Tesseract non trovato automaticamente.\nIndicalo manualmente.")
 
     def _add_rule(self):
@@ -1248,7 +1237,7 @@ class MainApp:
         """Modifica una regola esistente."""
         selected_item = self.rules_tree.focus()
         if not selected_item:
-            messagebox.showwarning("⚠️ Selezione", "Selezionare una regola da modificare.")
+            messagebox.showwarning("Selezione", "Selezionare una regola da modificare.")
             return
         
         item_values = self.rules_tree.item(selected_item, "values")
@@ -1261,11 +1250,11 @@ class MainApp:
         """Rimuove una regola."""
         selected_item = self.rules_tree.focus()
         if not selected_item:
-            messagebox.showwarning("⚠️ Selezione", "Selezionare una regola da rimuovere.")
+            messagebox.showwarning("Selezione", "Selezionare una regola da rimuovere.")
             return
         
         category_name = self.rules_tree.item(selected_item, "values")[1]
-        if messagebox.askyesno("🗑️ Conferma", f"Rimuovere la regola '{category_name}'?"):
+        if messagebox.askyesno("Conferma", f"Rimuovere la regola '{category_name}'?"):
             self.config["classification_rules"] = [
                 r for r in self.config["classification_rules"] 
                 if r["category_name"] != category_name
@@ -1280,7 +1269,7 @@ class MainApp:
     def _show_rule_editor(self, rule=None):
         """Mostra l'editor di regole."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("✏️ Modifica Regola" if rule else "➕ Nuova Regola")
+        dialog.title("Modifica Regola" if rule else "Nuova Regola")
         dialog.configure(bg=COLORS['bg_primary'])
         dialog.geometry("450x350")
         dialog.resizable(False, False)
@@ -1335,13 +1324,13 @@ class MainApp:
         color_swatch.grid(row=row, column=1, sticky='w', pady=8)
 
         def choose_color():
-            result = colorchooser.askcolor(title="🎨 Scegli Colore", 
+            result = colorchooser.askcolor(title="Scegli Colore", 
                                           initialcolor=chosen_color.get())
             if result and result[1]:
                 chosen_color.set(result[1])
                 color_swatch.config(bg=result[1])
 
-        ttk.Button(main_frame, text="🎨 Scegli", command=choose_color).grid(
+        ttk.Button(main_frame, text="Scegli", command=choose_color).grid(
             row=row, column=2, pady=8)
         
         row += 1
@@ -1350,7 +1339,7 @@ class MainApp:
         ttk.Label(main_frame, text="Aree ROI:", font=FONTS['body_bold']).grid(
             row=row, column=0, sticky='w', pady=8)
         roi_count = len(rule.get("rois", [])) if rule else 0
-        ttk.Label(main_frame, text=f"📍 {roi_count} aree definite", 
+        ttk.Label(main_frame, text=f"{roi_count} aree definite", 
                  style='Muted.TLabel').grid(row=row, column=1, sticky='w', pady=8)
 
         def on_save():
@@ -1360,7 +1349,7 @@ class MainApp:
             color = chosen_color.get()
 
             if not category or not keywords:
-                messagebox.showerror("❌ Errore", 
+                messagebox.showerror("Errore", 
                                     "Nome categoria e almeno una keyword sono obbligatori.", 
                                     parent=dialog)
                 return
@@ -1379,7 +1368,7 @@ class MainApp:
             else:
                 if any(r["category_name"] == category 
                       for r in self.config.get("classification_rules", [])):
-                    messagebox.showerror("❌ Errore", "Categoria già esistente.", parent=dialog)
+                    messagebox.showerror("Errore", "Categoria gia' esistente.", parent=dialog)
                     return
                 new_data["rois"] = []
                 self.config.setdefault("classification_rules", []).append(new_data)
@@ -1396,8 +1385,8 @@ class MainApp:
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=row+2, column=0, columnspan=3)
         
-        ttk.Button(btn_frame, text="💾 Salva", command=on_save).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="❌ Annulla", command=dialog.destroy).pack(side='left', padx=10)
+        ttk.Button(btn_frame, text="Salva", command=on_save).pack(side='left', padx=10)
+        ttk.Button(btn_frame, text="Annulla", command=dialog.destroy).pack(side='left', padx=10)
 
     def _launch_roi_utility(self):
         """Lancia l'utility ROI."""
@@ -1406,125 +1395,93 @@ class MainApp:
             subprocess.Popen([sys.executable, script_path])
             self._add_log_message("Utility ROI avviata", "SUCCESS")
         except Exception as e:
-            messagebox.showerror("❌ Errore", f"Impossibile avviare l'utility ROI:\n{e}")
+            messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI:\n{e}")
 
 
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
+    # Banner di avvio (senza caratteri Unicode)
+    logger.info("="*68)
+    logger.info("           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
+    logger.info("="*68)
+    logger.info(f"  Versione: {version.__version__}")
+    logger.info(f"  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    logger.info("="*68)
+
+    # Print anche su console se disponibile
+    print("+====================================================================+")
+    print("|           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE               |")
+    print("+====================================================================+")
+    print(f"|  Versione: {version.__version__}")
+    print(f"|  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print("+====================================================================+")
+    print()
+
+    # License Update & Check
+    logger.info("Verifica licenza in corso...")
+    print("[SISTEMA] Verifica licenza in corso...")
     try:
-        # Banner di avvio professionale
-        print("╔════════════════════════════════════════════════════════════════╗")
-        print("║           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE           ║")
-        print("╠════════════════════════════════════════════════════════════════╣")
-        print(f"║  Versione: {version.__version__:<52}║")
-        print(f"║  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S'):<56}║")
-        print("╚════════════════════════════════════════════════════════════════╝")
-        print()
-
-        # License Update & Check
-        print("[SISTEMA] Verifica licenza in corso...")
-        try:
-            license_updater.run_update()
-            print("[SISTEMA] ✓ Aggiornamento licenza completato")
-        except Exception as e:
-            print(f"[ERRORE] Verifica licenza fallita: {e}")
-            # Ensure root exists for messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
-            sys.exit(1)
-
-        is_valid, msg = license_validator.verify_license()
-        if not is_valid:
-            root = tk.Tk()
-            root.withdraw()
-            hw_id = license_validator.get_hardware_id()
-            err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
-            root.clipboard_clear()
-            root.clipboard_append(hw_id)
-            messagebox.showerror("Licenza Non Valida", err_msg)
-            print(f"[ERRORE] Licenza non valida: {msg}")
-            sys.exit(1)
-
-        print("[SISTEMA] ✓ Licenza valida")
-        print("[SISTEMA] Inizializzazione interfaccia grafica...")
-        print()
-
-        # Pulizia signal file
-        if os.path.exists(SIGNAL_FILE):
-            os.remove(SIGNAL_FILE)
-
-        # Inizializzazione Tk con DnD
-        if TkinterDnD:
-            try:
-                root = TkinterDnD.Tk()
-                print("[SISTEMA] ✓ Drag & Drop abilitato")
-            except Exception as e:
-                print(f"[AVVISO] Errore inizializzazione Drag & Drop: {e}")
-                root = tk.Tk()
-        else:
-            print("[AVVISO] Modulo TkinterDnD non disponibile. Fallback a Tk standard.")
-            root = tk.Tk()
-
-        # Hide console on success (if running from a console window that isn't frozen, or if logic dictates)
-        # Note: In frozen apps with --windows-disable-console, there is no console.
-        # This logic is primarily for the 'launch.bat' user experience where we want to close the CMD on success.
-        try:
-            if sys.platform == "win32" and not getattr(sys, 'frozen', False):
-                # Detach console window if successful initialization
-                ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-        except Exception:
-            pass
-
-        # Check CLI args
-        cli_path = None
-        if len(sys.argv) > 1:
-            potential_path = sys.argv[1]
-            if os.path.exists(potential_path):
-                if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
-                    cli_path = potential_path
-                    print(f"[SISTEMA] Avvio con file: {potential_path}")
-
-        print("[SISTEMA] ✓ Applicazione pronta")
-        print("═" * 68)
-        print()
-
-        app = MainApp(root, auto_file_path=cli_path)
-        root.mainloop()
-
+        license_updater.run_update()
+        logger.info("Aggiornamento licenza completato")
+        print("[SISTEMA] [OK] Aggiornamento licenza completato")
     except Exception as e:
-        # Global Error Handler
-        import traceback
-
-        # Capture full traceback
-        tb_str = "".join(traceback.format_exception(None, e, e.__traceback__))
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Write to log file
-        try:
-            with open(LOG_FILE, 'a') as f:
-                f.write(f"\n{'='*50}\n")
-                f.write(f"CRASH REPORT - {timestamp}\n")
-                f.write(f"{'='*50}\n")
-                f.write(tb_str)
-                f.write("\n")
-        except:
-            pass # If logging fails, we still try to show the popup
-
-        # Using ctypes directly to ensure a popup appears even if Tkinter failed completely.
-        error_msg = f"Errore Fatale all'avvio:\n\n{str(e)}\n\nVedi {LOG_FILE} per dettagli."
-        print(f"[CRITICAL ERROR] {error_msg}")
-        try:
-            if sys.platform == "win32":
-                ctypes.windll.user32.MessageBoxW(0, error_msg, "Intelleo PDF Splitter - Errore", 0x10)
-            else:
-                # Fallback for non-Windows (unlikely given context, but good practice)
-                import tkinter
-                root = tkinter.Tk()
-                root.withdraw()
-                tkinter.messagebox.showerror("Errore Fatale", error_msg)
-        except:
-            pass # If even showing the error fails, we are in trouble.
+        logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
+        print(f"[ERRORE] Verifica licenza fallita: {e}")
+        messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
         sys.exit(1)
+
+    is_valid, msg = license_validator.verify_license()
+    if not is_valid:
+        logger.error(f"Licenza non valida: {msg}")
+        root = tk.Tk()
+        root.withdraw()
+        hw_id = license_validator.get_hardware_id()
+        err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
+        root.clipboard_clear()
+        root.clipboard_append(hw_id)
+        messagebox.showerror("Licenza Non Valida", err_msg)
+        print(f"[ERRORE] Licenza non valida: {msg}")
+        sys.exit(1)
+
+    logger.info("Licenza valida")
+    print("[SISTEMA] [OK] Licenza valida")
+    logger.info("Inizializzazione interfaccia grafica...")
+    print("[SISTEMA] Inizializzazione interfaccia grafica...")
+    print()
+
+    # Pulizia signal file
+    if os.path.exists(SIGNAL_FILE):
+        os.remove(SIGNAL_FILE)
+
+    # Inizializzazione Tk con DnD
+    try:
+        root = TkinterDnD.Tk()
+        logger.info("Drag & Drop abilitato")
+        print("[SISTEMA] [OK] Drag & Drop abilitato")
+    except Exception as e:
+        logger.warning(f"Drag & Drop non disponibile: {e}")
+        print(f"[AVVISO] Drag & Drop non disponibile: {e}")
+        root = tk.Tk()
+
+    # Check CLI args
+    cli_path = None
+    if len(sys.argv) > 1:
+        potential_path = sys.argv[1]
+        if os.path.exists(potential_path):
+            if os.path.isdir(potential_path) or potential_path.lower().endswith('.pdf'):
+                cli_path = potential_path
+                logger.info(f"Avvio con file: {potential_path}")
+                print(f"[SISTEMA] Avvio con file: {potential_path}")
+
+    logger.info("Applicazione pronta")
+    print("[SISTEMA] [OK] Applicazione pronta")
+    print("="*68)
+    print()
+
+    app = MainApp(root, auto_file_path=cli_path)
+    
+    logger.info("Avvio mainloop")
+    root.mainloop()
+    logger.info("Applicazione chiusa normalmente")

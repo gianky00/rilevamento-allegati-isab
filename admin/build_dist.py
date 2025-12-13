@@ -148,9 +148,10 @@ def build():
 
         log_and_print("\n--- Step 3/7: Obfuscating with PyArmor ---")
 
-        # Files to obfuscate
+        # Files to obfuscate - ADDED app_logger.py
         target_files = [
             os.path.join(ROOT_DIR, "main.py"),
+            os.path.join(ROOT_DIR, "app_logger.py"),  # NEW: logging module
             os.path.join(ROOT_DIR, "pdf_processor.py"),
             os.path.join(ROOT_DIR, "config_manager.py"),
             os.path.join(ROOT_DIR, "roi_utility.py"),
@@ -162,6 +163,11 @@ def build():
 
         # Check if files exist
         valid_targets = [f for f in target_files if os.path.exists(f)]
+        
+        # Log which files will be obfuscated
+        log_and_print(f"Files to obfuscate: {len(valid_targets)}")
+        for f in valid_targets:
+            log_and_print(f"  - {os.path.basename(f)}")
 
         cmd_pyarmor = [
             sys.executable, "-m", "pyarmor.cli", "gen",
@@ -198,7 +204,6 @@ def build():
         cmd_nuitka = [
             sys.executable, "-m", "nuitka",
             "--standalone",
-            "--mingw64", # Enforce MinGW64 compiler
             f"--output-dir={DIST_DIR}",
             "--enable-plugin=tk-inter",
             "--show-progress", # Show detailed progress
@@ -243,6 +248,8 @@ def build():
             "numpy", # Required by pytesseract
             "tkinterdnd2", # Required for Drag & Drop
             "requests", # Required for license updater
+            "logging",  # Ensure logging is included
+            "traceback", # For exception handling
             # Built-in modules are generally handled, but explicit inclusion is safer for key logic
             # However, for built-ins Nuitka usually finds them unless obfuscation hides them completely.
             # But standard library is linked in standalone mode.

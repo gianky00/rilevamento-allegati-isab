@@ -44,7 +44,7 @@ class ROIDrawingApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("🎯 Intelleo - Utility Gestione ROI")
+        self.root.title("Intelleo - Utility Gestione ROI")
         self.root.geometry("1300x900")
         self.root.configure(bg=COLORS['bg_primary'])
         self.root.state('zoomed')
@@ -96,18 +96,18 @@ class ROIDrawingApp:
         header_frame = ttk.Frame(main_container)
         header_frame.pack(fill='x', pady=(0, 15))
 
-        ttk.Label(header_frame, text="🎯 Utility Gestione ROI", 
+        ttk.Label(header_frame, text="Utility Gestione ROI", 
                  style='Header.TLabel').pack(side='left')
 
         # Toolbar
-        toolbar = ttk.LabelFrame(main_container, text=" 🔧 Strumenti ", padding=10)
+        toolbar = ttk.LabelFrame(main_container, text=" Strumenti ", padding=10)
         toolbar.pack(fill='x', pady=(0, 15))
 
         # Bottoni toolbar
         btn_frame = ttk.Frame(toolbar)
         btn_frame.pack(fill='x')
 
-        ttk.Button(btn_frame, text="📂 Apri PDF di Esempio", 
+        ttk.Button(btn_frame, text="Apri PDF di Esempio", 
                   command=self.open_pdf).pack(side='left', padx=5)
 
         ttk.Separator(btn_frame, orient='vertical').pack(side='left', fill='y', padx=15)
@@ -115,15 +115,15 @@ class ROIDrawingApp:
         # Navigazione pagine
         self.nav_frame = ttk.Frame(btn_frame)
         
-        self.prev_page_button = ttk.Button(self.nav_frame, text="◀◀ Pagina Precedente", 
+        self.prev_page_button = ttk.Button(self.nav_frame, text="<< Pagina Precedente", 
                                           command=self.prev_page)
         self.prev_page_button.pack(side='left', padx=3)
 
-        self.page_label = ttk.Label(self.nav_frame, text="📄 Nessun PDF caricato", 
+        self.page_label = ttk.Label(self.nav_frame, text="Nessun PDF caricato", 
                                    font=FONTS['body_bold'], width=25, anchor='center')
         self.page_label.pack(side='left', padx=15)
 
-        self.next_page_button = ttk.Button(self.nav_frame, text="Pagina Successiva ▶▶", 
+        self.next_page_button = ttk.Button(self.nav_frame, text="Pagina Successiva >>", 
                                           command=self.next_page)
         self.next_page_button.pack(side='left', padx=3)
 
@@ -133,23 +133,23 @@ class ROIDrawingApp:
         zoom_frame = ttk.Frame(btn_frame)
         zoom_frame.pack(side='left', padx=10)
         
-        ttk.Label(zoom_frame, text="🔍 Zoom:", font=FONTS['body_bold']).pack(side='left', padx=5)
-        ttk.Button(zoom_frame, text="➖", width=3, command=self.zoom_out).pack(side='left', padx=2)
+        ttk.Label(zoom_frame, text="Zoom:", font=FONTS['body_bold']).pack(side='left', padx=5)
+        ttk.Button(zoom_frame, text="-", width=3, command=self.zoom_out).pack(side='left', padx=2)
         self.zoom_label = ttk.Label(zoom_frame, text="100%", width=6, anchor='center')
         self.zoom_label.pack(side='left', padx=5)
-        ttk.Button(zoom_frame, text="➕", width=3, command=self.zoom_in).pack(side='left', padx=2)
-        ttk.Button(zoom_frame, text="🔄", width=3, command=self.zoom_reset).pack(side='left', padx=2)
+        ttk.Button(zoom_frame, text="+", width=3, command=self.zoom_in).pack(side='left', padx=2)
+        ttk.Button(zoom_frame, text="Reset", width=5, command=self.zoom_reset).pack(side='left', padx=2)
 
         ttk.Separator(btn_frame, orient='vertical').pack(side='left', fill='y', padx=15)
 
-        # Modalità cancellazione
-        self.delete_mode_btn = ttk.Checkbutton(btn_frame, text="🗑️ Modalità Cancellazione ROI", 
+        # Modalita' cancellazione
+        self.delete_mode_btn = ttk.Checkbutton(btn_frame, text="Modalita' Cancellazione ROI", 
                                                variable=self.delete_mode, 
                                                command=self.toggle_delete_mode)
         self.delete_mode_btn.pack(side='left', padx=10)
 
-        # Indicatore modalità
-        self.mode_indicator = ttk.Label(btn_frame, text="✏️ Modalità: Disegno", 
+        # Indicatore modalita'
+        self.mode_indicator = ttk.Label(btn_frame, text="[DISEGNO] Modalita' attiva", 
                                         foreground=COLORS['success'], font=FONTS['body_bold'])
         self.mode_indicator.pack(side='right', padx=15)
 
@@ -160,7 +160,7 @@ class ROIDrawingApp:
         content_frame.rowconfigure(0, weight=1)
 
         # Canvas Frame
-        canvas_container = ttk.LabelFrame(content_frame, text=" 📐 Area di Lavoro ", padding=10)
+        canvas_container = ttk.LabelFrame(content_frame, text=" Area di Lavoro ", padding=10)
         canvas_container.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
 
         self.canvas = tk.Canvas(canvas_container, bg=COLORS['bg_tertiary'], 
@@ -178,7 +178,7 @@ class ROIDrawingApp:
         self.canvas.pack(side='left', expand=True, fill='both')
 
         # Sidebar con regole
-        sidebar = ttk.LabelFrame(content_frame, text=" 📋 Regole Attive ", padding=10, width=280)
+        sidebar = ttk.LabelFrame(content_frame, text=" Regole Attive ", padding=10, width=280)
         sidebar.grid(row=0, column=1, sticky='nsew')
         sidebar.grid_propagate(False)
 
@@ -192,11 +192,11 @@ class ROIDrawingApp:
         self.rules_listbox.pack(fill='both', expand=True, pady=(0, 10))
         self._update_rules_list()
 
-        ttk.Button(sidebar, text="🔄 Aggiorna Lista", 
+        ttk.Button(sidebar, text="Aggiorna Lista", 
                   command=self._update_rules_list).pack(fill='x')
 
         # Status bar
-        self.status_bar = ttk.Label(main_container, text="ℹ️ Carica un PDF per iniziare a definire le aree ROI",
+        self.status_bar = ttk.Label(main_container, text="[INFO] Carica un PDF per iniziare a definire le aree ROI",
                                    style='Muted.TLabel', anchor='w')
         self.status_bar.pack(fill='x', pady=(10, 0))
 
@@ -205,8 +205,8 @@ class ROIDrawingApp:
         help_frame.pack(fill='x', pady=(5, 0))
         
         ttk.Label(help_frame, 
-                 text="💡 Disegna un rettangolo sul PDF per definire una nuova ROI | "
-                      "Frecce ←→ per navigare | Rotella mouse per zoom | "
+                 text="[AIUTO] Disegna un rettangolo sul PDF per definire una nuova ROI | "
+                      "Frecce <- -> per navigare | Rotella mouse per zoom | "
                       "Attiva 'Cancellazione' per rimuovere ROI esistenti",
                  style='Muted.TLabel').pack()
 
@@ -236,15 +236,15 @@ class ROIDrawingApp:
             self.rules_listbox.insert('end', f"  {name} ({roi_count} ROI)")
 
     def toggle_delete_mode(self):
-        """Attiva/disattiva la modalità cancellazione."""
+        """Attiva/disattiva la modalita' cancellazione."""
         if self.delete_mode.get():
             self.canvas.config(cursor="X_cursor")
-            self.mode_indicator.config(text="🗑️ Modalità: Cancellazione", foreground=COLORS['danger'])
-            self.status_bar.config(text="⚠️ Modalità Cancellazione: Clicca su una ROI per eliminarla")
+            self.mode_indicator.config(text="[CANCELLA] Modalita' attiva", foreground=COLORS['danger'])
+            self.status_bar.config(text="[!] Modalita' Cancellazione: Clicca su una ROI per eliminarla")
         else:
             self.canvas.config(cursor="crosshair")
-            self.mode_indicator.config(text="✏️ Modalità: Disegno", foreground=COLORS['success'])
-            self.status_bar.config(text="✏️ Modalità Disegno: Trascina per creare una nuova ROI")
+            self.mode_indicator.config(text="[DISEGNO] Modalita' attiva", foreground=COLORS['success'])
+            self.status_bar.config(text="[OK] Modalita' Disegno: Trascina per creare una nuova ROI")
 
     def on_mouse_motion(self, event):
         """Mostra le coordinate del mouse."""
@@ -254,9 +254,9 @@ class ROIDrawingApp:
             factor = 72 / (150 * self.zoom_level)
             pdf_x = int(x * factor)
             pdf_y = int(y * factor)
-            coord_text = f"📍 Coordinate PDF: ({pdf_x}, {pdf_y})"
+            coord_text = f"Coordinate PDF: ({pdf_x}, {pdf_y})"
             if not self.delete_mode.get():
-                self.status_bar.config(text=f"✏️ Modalità Disegno | {coord_text}")
+                self.status_bar.config(text=f"[DISEGNO] Modalita' attiva | {coord_text}")
 
     def zoom_in(self):
         """Aumenta lo zoom."""
@@ -308,13 +308,13 @@ class ROIDrawingApp:
                 self.zoom_label.config(text="100%")
                 self.render_page(self.current_page_index)
                 self.status_bar.config(
-                    text=f"✅ PDF caricato: {os.path.basename(filepath)} "
+                    text=f"[OK] PDF caricato: {os.path.basename(filepath)} "
                          f"({self.pdf_doc.page_count} pagine)")
             else:
-                messagebox.showwarning("⚠️ Attenzione", 
+                messagebox.showwarning("Attenzione", 
                                       "Il PDF selezionato non contiene pagine.")
         except Exception as e:
-            messagebox.showerror("❌ Errore", f"Impossibile aprire il PDF:\n{e}")
+            messagebox.showerror("Errore", f"Impossibile aprire il PDF:\n{e}")
 
     def render_page(self, page_index):
         """Renderizza una pagina del PDF."""
@@ -441,7 +441,7 @@ class ROIDrawingApp:
                 self.rect = None
 
     def handle_delete_click(self, event):
-        """Gestisce il click in modalità cancellazione."""
+        """Gestisce il click in modalita' cancellazione."""
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
         item_ids = self.canvas.find_overlapping(x, y, x, y)
@@ -462,13 +462,13 @@ class ROIDrawingApp:
                     category_name = rule.get("category_name", "N/A")
 
                     if messagebox.askyesno(
-                        "🗑️ Conferma Cancellazione",
+                        "Conferma Cancellazione",
                         f"Eliminare questa ROI per la categoria '{category_name}'?",
                         parent=self.root):
                         
                         del rule["rois"][roi_index]
                         self.save_and_refresh()
-                        self.status_bar.config(text=f"✅ ROI eliminata da '{category_name}'")
+                        self.status_bar.config(text=f"[OK] ROI eliminata da '{category_name}'")
                         return
 
     def prompt_and_save_roi(self, roi_coords):
@@ -478,13 +478,13 @@ class ROIDrawingApp:
 
         if not categories:
             messagebox.showwarning(
-                "⚠️ Nessuna Categoria",
+                "Nessuna Categoria",
                 "Non ci sono categorie definite.\nCrea prima una categoria nell'applicazione principale.",
                 parent=self.root)
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("📍 Salva Nuova ROI")
+        dialog.title("Salva Nuova ROI")
         dialog.configure(bg=COLORS['bg_primary'])
         dialog.geometry("400x200")
         dialog.resizable(False, False)
@@ -500,7 +500,7 @@ class ROIDrawingApp:
         main_frame = ttk.Frame(dialog, padding=20)
         main_frame.pack(fill='both', expand=True)
 
-        ttk.Label(main_frame, text="📍 Associa ROI alla categoria:",
+        ttk.Label(main_frame, text="Associa ROI alla categoria:",
                  font=FONTS['subheading']).pack(pady=(0, 15))
 
         category_var = tk.StringVar()
@@ -512,7 +512,7 @@ class ROIDrawingApp:
             category_combo.set(categories[0])
 
         # Info coordinate
-        coords_text = f"Coordinate: ({roi_coords[0]}, {roi_coords[1]}) → ({roi_coords[2]}, {roi_coords[3]})"
+        coords_text = f"Coordinate: ({roi_coords[0]}, {roi_coords[1]}) -> ({roi_coords[2]}, {roi_coords[3]})"
         ttk.Label(main_frame, text=coords_text, style='Muted.TLabel').pack(pady=10)
 
         def save():
@@ -526,14 +526,14 @@ class ROIDrawingApp:
                     break
             
             self.save_and_refresh()
-            self.status_bar.config(text=f"✅ ROI aggiunta a '{selected_category}'")
+            self.status_bar.config(text=f"[OK] ROI aggiunta a '{selected_category}'")
             dialog.destroy()
 
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(pady=15)
 
-        ttk.Button(btn_frame, text="💾 Salva ROI", command=save).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="❌ Annulla", command=dialog.destroy).pack(side='left', padx=10)
+        ttk.Button(btn_frame, text="Salva ROI", command=save).pack(side='left', padx=10)
+        ttk.Button(btn_frame, text="Annulla", command=dialog.destroy).pack(side='left', padx=10)
 
     def save_and_refresh(self):
         """Salva la configurazione e aggiorna la vista."""
@@ -548,7 +548,7 @@ class ROIDrawingApp:
             self._update_rules_list()
             
         except Exception as e:
-            messagebox.showerror("❌ Errore", 
+            messagebox.showerror("Errore", 
                                f"Impossibile salvare la configurazione:\n{e}",
                                parent=self.root)
 
@@ -568,7 +568,7 @@ class ROIDrawingApp:
             return
         
         total_pages = self.pdf_doc.page_count
-        self.page_label.config(text=f"📄 Pagina {self.current_page_index + 1} / {total_pages}")
+        self.page_label.config(text=f"Pagina {self.current_page_index + 1} / {total_pages}")
         
         self.prev_page_button.config(
             state='normal' if self.current_page_index > 0 else 'disabled')
@@ -580,12 +580,12 @@ class ROIDrawingApp:
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
-    print("╔════════════════════════════════════════════════════════════════╗")
-    print("║            INTELLEO - UTILITY GESTIONE ROI                     ║")
-    print("╠════════════════════════════════════════════════════════════════╣")
-    print("║  Usa questa utility per definire le aree di ricerca OCR.       ║")
-    print("║  Le modifiche verranno sincronizzate con l'app principale.     ║")
-    print("╚════════════════════════════════════════════════════════════════╝")
+    print("+====================================================================+")
+    print("|            INTELLEO - UTILITY GESTIONE ROI                         |")
+    print("+====================================================================+")
+    print("|  Usa questa utility per definire le aree di ricerca OCR.           |")
+    print("|  Le modifiche verranno sincronizzate con l'app principale.         |")
+    print("+====================================================================+")
     print()
 
     root = tk.Tk()
