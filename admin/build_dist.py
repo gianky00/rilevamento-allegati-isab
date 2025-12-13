@@ -229,10 +229,21 @@ def build():
                  cmd_pyinstaller.append(f"--icon={icon_path}")
 
         # Hidden imports
-        # We must explicitly import the pyarmor runtime
+        # We must explicitly import the pyarmor runtime and all local obfuscated modules
+        # because PyInstaller cannot analyze imports inside obfuscated code.
         hidden_imports = [
             "fitz", "PIL", "pytesseract", "cffi", "cryptography",
             "numpy", "tkinterdnd2", "requests", "logging", "traceback",
+            # Local modules
+            "app_logger",
+            "config_manager",
+            "pdf_processor",
+            "roi_utility",
+            "license_validator",
+            "license_updater",
+            "app_updater",
+            "version",
+            # PyArmor runtime
             runtime_dir
         ]
 
