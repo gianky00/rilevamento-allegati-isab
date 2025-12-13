@@ -4,9 +4,9 @@ COLOR 0B
 cls
 
 echo.
-echo  ╔════════════════════════════════════════════════════════════════╗
-echo  ║           INTELLEO PDF SPLITTER - LAUNCHER                     ║
-echo  ╚════════════════════════════════════════════════════════════════╝
+echo  +====================================================================+
+echo  ^|           INTELLEO PDF SPLITTER - LAUNCHER                        ^|
+echo  +====================================================================+
 echo.
 
 set VENV_DIR=.venv
@@ -27,7 +27,7 @@ if not exist "%VENV_DIR%\Scripts\activate.bat" (
         pause
         exit /b 1
     )
-    echo  [SETUP] ✓ Ambiente virtuale creato
+    echo  [SETUP] [OK] Ambiente virtuale creato
 )
 
 :: 2. Activate Virtual Environment
@@ -47,18 +47,26 @@ if %errorlevel% neq 0 (
         exit /b 1
     )
 )
-echo  [SETUP] ✓ Dipendenze verificate
+echo  [SETUP] [OK] Dipendenze verificate
 echo.
 
 :: 4. Launch App
-echo  ══════════════════════════════════════════════════════════════════
+echo  ======================================================================
 echo.
 python main.py
+set APP_EXIT_CODE=%errorlevel%
 
-if %errorlevel% neq 0 (
+:: 5. Handle exit code
+if %APP_EXIT_CODE% neq 0 (
     echo.
-    echo  ══════════════════════════════════════════════════════════════════
-    echo  [ERRORE] L'applicazione si e' chiusa con un errore.
-    echo  ══════════════════════════════════════════════════════════════════
-    pause
+    echo  ======================================================================
+    echo  [ERRORE] L'applicazione si e' chiusa con un errore (codice: %APP_EXIT_CODE%).
+    echo  ======================================================================
+    echo.
+    echo  Premi un tasto per chiudere...
+    pause >nul
+    exit /b %APP_EXIT_CODE%
 )
+
+:: App closed successfully - exit silently
+exit /b 0

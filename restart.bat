@@ -4,9 +4,9 @@ COLOR 0E
 cls
 
 echo.
-echo  ╔════════════════════════════════════════════════════════════════╗
-echo  ║           INTELLEO PDF SPLITTER - RESET AMBIENTE               ║
-echo  ╚════════════════════════════════════════════════════════════════╝
+echo  +====================================================================+
+echo  ^|           INTELLEO PDF SPLITTER - RESET AMBIENTE                  ^|
+echo  +====================================================================+
 echo.
 echo  ATTENZIONE: Questo comando cancellera' e reinstallera' l'intero
 echo              ambiente Python dell'applicazione.
@@ -23,7 +23,7 @@ if exist %VENV_DIR% (
     echo  [RESET] Rimozione ambiente esistente...
     rmdir /s /q %VENV_DIR%
     if %errorlevel% equ 0 (
-        echo  [RESET] ✓ Ambiente rimosso
+        echo  [RESET] [OK] Ambiente rimosso
     ) else (
         echo  [ERRORE] Impossibile rimuovere l'ambiente.
         echo           Chiudi tutte le istanze dell'applicazione e riprova.
@@ -34,6 +34,6 @@ if exist %VENV_DIR% (
 
 echo.
 echo  [RESET] Riavvio procedura di installazione...
-echo  ══════════════════════════════════════════════════════════════════
+echo  ======================================================================
 echo.
 call launch.bat
