@@ -2,9 +2,17 @@
 echo ========================================================
 echo      INTELLEO PDF SPLITTER - AUTOMATED RELEASE
 echo ========================================================
+set VENV_DIR=.venv
 
-:: 1. Environment Check & Prep
-echo [1/4] Checking Environment...
+:: 1. Environment Prep (VENV)
+echo [1/5] Checking Environment (%VENV_DIR%)...
+if not exist %VENV_DIR% (
+    echo Creating virtual environment...
+    python -m venv %VENV_DIR%
+)
+call %VENV_DIR%\Scripts\activate.bat
+
+echo Updating dependencies...
 pip install --upgrade pip
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
@@ -13,14 +21,26 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
+:: 2. Run Tests
+echo.
+echo [2/5] Running Unit Tests...
+pytest
+if %errorlevel% neq 0 (
+    echo TESTS FAILED! Aborting release.
+    echo Please fix the errors before deploying.
+    pause
+    exit /b %errorlevel%
+)
+echo Tests passed.
+
 :: Clean previous builds
 if exist dist rmdir /s /q dist
 if exist build rmdir /s /q build
 echo Cleaned previous build artifacts.
 
-:: 2. Bump Version
+:: 3. Bump Version
 echo.
-echo [2/4] Incrementing Patch Version...
+echo [3/5] Incrementing Patch Version...
 python admin/bump_version.py patch
 if %errorlevel% neq 0 (
     echo Error bumping version!
@@ -28,9 +48,9 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-:: 3. Build & Deploy
+:: 4. Build & Deploy
 echo.
-echo [3/4] Building Application and Installer...
+echo [4/5] Building Application and Installer...
 echo This may take a few minutes...
 python admin/build_dist.py
 if %errorlevel% neq 0 (
@@ -39,9 +59,9 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-:: 4. Finalizing
+:: 5. Finalizing
 echo.
-echo [4/4] Release Process Completed!
+echo [5/5] Release Process Completed!
 echo.
 echo New version is live on Netlify.
 pause
