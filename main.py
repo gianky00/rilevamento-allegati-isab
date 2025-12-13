@@ -32,6 +32,26 @@ import ctypes
 # Segnale per comunicazione tra utility ROI e app principale
 SIGNAL_FILE = ".update_signal"
 
+# Setup logging file
+try:
+    if getattr(sys, 'frozen', False):
+        BASE_DIR = os.path.dirname(sys.executable)
+    else:
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    LOG_DIR = os.path.join(BASE_DIR, "Log")
+    os.makedirs(LOG_DIR, exist_ok=True)
+    LOG_FILE = os.path.join(LOG_DIR, "error_log.txt")
+
+    # Redirect stderr to file to capture crash tracebacks
+    # We open in append mode to keep history, or 'w' to reset. 'a' is safer.
+    sys.stderr = open(LOG_FILE, 'a', buffering=1)
+    # Optionally redirect stdout too if debug info is needed
+    # sys.stdout = sys.stderr
+except Exception as e:
+    # If we can't set up logging, print to console (if exists) but proceed
+    print(f"Failed to setup logging: {e}")
+
 # ============================================================================
 # COSTANTI STILE - TEMA CHIARO PROFESSIONALE
 # ============================================================================
@@ -1468,8 +1488,25 @@ if __name__ == "__main__":
 
     except Exception as e:
         # Global Error Handler
+        import traceback
+
+        # Capture full traceback
+        tb_str = "".join(traceback.format_exception(None, e, e.__traceback__))
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Write to log file
+        try:
+            with open(LOG_FILE, 'a') as f:
+                f.write(f"\n{'='*50}\n")
+                f.write(f"CRASH REPORT - {timestamp}\n")
+                f.write(f"{'='*50}\n")
+                f.write(tb_str)
+                f.write("\n")
+        except:
+            pass # If logging fails, we still try to show the popup
+
         # Using ctypes directly to ensure a popup appears even if Tkinter failed completely.
-        error_msg = f"Errore Fatale all'avvio:\n\n{str(e)}"
+        error_msg = f"Errore Fatale all'avvio:\n\n{str(e)}\n\nVedi {LOG_FILE} per dettagli."
         print(f"[CRITICAL ERROR] {error_msg}")
         try:
             if sys.platform == "win32":
