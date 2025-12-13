@@ -234,6 +234,14 @@ def build():
         hidden_imports = [
             "fitz", "PIL", "pytesseract", "cffi", "cryptography",
             "numpy", "tkinterdnd2", "requests", "logging", "traceback",
+            # Tkinter submodules (often missed in obfuscated/frozen builds)
+            "tkinter",
+            "tkinter.ttk",
+            "tkinter.filedialog",
+            "tkinter.messagebox",
+            "tkinter.scrolledtext",
+            "tkinter.colorchooser",
+            "tkinter.simpledialog",
             # Local modules
             "app_logger",
             "config_manager",
