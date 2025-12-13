@@ -94,6 +94,11 @@ class TestMainLogic(unittest.TestCase):
     def test_on_drop_single_file(self):
         event = MagicMock()
         event.data = "path/to/file.pdf"
+
+        # Configure mock for Windows behavior where splitlist is called
+        if sys.platform == 'win32':
+            self.app.root.tk.splitlist.return_value = [event.data]
+
         with patch("os.path.exists", return_value=True), patch("os.path.isdir", return_value=False):
              with patch.object(self.app, 'start_processing') as mock_start:
                  self.app.on_drop(event)

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch, MagicMock, mock_open
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import license_updater
 
 class TestLicenseUpdater(unittest.TestCase):
@@ -86,7 +86,7 @@ class TestLicenseUpdater(unittest.TestCase):
         from cryptography.fernet import Fernet
         key = license_updater.GRACE_PERIOD_KEY
         
-        valid_time = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        valid_time = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         cipher = Fernet(key)
         encrypted = cipher.encrypt(valid_time.encode())
         
@@ -101,7 +101,7 @@ class TestLicenseUpdater(unittest.TestCase):
         from cryptography.fernet import Fernet
         key = license_updater.GRACE_PERIOD_KEY
         
-        expired_time = (datetime.utcnow() - timedelta(days=4)).isoformat()
+        expired_time = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
         cipher = Fernet(key)
         encrypted = cipher.encrypt(expired_time.encode())
         

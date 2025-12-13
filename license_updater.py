@@ -2,7 +2,7 @@ import os
 import requests
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
 import license_validator  # Keep for get_hardware_id
 
@@ -45,7 +45,7 @@ def update_grace_timestamp():
     try:
         token_path = _get_validity_token_path()
         # Use simple isoformat for UTC time
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now(timezone.utc).isoformat()
         
         cipher = Fernet(GRACE_PERIOD_KEY)
         encrypted_time = cipher.encrypt(current_time.encode('utf-8'))
@@ -82,7 +82,7 @@ def check_grace_period():
         cipher = Fernet(GRACE_PERIOD_KEY)
         decrypted_data = cipher.decrypt(encrypted_data).decode('utf-8')
         last_online = datetime.fromisoformat(decrypted_data)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Check for clock rollback (tolerance of 5 minutes for slight clock skews)
         if now < last_online - timedelta(minutes=5):
