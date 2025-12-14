@@ -232,7 +232,7 @@ def build():
         # We must explicitly import the pyarmor runtime and all local obfuscated modules
         # because PyInstaller cannot analyze imports inside obfuscated code.
         hidden_imports = [
-            "fitz", "PIL", "pytesseract", "cffi", "cryptography",
+            "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet",
             "numpy", "tkinterdnd2", "requests", "logging", "traceback",
             # Standard library modules (missed due to obfuscation)
             "uuid",
