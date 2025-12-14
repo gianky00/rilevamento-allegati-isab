@@ -378,52 +378,83 @@ def generate_index_html(deploy_dir, setup_filename, version_str):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Download {APP_NAME}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             height: 100vh;
-            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }}
-        .container {{
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            text-align: center;
+        .card {{
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             max-width: 500px;
             width: 90%;
         }}
-        h1 {{ margin-bottom: 10px; color: #2c3e50; }}
-        p {{ color: #666; margin-bottom: 30px; }}
-        .btn {{
-            display: inline-block;
-            background-color: #007bff;
-            color: white;
-            padding: 15px 30px;
-            text-decoration: none;
-            font-size: 18px;
-            border-radius: 6px;
-            transition: background-color 0.3s;
+        .card-header {{
+            background-color: white;
+            border-bottom: none;
+            padding-top: 30px;
+            border-radius: 15px 15px 0 0 !important;
         }}
-        .btn:hover {{ background-color: #0056b3; }}
-        .version-info {{ margin-top: 20px; font-size: 14px; color: #888; }}
+        .app-icon {{
+            font-size: 4rem;
+            color: #0d6efd;
+        }}
+        .btn-download {{
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 50px;
+            box-shadow: 0 4px 6px rgba(13, 110, 253, 0.3);
+            transition: all 0.3s ease;
+        }}
+        .btn-download:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(13, 110, 253, 0.4);
+        }}
+        .features-list {{
+            text-align: left;
+            margin: 20px 0;
+            color: #6c757d;
+        }}
+        .features-list li {{
+            margin-bottom: 8px;
+        }}
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>{APP_NAME}</h1>
-        <p>Strumento professionale per la divisione e classificazione automatica dei PDF.</p>
+    <div class="card text-center p-4">
+        <div class="card-header">
+            <i class="bi bi-file-earmark-pdf-fill app-icon"></i>
+            <h2 class="mt-3 fw-bold text-primary">{APP_NAME}</h2>
+            <p class="text-muted">Soluzione professionale per la gestione documentale</p>
+        </div>
+        <div class="card-body">
+            <ul class="list-unstyled features-list mx-auto" style="max-width: 300px;">
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i>Divisione automatica PDF</li>
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i>Riconoscimento OCR intelligente</li>
+                <li><i class="bi bi-check-circle-fill text-success me-2"></i>Gestione Regole e ROI</li>
+            </ul>
 
-        <a href="{setup_filename}" class="btn">Scarica per Windows</a>
+            <a href="{setup_filename}" class="btn btn-primary btn-download w-100 my-3">
+                <i class="bi bi-windows me-2"></i> Scarica per Windows
+            </a>
 
-        <div class="version-info">
-            Versione Corrente: <strong>v{version_str}</strong><br>
-            Ultimo Aggiornamento: {time.strftime('%d/%m/%Y')}
+            <div class="mt-4 pt-3 border-top">
+                <div class="row text-muted small">
+                    <div class="col-6 text-start">
+                        Versione: <span class="fw-bold text-dark">v{version_str}</span>
+                    </div>
+                    <div class="col-6 text-end">
+                        Data: {time.strftime('%d/%m/%Y')}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </body>
@@ -483,6 +514,12 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, deploy_dir)
                 zipf.write(file_path, arcname)
+                log_and_print(f"  + Added to zip: {arcname}")
+
+    # Check zip size
+    if os.path.exists(zip_path):
+        size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+        log_and_print(f"Zip created successfully. Size: {size_mb:.2f} MB")
 
     try:
         with open(zip_path, 'rb') as f:
