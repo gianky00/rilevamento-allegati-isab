@@ -218,6 +218,10 @@ class ROIDrawingApp:
         self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
         self.canvas.bind("<Motion>", self.on_mouse_motion)
 
+        # Pan con Ctrl+Click
+        self.canvas.bind("<Control-ButtonPress-1>", self.start_pan)
+        self.canvas.bind("<Control-B1-Motion>", self.pan)
+
         self.root.bind("<Left>", lambda e: self.prev_page())
         self.root.bind("<Right>", lambda e: self.next_page())
         self.root.bind("<plus>", lambda e: self.zoom_in())
@@ -390,8 +394,20 @@ class ROIDrawingApp:
                 self.roi_item_map[text_id] = roi_info
                 self.roi_item_map[text_bg] = roi_info
 
+    def start_pan(self, event):
+        """Inizia il panning."""
+        self.canvas.scan_mark(event.x, event.y)
+
+    def pan(self, event):
+        """Esegue il panning."""
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
     def on_button_press(self, event):
         """Gestisce il click del mouse."""
+        # Se Ctrl e' premuto, stiamo facendo panning, ignora disegno
+        if event.state & 0x0004:
+            return
+
         if self.delete_mode.get():
             self.handle_delete_click(event)
         else:
@@ -406,6 +422,10 @@ class ROIDrawingApp:
 
     def on_mouse_drag(self, event):
         """Gestisce il trascinamento del mouse."""
+        # Se Ctrl e' premuto, ignora
+        if event.state & 0x0004:
+            return
+
         if not self.delete_mode.get() and self.rect:
             cur_x = self.canvas.canvasx(event.x)
             cur_y = self.canvas.canvasy(event.y)
@@ -486,8 +506,8 @@ class ROIDrawingApp:
         dialog = tk.Toplevel(self.root)
         dialog.title("Salva Nuova ROI")
         dialog.configure(bg=COLORS['bg_primary'])
-        dialog.geometry("400x200")
-        dialog.resizable(False, False)
+        dialog.geometry("550x250")  # Aumentato per visibilità bottoni
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         dialog.grab_set()
 

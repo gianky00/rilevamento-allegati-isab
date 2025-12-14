@@ -1252,8 +1252,9 @@ class MainApp:
         dialog = tk.Toplevel(self.root)
         dialog.title("Modifica Regola" if rule else "Nuova Regola")
         dialog.configure(bg=COLORS['bg_primary'])
-        dialog.geometry("450x350")
-        dialog.resizable(False, False)
+        dialog.geometry("500x400")  # Aumentato leggermente
+        dialog.minsize(450, 350)
+        dialog.resizable(True, True)  # Abilitato ridimensionamento
         dialog.transient(self.root)
         dialog.grab_set()
 
