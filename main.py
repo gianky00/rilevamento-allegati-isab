@@ -125,6 +125,10 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.canvas.pack(side='left', fill='both', expand=True)
 
         self.canvas.bind('<MouseWheel>', self.on_mouse_wheel)
+        # Pan con Ctrl+Click
+        self.canvas.bind("<Control-ButtonPress-1>", self.start_pan)
+        self.canvas.bind("<Control-B1-Motion>", self.pan)
+
         self.bind('<Left>', lambda e: self.go_prev_page())
         self.bind('<Right>', lambda e: self.go_next_page())
         self.bind('<Up>', lambda e: self.go_prev_file())
@@ -270,6 +274,14 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         scale_factor = 1.1 if event.delta > 0 else 0.9
         self.zoom_level = max(0.1, min(20.0, self.zoom_level * scale_factor))
         self.render_pdf()
+
+    def start_pan(self, event):
+        """Inizia il panning."""
+        self.canvas.scan_mark(event.x, event.y)
+
+    def pan(self, event):
+        """Esegue il panning."""
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
 
     def go_prev_file(self):
         if self.current_index > 0:
@@ -1252,8 +1264,9 @@ class MainApp:
         dialog = tk.Toplevel(self.root)
         dialog.title("Modifica Regola" if rule else "Nuova Regola")
         dialog.configure(bg=COLORS['bg_primary'])
-        dialog.geometry("450x350")
-        dialog.resizable(False, False)
+        dialog.geometry("500x400")  # Aumentato leggermente
+        dialog.minsize(450, 350)
+        dialog.resizable(True, True)  # Abilitato ridimensionamento
         dialog.transient(self.root)
         dialog.grab_set()
 

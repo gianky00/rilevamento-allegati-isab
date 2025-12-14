@@ -123,12 +123,16 @@ def get_hardware_id():
 
 def _get_license_paths():
     """Restituisce i percorsi dei file di licenza."""
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
+    # Use APPDATA for license storage to ensure write permissions
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA')
+        if not appdata:
+            appdata = os.path.expanduser('~')
+        license_dir = os.path.join(appdata, "Intelleo PDF Splitter", "Licenza")
     else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        # Linux/Mac fallback
+        license_dir = os.path.join(os.path.expanduser('~'), ".intelleo-pdf-splitter", "licenza")
 
-    license_dir = os.path.join(base_dir, "Licenza")
     return {
         "dir": license_dir,
         "config": os.path.join(license_dir, "config.dat"),
