@@ -174,7 +174,8 @@ def perform_auto_update(download_url):
         # Lancia installer in modo silenzioso e chiudi app
         # /SILENT -> mostra progresso ma non chiede input
         # /CLOSEAPPLICATIONS -> tenta di chiudere le app in uso (noi)
-        subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"])
+        # /FORCESTART -> flag custom per riavviare l'app alla fine (gestito dallo script Inno Setup)
+        subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
 
         sys.exit(0)
 
