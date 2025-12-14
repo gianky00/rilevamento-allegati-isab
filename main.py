@@ -459,7 +459,7 @@ class MainApp:
         self._display_license_info()
         self.root.after(100, self._process_log_queue)
         self.root.after(150, self._check_for_updates)
-        self.root.after(3000, lambda: app_updater.check_for_updates(silent=True))
+        self.root.after(3000, lambda: app_updater.check_for_updates(silent=True, on_confirm=self._auto_save_settings))
 
         # Gestione avvio da CLI
         if auto_file_path and os.path.exists(auto_file_path):
@@ -575,7 +575,7 @@ class MainApp:
         ttk.Button(btn_frame, text="Apri Utility ROI", 
                   command=self._launch_roi_utility).pack(side='left', padx=10)
         ttk.Button(btn_frame, text="Verifica Aggiornamenti", 
-                  command=lambda: app_updater.check_for_updates(silent=False)).pack(side='left', padx=10)
+                  command=lambda: app_updater.check_for_updates(silent=False, on_confirm=self._auto_save_settings)).pack(side='left', padx=10)
 
         # Info Licenza dettagliata
         license_frame = ttk.LabelFrame(main_frame, text=" Informazioni Licenza ", padding=15)
