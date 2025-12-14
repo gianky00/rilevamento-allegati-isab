@@ -20,7 +20,7 @@ class TestLicenseValidator(unittest.TestCase):
     @patch("license_validator.get_hardware_id")
     def test_verify_license_missing_files(self, mock_get_hw_id):
          def exists_side_effect(path):
-             if "Licenza" in path and not path.endswith(".dat") and not path.endswith(".json"):
+             if "licenza" in path.lower() and not path.endswith(".dat") and not path.endswith(".json"):
                  return True
              return False
          with patch("os.path.exists", side_effect=exists_side_effect):
