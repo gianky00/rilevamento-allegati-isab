@@ -36,10 +36,10 @@ call "%VENV_DIR%\Scripts\activate.bat"
 
 :: 3. Install/Update Dependencies
 echo  [SETUP] Verifica dipendenze...
-pip install -r requirements.txt --quiet --disable-pip-version-check >nul 2>&1
+pip install -r src/requirements.txt --quiet --disable-pip-version-check >nul 2>&1
 if %errorlevel% neq 0 (
     echo  [SETUP] Installazione dipendenze in corso...
-    pip install -r requirements.txt
+    pip install -r src/requirements.txt
     if %errorlevel% neq 0 (
         echo.
         echo  [ERRORE] Impossibile installare le dipendenze.
@@ -58,7 +58,7 @@ echo.
 
 :: Use START with pythonw to launch GUI without keeping console open
 :: pythonw runs Python without a console window
-start "" "%VENV_DIR%\Scripts\pythonw.exe" main.py %*
+start "" "%VENV_DIR%\Scripts\pythonw.exe" src/main.py %*
 
 :: Exit immediately - the app runs independently
 exit /b 0

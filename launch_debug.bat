@@ -38,10 +38,10 @@ call "%VENV_DIR%\Scripts\activate.bat"
 
 :: 3. Install/Update Dependencies
 echo  [SETUP] Verifica dipendenze...
-pip install -r requirements.txt --quiet --disable-pip-version-check >nul 2>&1
+pip install -r src/requirements.txt --quiet --disable-pip-version-check >nul 2>&1
 if %errorlevel% neq 0 (
     echo  [SETUP] Installazione dipendenze in corso...
-    pip install -r requirements.txt
+    pip install -r src/requirements.txt
     if %errorlevel% neq 0 (
         echo.
         echo  [ERRORE] Impossibile installare le dipendenze.
@@ -58,7 +58,7 @@ echo  [DEBUG] Avvio applicazione con console visibile...
 echo  ======================================================================
 echo.
 
-python main.py %*
+python src/main.py %*
 set APP_EXIT_CODE=%errorlevel%
 
 echo.

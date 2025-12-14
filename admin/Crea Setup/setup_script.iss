@@ -12,7 +12,7 @@
 #endif
 #ifndef BuildDir
   ; Fallback relativo se non passato da riga di comando
-  #define BuildDir "..\dist\Intelleo PDF Splitter"
+  #define BuildDir "..\..\dist\Intelleo PDF Splitter"
 #endif
 
 [Setup]
@@ -36,11 +36,11 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; === OUTPUT DIRECTORY ===
-OutputDir=..\dist\Setup
+OutputDir=Setup
 OutputBaseFilename=IntelleoPDFSplitter_Setup_v{#MyAppVersion}
 
 ; === ICONA ===
-SetupIconFile=..\resources\icon.ico
+SetupIconFile=..\..\src\resources\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma
