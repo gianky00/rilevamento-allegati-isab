@@ -282,11 +282,6 @@ def build():
 
         log_and_print("\n--- Step 6/7: Post-Build Cleanup & License Setup ---")
 
-        # Create empty 'Licenza' folder in output
-        lic_dest_dir = os.path.join(final_dist_path, "Licenza")
-        os.makedirs(lic_dest_dir, exist_ok=True)
-        log_and_print("Created empty 'Licenza' folder structure.")
-
         # Also copy config.json to output root if needed
         # PyInstaller doesn't automatically copy data files unless specified, and we modified source.
         # We manually copy config.json to the dist folder if it's not there.
