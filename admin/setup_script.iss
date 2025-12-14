@@ -36,8 +36,12 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; === OUTPUT DIRECTORY ===
-OutputDir=dist\Setup
+OutputDir=..\dist\Setup
 OutputBaseFilename=IntelleoPDFSplitter_Setup_v{#MyAppVersion}
+
+; === ICONA ===
+SetupIconFile=..\resources\icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 Compression=lzma
 SolidCompression=yes
@@ -85,8 +89,26 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Avvia l'app dopo l'installazione
+; Avvia l'app dopo l'installazione (GUI standard)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; Riavvio automatico dopo update (attivato da flag /FORCESTART)
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: IsForceStart
+
+[Code]
+function IsForceStart: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    if CompareText(ParamStr(I), '/FORCESTART') = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
 
 [UninstallDelete]
 ; === PULIZIA ===

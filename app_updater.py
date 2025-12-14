@@ -11,11 +11,12 @@ import tempfile
 import subprocess
 import sys
 import os
+import time
 import tkinter as tk
 from tkinter import ttk
 
 
-def check_for_updates(silent=True):
+def check_for_updates(silent=True, on_confirm=None):
     """
     Controlla se è disponibile una nuova versione dell'applicazione.
     
@@ -27,6 +28,7 @@ def check_for_updates(silent=True):
     
     Args:
         silent (bool): Se True, non mostra notifiche se non ci sono aggiornamenti
+        on_confirm (callable): Funzione da chiamare se l'utente conferma l'aggiornamento (es. salvataggio)
     """
     url = version.UPDATE_URL
     
@@ -53,10 +55,18 @@ def check_for_updates(silent=True):
                         f"È disponibile una nuova versione!\n\n"
                         f"Versione corrente: {version.__version__}\n"
                         f"Nuova versione: {remote_ver_str}\n\n"
-                        f"Vuoi scaricarla e installarla ora?"
+                        f"L'applicazione verrà chiusa e riavviata automaticamente.\n"
+                        f"Vuoi procedere con l'aggiornamento?"
                     )
                     
                     if messagebox.askyesno("🔄 Aggiornamento Disponibile", msg):
+                        if on_confirm:
+                            try:
+                                on_confirm()
+                                print("[AGGIORNAMENTO] Salvataggio automatico completato.")
+                            except Exception as e:
+                                print(f"[ERRORE] Callback salvataggio: {e}")
+
                         if download_url:
                             perform_auto_update(download_url)
                         else:
@@ -89,14 +99,20 @@ def check_for_updates(silent=True):
 
 def perform_auto_update(download_url):
     """
-    Scarica e installa automaticamente l'aggiornamento.
+    Scarica e installa automaticamente l'aggiornamento con barra di avanzamento reale.
     """
     try:
         # Crea finestra di progresso
         progress_win = tk.Toplevel()
         progress_win.title("Download Aggiornamento")
-        progress_win.geometry("350x150")
+        progress_win.geometry("400x180")
         progress_win.resizable(False, False)
+        progress_win.attributes("-topmost", True)  # Sempre in primo piano
+
+        # Configurazione Stile Verde per Progressbar
+        style = ttk.Style()
+        style.theme_use('clam')  # 'clam' supporta meglio i colori custom
+        style.configure("Green.Horizontal.TProgressbar", troughcolor='#E0E0E0', background='#198754')
 
         # Centra finestra
         progress_win.update_idletasks()
@@ -104,12 +120,16 @@ def perform_auto_update(download_url):
         y = (progress_win.winfo_screenheight() - progress_win.winfo_height()) // 2
         progress_win.geometry(f"+{x}+{y}")
 
-        lbl = ttk.Label(progress_win, text="Scaricamento aggiornamento in corso...", font=('Segoe UI', 10))
-        lbl.pack(pady=20)
+        lbl = ttk.Label(progress_win, text="Inizializzazione download...", font=('Segoe UI', 10))
+        lbl.pack(pady=(20, 10))
 
-        pb = ttk.Progressbar(progress_win, mode='indeterminate', length=280)
-        pb.pack(pady=10)
-        pb.start(10)
+        # Barra determinata Verde
+        pb = ttk.Progressbar(progress_win, mode='determinate', length=320, style="Green.Horizontal.TProgressbar")
+        pb.pack(pady=5)
+
+        # Label per dettagli
+        details_lbl = ttk.Label(progress_win, text="", font=('Segoe UI', 9), foreground="#666666")
+        details_lbl.pack(pady=5)
 
         progress_win.update()
 
@@ -121,13 +141,52 @@ def perform_auto_update(download_url):
         temp_dir = tempfile.gettempdir()
         setup_path = os.path.join(temp_dir, local_filename)
 
-        response = requests.get(download_url, stream=True)
+        # Richiesta con stream
+        response = requests.get(download_url, stream=True, timeout=30)
         response.raise_for_status()
 
+        # Ottieni dimensione totale
+        total_size = int(response.headers.get('content-length', 0))
+        pb['maximum'] = total_size if total_size > 0 else 100
+
+        downloaded = 0
+        chunk_size = 8192
+        start_time = time.time()
+
         with open(setup_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
                     f.write(chunk)
+                    downloaded += len(chunk)
+
+                    # Aggiorna UI
+                    pb['value'] = downloaded
+
+                    elapsed_time = time.time() - start_time
+                    speed = downloaded / elapsed_time if elapsed_time > 0 else 0  # Bytes/s
+
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        mb_down = downloaded / (1024 * 1024)
+                        # mb_total = total_size / (1024 * 1024)
+
+                        # Stima tempo rimanente
+                        remaining_bytes = total_size - downloaded
+                        remaining_time = remaining_bytes / speed if speed > 0 else 0
+
+                        if remaining_time < 60:
+                            eta_str = f"{int(remaining_time)}s"
+                        else:
+                            eta_str = f"{int(remaining_time // 60)}m {int(remaining_time % 60)}s"
+
+                        lbl.config(text=f"Scaricamento in corso... ({int(percent)}%) - ETA: {eta_str}")
+                        details_lbl.config(text=f"{mb_down:.1f} MB scaricati")
+                    else:
+                        # Fallback se content-length manca
+                        mb_down = downloaded / (1024 * 1024)
+                        lbl.config(text="Scaricamento in corso...")
+                        details_lbl.config(text=f"{mb_down:.1f} MB scaricati")
+
                     progress_win.update()
 
         progress_win.destroy()
@@ -135,7 +194,8 @@ def perform_auto_update(download_url):
         # Lancia installer in modo silenzioso e chiudi app
         # /SILENT -> mostra progresso ma non chiede input
         # /CLOSEAPPLICATIONS -> tenta di chiudere le app in uso (noi)
-        subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"])
+        # /FORCESTART -> flag custom per riavviare l'app alla fine (gestito dallo script Inno Setup)
+        subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
 
         sys.exit(0)
 

@@ -201,14 +201,12 @@ def build():
             sys.exit(1)
 
         # Check for Icon
-        icon_path = None
-        # Look for any .ico file in ROOT_DIR
-        for f in os.listdir(ROOT_DIR):
-            if f.lower().endswith(".ico"):
-                icon_path = os.path.join(ROOT_DIR, f)
-                break
-        if icon_path:
+        icon_path = os.path.join(ROOT_DIR, "resources", "icon.ico")
+        if os.path.exists(icon_path):
              log_and_print(f"Using icon: {icon_path}")
+        else:
+             icon_path = None
+             log_and_print("WARNING: resources/icon.ico not found.", "WARNING")
 
         # Construct PyInstaller Command
         cmd_pyinstaller = [
@@ -222,6 +220,12 @@ def build():
             "--onedir",
             "--collect-all=tkinterdnd2", # Ensures drag and drop binaries are included
         ]
+
+        # Add resources data
+        if icon_path:
+            # On Windows, use semicolon
+            sep = ";" if os.name == 'nt' else ":"
+            cmd_pyinstaller.append(f"--add-data={icon_path}{sep}resources")
 
         if os.name == 'nt':
              cmd_pyinstaller.append("--windowed")
@@ -324,6 +328,9 @@ def build():
                         setup_filename = f
                         log_and_print(f" - Found setup: {f}")
                         break
+
+            if not setup_filename:
+                log_and_print(f"WARNING: No executable found in {setup_output_dir}", "WARNING")
         else:
              log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
@@ -331,6 +338,8 @@ def build():
         if setup_filename:
             log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
             prepare_and_deploy_netlify(setup_output_dir, setup_filename)
+        else:
+            log_and_print("\n[WARNING] Skipping Netlify deployment because installer was not found.", "WARNING")
 
         log_and_print("="*60)
         log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
