@@ -11,6 +11,7 @@ import tempfile
 import subprocess
 import sys
 import os
+import time
 import tkinter as tk
 from tkinter import ttk
 
@@ -108,6 +109,11 @@ def perform_auto_update(download_url):
         progress_win.resizable(False, False)
         progress_win.attributes("-topmost", True)  # Sempre in primo piano
 
+        # Configurazione Stile Verde per Progressbar
+        style = ttk.Style()
+        style.theme_use('clam')  # 'clam' supporta meglio i colori custom
+        style.configure("Green.Horizontal.TProgressbar", troughcolor='#E0E0E0', background='#198754')
+
         # Centra finestra
         progress_win.update_idletasks()
         x = (progress_win.winfo_screenwidth() - progress_win.winfo_width()) // 2
@@ -117,11 +123,11 @@ def perform_auto_update(download_url):
         lbl = ttk.Label(progress_win, text="Inizializzazione download...", font=('Segoe UI', 10))
         lbl.pack(pady=(20, 10))
 
-        # Barra determinata
-        pb = ttk.Progressbar(progress_win, mode='determinate', length=320)
+        # Barra determinata Verde
+        pb = ttk.Progressbar(progress_win, mode='determinate', length=320, style="Green.Horizontal.TProgressbar")
         pb.pack(pady=5)
 
-        # Label per dettagli (es. 45% - 10MB / 20MB)
+        # Label per dettagli
         details_lbl = ttk.Label(progress_win, text="", font=('Segoe UI', 9), foreground="#666666")
         details_lbl.pack(pady=5)
 
@@ -145,6 +151,7 @@ def perform_auto_update(download_url):
 
         downloaded = 0
         chunk_size = 8192
+        start_time = time.time()
 
         with open(setup_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
@@ -155,12 +162,25 @@ def perform_auto_update(download_url):
                     # Aggiorna UI
                     pb['value'] = downloaded
 
+                    elapsed_time = time.time() - start_time
+                    speed = downloaded / elapsed_time if elapsed_time > 0 else 0  # Bytes/s
+
                     if total_size > 0:
                         percent = (downloaded / total_size) * 100
                         mb_down = downloaded / (1024 * 1024)
-                        mb_total = total_size / (1024 * 1024)
-                        lbl.config(text=f"Scaricamento in corso: {int(percent)}%")
-                        details_lbl.config(text=f"{mb_down:.1f} MB / {mb_total:.1f} MB")
+                        # mb_total = total_size / (1024 * 1024)
+
+                        # Stima tempo rimanente
+                        remaining_bytes = total_size - downloaded
+                        remaining_time = remaining_bytes / speed if speed > 0 else 0
+
+                        if remaining_time < 60:
+                            eta_str = f"{int(remaining_time)}s"
+                        else:
+                            eta_str = f"{int(remaining_time // 60)}m {int(remaining_time % 60)}s"
+
+                        lbl.config(text=f"Scaricamento in corso... ({int(percent)}%) - ETA: {eta_str}")
+                        details_lbl.config(text=f"{mb_down:.1f} MB scaricati")
                     else:
                         # Fallback se content-length manca
                         mb_down = downloaded / (1024 * 1024)
