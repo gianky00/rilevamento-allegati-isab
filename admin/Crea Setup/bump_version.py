@@ -7,7 +7,8 @@ def bump_version(part='patch'):
     Increments the version in version.py.
     part: 'major', 'minor', or 'patch'
     """
-    version_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "version.py")
+    # admin/Crea Setup/bump_version.py -> ../../src/version.py
+    version_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src", "version.py")
 
     with open(version_file, "r") as f:
         content = f.read()

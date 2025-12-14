@@ -24,7 +24,7 @@ call "%VENV_DIR%\Scripts\activate.bat"
 
 echo Updating dependencies...
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r src/requirements.txt
 if %errorlevel% neq 0 (
     echo Error installing dependencies!
     pause
@@ -51,7 +51,7 @@ echo Cleaned previous build artifacts.
 :: 3. Bump Version
 echo.
 echo [3/5] Incrementing Patch Version...
-python admin/bump_version.py patch
+python "admin/Crea Setup/bump_version.py" patch
 if %errorlevel% neq 0 (
     echo Error bumping version!
     pause
@@ -62,7 +62,7 @@ if %errorlevel% neq 0 (
 echo.
 echo [4/5] Building Application and Installer...
 echo This may take a few minutes...
-python admin/build_dist.py
+python "admin/Crea Setup/build_dist.py"
 if %errorlevel% neq 0 (
     echo Error during build/deploy process!
     pause

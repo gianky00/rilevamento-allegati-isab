@@ -48,7 +48,7 @@ echo  [RESET] Attivazione ambiente virtuale...
 call "%VENV_DIR%\Scripts\activate.bat"
 
 echo  [RESET] Installazione dipendenze...
-pip install -r requirements.txt
+pip install -r src/requirements.txt
 
 if %errorlevel% neq 0 (
     echo.

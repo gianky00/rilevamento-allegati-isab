@@ -12,14 +12,14 @@ import requests
 # 1. FIX PORTABILITÀ: Directory corrente = cartella dello script
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-# Calcola la ROOT del progetto (due livelli sopra admin/build_dist.py -> root)
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Calcola la ROOT del progetto (tre livelli sopra admin/Crea Setup/build_dist.py -> root)
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# Add root to path to import version
-sys.path.append(ROOT_DIR)
+# Add src to path to import version
+sys.path.append(os.path.join(ROOT_DIR, "src"))
 import version
 
-ENTRY_SCRIPT = "main.py"
+ENTRY_SCRIPT = "src/main.py"
 APP_NAME = "Intelleo PDF Splitter"
 APP_VERSION = version.__version__
 DIST_DIR = os.path.join(ROOT_DIR, "dist")
@@ -150,15 +150,15 @@ def build():
 
         # Files to obfuscate
         target_files = [
-            os.path.join(ROOT_DIR, "main.py"),
-            os.path.join(ROOT_DIR, "app_logger.py"),
-            os.path.join(ROOT_DIR, "pdf_processor.py"),
-            os.path.join(ROOT_DIR, "config_manager.py"),
-            os.path.join(ROOT_DIR, "roi_utility.py"),
-            os.path.join(ROOT_DIR, "license_validator.py"),
-            os.path.join(ROOT_DIR, "license_updater.py"),
-            os.path.join(ROOT_DIR, "app_updater.py"),
-            os.path.join(ROOT_DIR, "version.py")
+            os.path.join(ROOT_DIR, "src", "main.py"),
+            os.path.join(ROOT_DIR, "src", "app_logger.py"),
+            os.path.join(ROOT_DIR, "src", "pdf_processor.py"),
+            os.path.join(ROOT_DIR, "src", "config_manager.py"),
+            os.path.join(ROOT_DIR, "src", "roi_utility.py"),
+            os.path.join(ROOT_DIR, "src", "license_validator.py"),
+            os.path.join(ROOT_DIR, "src", "license_updater.py"),
+            os.path.join(ROOT_DIR, "src", "app_updater.py"),
+            os.path.join(ROOT_DIR, "src", "version.py")
         ]
 
         # Check if files exist
@@ -180,10 +180,10 @@ def build():
         log_and_print("\n--- Step 4/7: Preparing Assets for Packaging ---")
 
         # Copy requirements.txt
-        if os.path.exists(os.path.join(ROOT_DIR, "requirements.txt")):
-            shutil.copy(os.path.join(ROOT_DIR, "requirements.txt"), os.path.join(OBF_DIR, "requirements.txt"))
+        if os.path.exists(os.path.join(ROOT_DIR, "src", "requirements.txt")):
+            shutil.copy(os.path.join(ROOT_DIR, "src", "requirements.txt"), os.path.join(OBF_DIR, "requirements.txt"))
 
-        # Copy config.json (default config) if exists
+        # Copy config.json (default config) if exists in root
         if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
              shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
 
@@ -201,12 +201,12 @@ def build():
             sys.exit(1)
 
         # Check for Icon
-        icon_path = os.path.join(ROOT_DIR, "resources", "icon.ico")
+        icon_path = os.path.join(ROOT_DIR, "src", "resources", "icon.ico")
         if os.path.exists(icon_path):
              log_and_print(f"Using icon: {icon_path}")
         else:
              icon_path = None
-             log_and_print("WARNING: resources/icon.ico not found.", "WARNING")
+             log_and_print("WARNING: src/resources/icon.ico not found.", "WARNING")
 
         # Construct PyInstaller Command
         cmd_pyinstaller = [
@@ -267,8 +267,17 @@ def build():
         for mod in hidden_imports:
             cmd_pyinstaller.append(f"--hidden-import={mod}")
 
-        # Entry point (the obfuscated main.py)
-        cmd_pyinstaller.append(os.path.join(OBF_DIR, ENTRY_SCRIPT))
+        # Entry point (the obfuscated main.py) - ENTRY_SCRIPT is src/main.py
+        # OBF_DIR contains the flat structure or structure matching source?
+        # PyArmor gen -O OBF_DIR src/main.py -> creates OBF_DIR/src/main.py if recursion is on, or flat?
+        # PyArmor gen -O obf file.py -> obf/file.py.
+        # We passed full paths to files.
+        # If we passed "src/main.py", pyarmor might replicate structure?
+        # Let's assume flat for now or check pyarmor behavior.
+        # Actually, we passed valid_targets which are absolute paths.
+        # PyArmor usually outputs flat unless recursive.
+        # We will point to OBF_DIR/main.py assuming flat output.
+        cmd_pyinstaller.append(os.path.join(OBF_DIR, "main.py"))
 
         # Add PYTHONPATH to include OBF_DIR
         env = os.environ.copy()
@@ -319,7 +328,9 @@ def build():
             run_command(cmd_iscc, env=env)
 
             # Locate the generated setup file
-            setup_output_dir = os.path.join(DIST_DIR, "Setup")
+            # Setup script is configured to output to "Setup" (relative to itself).
+            # Itself is in "admin/Crea Setup". So output is "admin/Crea Setup/Setup".
+            setup_output_dir = os.path.join(os.path.dirname(__file__), "Setup")
             if os.path.exists(setup_output_dir):
                 log_and_print(f"Installer generated in: {setup_output_dir}")
                 # Find the latest setup file

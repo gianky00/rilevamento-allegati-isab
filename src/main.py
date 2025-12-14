@@ -420,6 +420,7 @@ class MainApp:
 
         # Icona Applicazione
         try:
+            # Running from src/main.py -> resources/icon.ico is in the same dir as main.py (src/)
             icon_path = os.path.join(os.path.dirname(__file__), "resources", "icon.ico")
             # Gestione PyInstaller (risorse in _MEIPASS)
             if hasattr(sys, '_MEIPASS'):
