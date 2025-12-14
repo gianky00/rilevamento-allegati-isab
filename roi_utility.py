@@ -576,10 +576,8 @@ class ROIDrawingApp:
             state='normal' if self.current_page_index < total_pages - 1 else 'disabled')
 
 
-# ============================================================================
-# MAIN ENTRY POINT
-# ============================================================================
-if __name__ == "__main__":
+def run_utility():
+    """Entry point programmatico per l'utility."""
     print("+====================================================================+")
     print("|            INTELLEO - UTILITY GESTIONE ROI                         |")
     print("+====================================================================+")
@@ -591,3 +589,10 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ROIDrawingApp(root)
     root.mainloop()
+
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+if __name__ == "__main__":
+    run_utility()

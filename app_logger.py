@@ -258,6 +258,37 @@ def get_log_path():
     return _log_path
 
 
+def shutdown_logging():
+    """
+    Chiude tutti gli handler di logging e il file di log immediato.
+    Da usare principalmente per cleanup durante i test o alla chiusura dell'app.
+    """
+    global _immediate_log_file, _log_path, _initialized
+
+    # 1. Chiudi e rimuovi gli handler del logging standard
+    logger = logging.getLogger()
+    for handler in logger.handlers[:]:
+        try:
+            handler.close()
+            logger.removeHandler(handler)
+        except Exception:
+            pass
+
+    # 2. Chiudi il file di log immediato
+    if _immediate_log_file:
+        try:
+            _immediate_log_file.flush()
+            os.fsync(_immediate_log_file.fileno())
+            _immediate_log_file.close()
+        except Exception:
+            pass
+        _immediate_log_file = None
+
+    # 3. Reset variabili globali
+    _log_path = None
+    _initialized = False
+
+
 # Test standalone
 if __name__ == "__main__":
     log_path = initialize()

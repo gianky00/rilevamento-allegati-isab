@@ -101,13 +101,13 @@ def verify_environment():
     log_and_print("--- Step 1/7: Environment Diagnostics ---")
     log_and_print(f"Running with Python: {sys.executable}")
 
-    # Verify Nuitka availability
+    # Verify PyInstaller availability
     try:
-        import nuitka
-        log_and_print(f"Nuitka verified at: {os.path.dirname(nuitka.__file__)}")
+        import PyInstaller
+        log_and_print(f"PyInstaller verified: {PyInstaller.__version__}")
     except ImportError:
-        log_and_print("CRITICAL: Nuitka module not found in this environment!", "ERROR")
-        log_and_print("Please run: pip install nuitka zstandard", "ERROR")
+        log_and_print("CRITICAL: PyInstaller module not found!", "ERROR")
+        log_and_print("Please run: pip install pyinstaller", "ERROR")
         sys.exit(1)
 
     iscc_path = shutil.which("ISCC.exe")
@@ -131,7 +131,7 @@ def verify_environment():
 
 def build():
     try:
-        log_and_print("Starting Build Process with Nuitka...")
+        log_and_print("Starting Build Process with PyInstaller...")
 
         kill_existing_process()
 
@@ -148,10 +148,10 @@ def build():
 
         log_and_print("\n--- Step 3/7: Obfuscating with PyArmor ---")
 
-        # Files to obfuscate - ADDED app_logger.py
+        # Files to obfuscate
         target_files = [
             os.path.join(ROOT_DIR, "main.py"),
-            os.path.join(ROOT_DIR, "app_logger.py"),  # NEW: logging module
+            os.path.join(ROOT_DIR, "app_logger.py"),
             os.path.join(ROOT_DIR, "pdf_processor.py"),
             os.path.join(ROOT_DIR, "config_manager.py"),
             os.path.join(ROOT_DIR, "roi_utility.py"),
@@ -187,7 +187,7 @@ def build():
         if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
              shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
 
-        log_and_print("\n--- Step 5/7: Packaging with Nuitka ---")
+        log_and_print("\n--- Step 5/7: Packaging with PyInstaller ---")
 
         # Identify PyArmor runtime
         runtime_dir = None
@@ -200,31 +200,6 @@ def build():
             log_and_print("ERROR: PyArmor runtime folder not found inside obfuscated dir!", "ERROR")
             sys.exit(1)
 
-        # Nuitka Command
-        cmd_nuitka = [
-            sys.executable, "-m", "nuitka",
-            "--standalone",
-            f"--output-dir={DIST_DIR}",
-            "--enable-plugin=tk-inter",
-            "--show-progress", # Show detailed progress
-            # Optimization: Use low memory to avoid exhaustion
-            "--low-memory",
-            # PREVENT COMPILATION OF PyMuPDF to avoid C1002 (Heap Space) error
-            "--nofollow-import-to=fitz",
-            "--nofollow-import-to=pymupdf",
-            # Include the pyarmor runtime package
-            f"--include-package={runtime_dir}",
-            # Include tkinterdnd2 package data (binaries)
-            "--include-package-data=tkinterdnd2",
-            # Point to the entry script in the OBFUSCATED directory
-            os.path.join(OBF_DIR, ENTRY_SCRIPT)
-        ]
-
-        # Windows-specific options
-        if os.name == 'nt':
-             # Explicitly disable console window for the final application
-             cmd_nuitka.append("--windows-disable-console")
-
         # Check for Icon
         icon_path = None
         # Look for any .ico file in ROOT_DIR
@@ -232,58 +207,78 @@ def build():
             if f.lower().endswith(".ico"):
                 icon_path = os.path.join(ROOT_DIR, f)
                 break
-
         if icon_path:
-            log_and_print(f"Using icon: {icon_path}")
-            cmd_nuitka.append(f"--windows-icon-from-ico={icon_path}")
+             log_and_print(f"Using icon: {icon_path}")
 
-        # --- Fix for Hidden Imports ---
-        # Since code is obfuscated, Nuitka cannot scan imports. We must explicitly include them.
-        explicit_modules = [
-            "fitz", # PyMuPDF
-            "PIL", # Pillow
-            "pytesseract",
-            "cffi",
-            "cryptography",
-            "numpy", # Required by pytesseract
-            "tkinterdnd2", # Required for Drag & Drop
-            "requests", # Required for license updater
-            "logging",  # Ensure logging is included
-            "traceback", # For exception handling
-            # Built-in modules are generally handled, but explicit inclusion is safer for key logic
-            # However, for built-ins Nuitka usually finds them unless obfuscation hides them completely.
-            # But standard library is linked in standalone mode.
+        # Construct PyInstaller Command
+        cmd_pyinstaller = [
+            sys.executable, "-m", "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            f"--name={APP_NAME}",
+            f"--distpath={DIST_DIR}",
+            f"--workpath={os.path.join(DIST_DIR, 'build')}",
+            f"--paths={OBF_DIR}", # Look for modules in OBF_DIR
+            "--onedir",
+            "--collect-all=tkinterdnd2", # Ensures drag and drop binaries are included
         ]
 
-        for mod in explicit_modules:
-            cmd_nuitka.append(f"--include-package={mod}")
+        if os.name == 'nt':
+             cmd_pyinstaller.append("--windowed")
+             if icon_path:
+                 cmd_pyinstaller.append(f"--icon={icon_path}")
 
-        # Add PYTHONPATH to include OBF_DIR so Nuitka finds the modules there
+        # Hidden imports
+        # We must explicitly import the pyarmor runtime and all local obfuscated modules
+        # because PyInstaller cannot analyze imports inside obfuscated code.
+        hidden_imports = [
+            "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet",
+            "numpy", "tkinterdnd2", "requests", "logging", "traceback",
+            # Standard library modules (missed due to obfuscation)
+            "uuid",
+            "platform",
+            "hashlib",
+            "shutil",
+            # Tkinter submodules (often missed in obfuscated/frozen builds)
+            "tkinter",
+            "tkinter.ttk",
+            "tkinter.filedialog",
+            "tkinter.messagebox",
+            "tkinter.scrolledtext",
+            "tkinter.colorchooser",
+            "tkinter.simpledialog",
+            # Local modules
+            "app_logger",
+            "config_manager",
+            "pdf_processor",
+            "roi_utility",
+            "license_validator",
+            "license_updater",
+            "app_updater",
+            "version",
+            # PyArmor runtime
+            runtime_dir
+        ]
+
+        for mod in hidden_imports:
+            cmd_pyinstaller.append(f"--hidden-import={mod}")
+
+        # Entry point (the obfuscated main.py)
+        cmd_pyinstaller.append(os.path.join(OBF_DIR, ENTRY_SCRIPT))
+
+        # Add PYTHONPATH to include OBF_DIR
         env = os.environ.copy()
         env["PYTHONPATH"] = OBF_DIR + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
 
-        # Important: Run from OBF_DIR so that `import config_manager` works relative to current dir
-        run_command(cmd_nuitka, cwd=OBF_DIR, env=env)
+        # Run PyInstaller
+        # We run it from OBF_DIR to help it resolve relative paths if any, though --paths handles modules
+        run_command(cmd_pyinstaller, cwd=OBF_DIR, env=env)
 
-        # Rename/Move the output folder
-        default_dist_name = "main.dist"
+        # Check Output
         final_dist_path = os.path.join(DIST_DIR, APP_NAME)
-
-        if os.path.exists(final_dist_path):
-            shutil.rmtree(final_dist_path)
-
-        generated_dist = os.path.join(DIST_DIR, default_dist_name)
-        if os.path.exists(generated_dist):
-            shutil.move(generated_dist, final_dist_path)
-        else:
-            log_and_print(f"ERROR: Nuitka output directory '{generated_dist}' not found.", "ERROR")
+        if not os.path.exists(final_dist_path):
+            log_and_print(f"ERROR: Expected output directory '{final_dist_path}' not found.", "ERROR")
             sys.exit(1)
-
-        # Rename the executable
-        default_exe = os.path.join(final_dist_path, "main.exe" if os.name == 'nt' else "main.bin")
-        final_exe = os.path.join(final_dist_path, f"{APP_NAME}.exe" if os.name == 'nt' else APP_NAME)
-        if os.path.exists(default_exe):
-            shutil.move(default_exe, final_exe)
 
         log_and_print("\n--- Step 6/7: Post-Build Cleanup & License Setup ---")
 
@@ -293,6 +288,8 @@ def build():
         log_and_print("Created empty 'Licenza' folder structure.")
 
         # Also copy config.json to output root if needed
+        # PyInstaller doesn't automatically copy data files unless specified, and we modified source.
+        # We manually copy config.json to the dist folder if it's not there.
         if os.path.exists(os.path.join(OBF_DIR, "config.json")):
              shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
 
@@ -320,7 +317,7 @@ def build():
                 iss_path
             ]
 
-            run_command(cmd_iscc, env=env) # Passing env just in case
+            run_command(cmd_iscc, env=env)
 
             # Locate the generated setup file
             setup_output_dir = os.path.join(DIST_DIR, "Setup")

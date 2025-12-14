@@ -1365,9 +1365,15 @@ class MainApp:
 
     def _launch_roi_utility(self):
         """Lancia l'utility ROI."""
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_utility.py')
         try:
-            subprocess.Popen([sys.executable, script_path])
+            if getattr(sys, 'frozen', False):
+                # Se l'app è congelata (PyInstaller), lancia l'eseguibile con un flag
+                subprocess.Popen([sys.executable, "--utility"])
+            else:
+                # Se è uno script Python, lancia il file roi_utility.py
+                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_utility.py')
+                subprocess.Popen([sys.executable, script_path])
+
             self._add_log_message("Utility ROI avviata", "SUCCESS")
         except Exception as e:
             messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI:\n{e}")
@@ -1377,6 +1383,15 @@ class MainApp:
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
+    # Check for ROI Utility launch flag (used in frozen builds)
+    if "--utility" in sys.argv:
+        try:
+            import roi_utility
+            roi_utility.run_utility()
+        except Exception as e:
+            logger.critical(f"Failed to launch ROI utility: {e}", exc_info=True)
+        sys.exit(0)
+
     logger.info("="*68)
     logger.info("           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
     logger.info("="*68)
