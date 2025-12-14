@@ -324,6 +324,9 @@ def build():
                         setup_filename = f
                         log_and_print(f" - Found setup: {f}")
                         break
+
+            if not setup_filename:
+                log_and_print(f"WARNING: No executable found in {setup_output_dir}", "WARNING")
         else:
              log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
@@ -331,6 +334,8 @@ def build():
         if setup_filename:
             log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
             prepare_and_deploy_netlify(setup_output_dir, setup_filename)
+        else:
+            log_and_print("\n[WARNING] Skipping Netlify deployment because installer was not found.", "WARNING")
 
         log_and_print("="*60)
         log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")

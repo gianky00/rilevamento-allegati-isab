@@ -36,7 +36,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; === OUTPUT DIRECTORY ===
-OutputDir=dist\Setup
+OutputDir=..\dist\Setup
 OutputBaseFilename=IntelleoPDFSplitter_Setup_v{#MyAppVersion}
 
 Compression=lzma
