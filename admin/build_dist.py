@@ -234,6 +234,11 @@ def build():
         hidden_imports = [
             "fitz", "PIL", "pytesseract", "cffi", "cryptography",
             "numpy", "tkinterdnd2", "requests", "logging", "traceback",
+            # Standard library modules (missed due to obfuscation)
+            "uuid",
+            "platform",
+            "hashlib",
+            "shutil",
             # Tkinter submodules (often missed in obfuscated/frozen builds)
             "tkinter",
             "tkinter.ttk",
