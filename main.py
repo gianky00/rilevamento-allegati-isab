@@ -418,6 +418,18 @@ class MainApp:
         self.root.state('zoomed')
         self.root.configure(bg=COLORS['bg_primary'])
 
+        # Icona Applicazione
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "resources", "icon.ico")
+            # Gestione PyInstaller (risorse in _MEIPASS)
+            if hasattr(sys, '_MEIPASS'):
+                icon_path = os.path.join(sys._MEIPASS, "resources", "icon.ico")
+
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(default=icon_path)
+        except Exception as e:
+            logger.warning(f"Impossibile caricare icona: {e}")
+
         # Inizializzazione variabili
         self.config = {}
         self.pdf_files = []

@@ -39,6 +39,10 @@ PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\dist\Setup
 OutputBaseFilename=IntelleoPDFSplitter_Setup_v{#MyAppVersion}
 
+; === ICONA ===
+SetupIconFile=..\resources\icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
+
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
