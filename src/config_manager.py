@@ -17,8 +17,8 @@ def get_config_path():
         # Eseguibile PyInstaller
         base_path = os.path.dirname(sys.executable)
     else:
-        # Script Python
-        base_path = os.path.dirname(os.path.abspath(__file__))
+        # Script Python: config.json is in root (one level up from src/)
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, 'config.json')
 
 

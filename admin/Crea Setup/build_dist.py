@@ -180,12 +180,12 @@ def build():
         log_and_print("\n--- Step 4/7: Preparing Assets for Packaging ---")
 
         # Copy requirements.txt
-        if os.path.exists(os.path.join(ROOT_DIR, "requirements.txt")):
-            shutil.copy(os.path.join(ROOT_DIR, "requirements.txt"), os.path.join(OBF_DIR, "requirements.txt"))
+        if os.path.exists(os.path.join(ROOT_DIR, "src", "requirements.txt")):
+            shutil.copy(os.path.join(ROOT_DIR, "src", "requirements.txt"), os.path.join(OBF_DIR, "requirements.txt"))
 
-        # Copy config.json (default config) if exists in src
-        if os.path.exists(os.path.join(ROOT_DIR, "src", "config.json")):
-             shutil.copy(os.path.join(ROOT_DIR, "src", "config.json"), os.path.join(OBF_DIR, "config.json"))
+        # Copy config.json (default config) if exists in root
+        if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
+             shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
 
         log_and_print("\n--- Step 5/7: Packaging with PyInstaller ---")
 
