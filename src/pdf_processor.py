@@ -80,19 +80,24 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             page_start_time = time.time()
             
             # Calcolo ETA
-            eta_str = ""
+            eta_seconds = 0
             if i > 0 and avg_time_per_page > 0:
                 remaining_pages = total_pages - i
                 eta_seconds = remaining_pages * avg_time_per_page
-                
-                if eta_seconds > 60:
-                    eta_minutes = int(eta_seconds // 60)
-                    eta_secs = int(eta_seconds % 60)
-                    eta_str = f" | Tempo Stimato: {eta_minutes}m {eta_secs}s"
-                else:
-                    eta_str = f" | Tempo Stimato: {int(eta_seconds)}s"
 
-            log(f"Elaborazione pagina {i + 1}/{total_pages}{eta_str}...", "PROGRESS")
+            # Invia aggiornamento strutturato (Smart Progress - Scalato al 90% per lasciare spazio al salvataggio)
+            # Analysis Phase: 0% -> 90%
+            current_pct = ((i + 1) / total_pages) * 90
+            
+            if progress_callback:
+                progress_callback({
+                    'type': 'page_progress',
+                    'current': i + 1,
+                    'total': total_pages,
+                    'eta_seconds': eta_seconds,
+                    'phase': 'analysis',
+                    'phase_pct': current_pct
+                })
 
             page_category = "sconosciuto"
             page_rect = page.rect
@@ -119,10 +124,28 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
                         continue
 
-                    # OTTIMIZZAZIONE 1: Risoluzione Bilanciata (400 DPI)
-                    # 400 DPI offre un compromesso eccellente tra velocità e precisione
+                    # ================================================================
+                    # OTTIMIZZAZIONE 0: TEXT EXTRACTION (Direct)
+                    # ================================================================
+                    # Prima di usare l'OCR (lento), proviamo ad estrarre il testo 
+                    # direttamente dal PDF se è un PDF nativo/digitale.
                     try:
-                        mat = fitz.Matrix(400/72, 400/72)
+                        text_content = page.get_text("text", clip=roi_rect).lower()
+                        if any(keyword in text_content for keyword in keywords):
+                            log(f"   ⚡ Match veloce (Testo Nativo) per '{category_name}'", "INFO")
+                            page_category = category_name
+                            roi_found = True
+                            page_found = True
+                            break
+                    except Exception:
+                        pass # Fallback su OCR
+
+                    if page_found: break
+
+                    # OTTIMIZZAZIONE 1: Risoluzione Bilanciata (300 DPI invece di 400)
+                    # 300 DPI è lo standard per OCR e riduce i tempi del 40-50% rispetto a 400 DPI
+                    try:
+                        mat = fitz.Matrix(300/72, 300/72)
                         pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
                         
                         if pix.width < 1 or pix.height < 1:
@@ -222,13 +245,23 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             icon = "✓" if cat != "sconosciuto" else "?"
             log(f"   {icon} {cat}: {len(pages)} pagine", "INFO")
 
-        # ====================================================================
-        # FASE 3: SALVATAGGIO DEI PDF DIVISI
-        # ====================================================================
-        log_separator()
-        log("💾 SALVATAGGIO FILE...", "INFO")
+            # ====================================================================
+            # FASE 3: SALVATAGGIO DEI PDF DIVISI
+            # ====================================================================
+            log_separator()
+            log("💾 SALVATAGGIO FILE...", "INFO")
+            
+            if progress_callback:
+                progress_callback({
+                    'type': 'page_progress',
+                    'current': total_pages,
+                    'total': total_pages,
+                    'eta_seconds': 0,
+                    'phase': 'saving',
+                    'phase_pct': 95  # Jump to 95% during saving
+                })
 
-        base_output_dir = os.path.dirname(pdf_path)
+            base_output_dir = os.path.dirname(pdf_path)
 
         for category, pages in page_groups.items():
             if not pages:

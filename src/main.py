@@ -35,6 +35,7 @@ try:
     import shutil
     from datetime import datetime
     import json
+    import notification_manager  # Import Notification Manager
     logger.info("Tutti i moduli importati con successo")
 except Exception as e:
     logger.critical(f"Errore durante l'importazione dei moduli: {e}", exc_info=True)
@@ -51,39 +52,39 @@ SESSION_FILE = os.path.join(APP_DATA_DIR, "session.json")
 
 
 # ============================================================================
-# COSTANTI STILE - TEMA CHIARO PROFESSIONALE
+# COSTANTI STILE - TEMA CHIARO PROFESSIONALE (MODERN UI)
 # ============================================================================
 COLORS = {
     'bg_primary': '#FFFFFF',
     'bg_secondary': '#F8F9FA',
     'bg_tertiary': '#E9ECEF',
-    'accent': '#0D6EFD',
-    'accent_hover': '#0B5ED7',
-    'success': '#198754',
-    'warning': '#FFC107',
-    'danger': '#DC3545',
-    'text_primary': '#212529',
-    'text_secondary': '#6C757D',
-    'text_muted': '#ADB5BD',
-    'border': '#DEE2E6',
-    'card_shadow': '#CED4DA',
+    'accent': '#2563EB',      # Blue 600 - Più vibrante
+    'accent_hover': '#1D4ED8', # Blue 700
+    'success': '#10B981',     # Emerald 500 - Più moderno del verde standard
+    'warning': '#F59E0B',     # Amber 500
+    'danger': '#EF4444',      # Red 500
+    'text_primary': '#111827', # Gray 900
+    'text_secondary': '#4B5563', # Gray 600
+    'text_muted': '#9CA3AF',   # Gray 400
+    'border': '#E5E7EB',       # Gray 200
+    'card_shadow': '#9CA3AF',
 }
 
 FONTS = {
-    'heading': ('Segoe UI', 14, 'bold'),
-    'subheading': ('Segoe UI', 11, 'bold'),
+    'heading': ('Segoe UI', 16, 'bold'),
+    'subheading': ('Segoe UI', 12, 'bold'),
     'body': ('Segoe UI', 10),
     'body_bold': ('Segoe UI', 10, 'bold'),
     'small': ('Segoe UI', 9),
-    'mono': ('Consolas', 9),
-    'mono_bold': ('Consolas', 9, 'bold'),
+    'mono': ('Consolas', 10),
+    'mono_bold': ('Consolas', 10, 'bold'),
 }
 
 
 class UnknownFilesReviewDialog(tk.Toplevel):
     """Dialog per la revisione manuale (Splitter) dei file sconosciuti."""
     
-    def __init__(self, parent, review_tasks, on_finish=None):
+    def __init__(self, parent, review_tasks, on_finish=None, odc=None, on_close_callback=None):
         super().__init__(parent)
         self.title("Revisione Manuale - Divisione Allegati")
         self.state('zoomed')
@@ -91,6 +92,8 @@ class UnknownFilesReviewDialog(tk.Toplevel):
 
         self.review_tasks = review_tasks
         self.on_finish = on_finish
+        self.odc = odc  # Save ODC for session restore
+        self.on_close_callback = on_close_callback # Callback to notify MainApp on close
         
         self.task_index = 0
         self.current_doc = None
@@ -328,7 +331,8 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             if self.review_tasks:
                 try:
                     with open(SESSION_FILE, 'w') as f:
-                        json.dump(self.review_tasks, f, indent=4)
+                        # Save session with ODC
+                        json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
                 except: pass
             else:
                 if os.path.exists(SESSION_FILE):
@@ -359,10 +363,19 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             try:
                 os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
                 with open(SESSION_FILE, 'w') as f:
-                    json.dump(self.review_tasks, f, indent=4)
+                    # Save session with ODC
+                    json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
                 logger.info(f"Sessione salvata: {len(self.review_tasks)} task rimasti.")
             except Exception as e:
                 logger.error(f"Errore salvataggio sessione in chiusura: {e}")
+        
+        # Notify MainApp to update restore button
+        if self.on_close_callback:
+            try:
+                self.on_close_callback()
+            except Exception as e:
+                logger.error(f"Error in on_close_callback: {e}")
+                
         self.destroy()
 
 class MainApp:
@@ -385,6 +398,10 @@ class MainApp:
 
         logger.info("Configurazione stili e UI...")
         self._setup_styles()
+        
+        # Inizializza notifiche PRIMA di setup_ui_layout (perché usato in dashboard_tab)
+        self.notifier = notification_manager.NotificationManager(self.root)
+        
         self._setup_ui_layout()
         self._setup_dashboard_tab()
         self._setup_processing_tab()
@@ -405,6 +422,7 @@ class MainApp:
         self.root.after(100, self._spinner_tick)
         self.root.after(3000, lambda: app_updater.check_for_updates(silent=True, on_confirm=self._auto_save_settings))
 
+        
         if auto_file_path and os.path.exists(auto_file_path):
             self.root.after(500, lambda: self._handle_cli_start(auto_file_path))
         logger.info("MainApp inizializzata con successo")
@@ -540,8 +558,12 @@ class MainApp:
         header_frame.pack(fill='x', pady=(0, 25))
         ttk.Label(header_frame, text="SISTEMA DI ELABORAZIONE INTELLIGENTE", style='Header.TLabel').pack(side='left')
         
+        # Bell Icon Container (sarà popolato dal manager)
+        if hasattr(self, 'notifier'):
+            self.notifier.setup_bell_icon(header_frame)
+
         self.clock_label = ttk.Label(header_frame, text="", font=FONTS['mono_bold'], foreground=COLORS['text_secondary'])
-        self.clock_label.pack(side='right')
+        self.clock_label.pack(side='right', padx=10)
         self._update_clock()
         
         # Statistiche in alto
@@ -662,11 +684,21 @@ class MainApp:
         tk.Label(self.hint_frame, text="Trascina file o cartelle qui per avviare l'elaborazione automatica", font=FONTS['small'], bg=COLORS['bg_tertiary'], fg=COLORS['text_secondary'], pady=10).pack()
         self.progress_frame = ttk.LabelFrame(main_frame, text=" Progresso ", padding=15)
         self.progress_frame.pack(fill='x', pady=10)
+        
+        # Info Container: Label progress + ETA
+        info_container = ttk.Frame(self.progress_frame)
+        info_container.pack(fill='x', padx=2, pady=(0, 5))
+        
+        self.progress_label = ttk.Label(info_container, text="Pronto", style='Muted.TLabel', font=FONTS['body_bold'])
+        self.progress_label.pack(side='left')
+        
+        self.eta_label = ttk.Label(info_container, text="--:--", style='Muted.TLabel', font=FONTS['mono_bold'])
+        self.eta_label.pack(side='right')
+
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=400, mode='determinate', style="Green.Horizontal.TProgressbar")
         self.progress_bar.pack(fill='x', pady=5)
-        self.progress_label = ttk.Label(self.progress_frame, text="In attesa...", style='Muted.TLabel')
-        self.progress_label.pack()
+        
         log_frame = ttk.LabelFrame(main_frame, text=" Log Elaborazione ", padding=15)
         log_frame.pack(fill='both', expand=True, pady=10)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled', font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat')
@@ -730,96 +762,168 @@ class MainApp:
         main_frame = ttk.Frame(self.help_tab, style='Card.TFrame', padding=20)
         main_frame.pack(fill='both', expand=True)
         
+        # Header
         header_frame = ttk.Frame(main_frame, style='Card.TFrame')
         header_frame.pack(fill='x', pady=(0, 15))
         ttk.Label(header_frame, text="Guida all'Uso", style='Header.TLabel').pack(side='left')
-        
         ttk.Button(header_frame, text="Apri Cartella Dati", 
                   command=lambda: os.startfile(APP_DATA_DIR)).pack(side='right')
 
-        # Sottoschede per la Guida
-        help_notebook = ttk.Notebook(main_frame)
-        help_notebook.pack(fill='both', expand=True)
+        # Layout Master-Detail
+        content_split = ttk.PanedWindow(main_frame, orient='horizontal')
+        content_split.pack(fill='both', expand=True)
 
-        # Tab: Introduzione
-        intro_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
-        help_notebook.add(intro_frame, text=" Introduzione ")
-        intro_text = """
-Benvenuto in Intelleo PDF Splitter. 
-Questa applicazione ti permette di dividere documenti PDF multipagina in base a regole OCR predefinite.
-
-FUNZIONALITÀ PRINCIPALI:
-• Suddivisione automatica basata su parole chiave.
-• Rilevamento aree specifiche (ROI) tramite OCR Tesseract.
-• Revisione manuale dei file non riconosciuti.
-• Supporto Drag & Drop per file e cartelle.
-"""
-        st = scrolledtext.ScrolledText(intro_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
-        st.insert('1.0', intro_text)
-        st.config(state='disabled')
-        st.pack(fill='both', expand=True)
-
-        # Tab: Tesseract OCR
-        tess_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
-        help_notebook.add(tess_frame, text=" Installazione Tesseract ")
+        # Sidebar (Topics)
+        sidebar_frame = ttk.Frame(content_split, width=200, style='Card.TFrame')
+        self.help_topics_list = tk.Listbox(sidebar_frame, font=FONTS['body'], bg=COLORS['bg_secondary'], 
+                                          relief='flat', selectbackground=COLORS['accent'], 
+                                          selectforeground='white', activestyle='none', highlightthickness=0)
+        self.help_topics_list.pack(fill='both', expand=True, padx=(0, 5))
         
-        tess_text = """
-L'applicazione richiede Tesseract OCR per funzionare correttamente. 
-Seleziona il tuo sistema operativo per le istruzioni:
+        # Detail View
+        detail_frame = ttk.Frame(content_split, style='Card.TFrame')
+        self.help_detail_text = scrolledtext.ScrolledText(detail_frame, wrap='word', font=FONTS['body'], 
+                                                         bg=COLORS['bg_primary'], relief='flat', padx=20, pady=20)
+        self.help_detail_text.pack(fill='both', expand=True)
+        
+        # Add panes
+        content_split.add(sidebar_frame, weight=1)
+        content_split.add(detail_frame, weight=3)
 
---- WINDOWS ---
-1. Scarica l'installer ufficiale: https://github.com/UB-Mannheim/tesseract/wiki
-2. Esegui l'installazione e segna il percorso (es. C:\\Program Files\\Tesseract-OCR).
-3. Inserisci il percorso nella tab 'Configurazione' di questa app.
+        # Topics Data
+        self.help_data = {
+            "🚀 Introduzione": """
+# BENVENUTO IN INTELLEO PDF SPLITTER
 
---- MACOS ---
-1. Installa Homebrew se non presente: https://brew.sh
-2. Apri il terminale ed esegui: brew install tesseract
+Intelleo è uno strumento professionale per l'automazione documentale.
+Permette di dividere massicci volumi di scansioni PDF in singoli documenti, classificandoli automaticamente.
 
---- LINUX (Ubuntu/Debian) ---
-1. Apri il terminale ed esegui: sudo apt update && sudo apt install tesseract-ocr
+---
+### ✨ FUNZIONALITÀ CHIAVE
+
+1. **Smart Splitting**: Riconoscimento intelligente delle pagine tramite parole chiave.
+2. **Supporto ROI**: Aree di interesse specifiche per aumentare la precisione.
+3. **Analisi Ibrida**: Combina estrazione testo nativa (velocissima) con OCR Tesseract (potente).
+4. **Revisione Manuale**: Interfaccia dedicata per gestire i file non riconosciuti.
+""",
+            "⚙️ Configurazione Iniziale": """
+# PRIMA CONFIGURAZIONE
+
+Per iniziare a usare il software al massimo delle sue potenzialità:
+
+1. **Installazione Tesseract OCR**
+   Il motore OCR è fondamentale per i PDF scansionati.
+   - Vai nella tab 'Configurazione'.
+   - Seleziona il percorso dell'eseguibile `tesseract.exe`.
+   - Usa il tasto 'Auto-Rileva' per trovarlo automaticamente.
+
+2. **Creazione Regole**
+   Definisci cosa cercare nei documenti.
+   - Tab 'Configurazione' -> 'Regole di Classificazione'.
+   - Clicca 'Aggiungi'.
+   - Imposta **Nome Categoria** (es. "FATTURA") e **Parole Chiave** (es. "Fattura n.", "Totale").
+   - Assegna un colore per riconoscerla visivamente.
+""",
+            "🎯 Utility ROI": """
+# UTILITY ROI (Region of Interest)
+
+Se la ricerca generica non basta, usa le ROI per dire al software DOVE guardare.
+
+### COME USARLA:
+1. Apri l'utility dal pulsante "Utility ROI" nella Dashboard.
+2. Carica un PDF di esempio ("Apri PDF").
+3. Seleziona una pagina rappresentativa.
+4. **Disegna un rettangolo** tenendo premuto il tasto sinistro del mouse attorno all'area che contiene la parola chiave (es. l'intestazione in alto a destra).
+5. Rilascia e assegna la ROI alla categoria desiderata.
+
+💡 **Consiglio Pro**: Aree più piccole = Analisi più veloce!
+""",
+            "📂 Elaborazione": """
+# ELABORAZIONE DOCUMENTI
+
+1. Vai alla scheda **Elaborazione**.
+2. **Trascina (Drag & Drop)** i file PDF o intere cartelle nell'area tratteggiata.
+3. Verifica il codice ODC (identificativo pratica).
+4. La barra di progresso ti mostrerà l'avanzamento in tempo reale.
+
+### STATI POSSIBILI:
+- 🟢 **Verde**: File analizzato e diviso correttamente.
+- 🟠 **Arancione**: Attenzione (es. pagina non riconosciuta).
+- 🔴 **Rosso**: Errore critico.
+""",
+            "📝 Revisione Manuale": """
+# REVISIONE FILE SCONOSCIUTI
+
+Al termine dell'elaborazione, se alcune pagine non corrispondono a nessuna regola, si aprirà la finestra di Revisione.
+
+- **Lista a Sinistra**: Seleziona le pagine che compongono un singolo documento.
+- **Anteprima a Destra**: Controlla visivamente il contenuto.
+- **Tasto RINOMINA**: Crea il file PDF finale assegnando ODC e Categoria manualmente.
+- **Tasto SALTA**: Passa al prossimo gruppo di pagine sconosciute.
+
+Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza.
 """
-        st = scrolledtext.ScrolledText(tess_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
-        st.insert('1.0', tess_text)
-        st.config(state='disabled')
-        st.pack(fill='both', expand=True)
+        }
 
-        # Tab: Configurazione
-        setup_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
-        help_notebook.add(setup_frame, text=" Configurazione ")
-        setup_text = """
-1. TESSERACT OCR:
-Assicurati che Tesseract sia installato e il percorso sia corretto nella tab 'Configurazione'.
+        # Populate Listbox
+        for topic in self.help_data.keys():
+            self.help_topics_list.insert('end', topic)
 
-2. REGOLE DI CLASSIFICAZIONE:
-Le regole definiscono come il software riconosce i documenti. Ogni regola ha:
-• Nome Categoria: Identifica il tipo di documento.
-• Suffisso: Verrà aggiunto al nome del file generato.
-• Keywords: Parole che il software cercherà nel testo estratto.
-• Colore: Usato per identificare visivamente la regola.
+        # Bind selection
+        self.help_topics_list.bind('<<ListboxSelect>>', self._on_help_topic_select)
+        
+        # Select first item
+        self.help_topics_list.selection_set(0)
+        self._on_help_topic_select(None)
 
-3. UTILITY ROI:
-Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software deve cercare le parole chiave. Questo aumenta drasticamente la precisione.
-"""
-        st = scrolledtext.ScrolledText(setup_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
-        st.insert('1.0', setup_text)
-        st.config(state='disabled')
-        st.pack(fill='both', expand=True)
+    def _on_help_topic_select(self, event):
+        selection = self.help_topics_list.curselection()
+        if not selection: return
+        
+        topic = self.help_topics_list.get(selection[0])
+        content = self.help_data.get(topic, "")
+        
+        self.help_detail_text.config(state='normal')
+        self.help_detail_text.delete('1.0', 'end')
+        self.help_detail_text.insert('1.0', content)
+        
+        # Simple Markdown-like styling
+        self._apply_help_styles()
+        
+        self.help_detail_text.config(state='disabled')
 
-        # Tab: Elaborazione
-        proc_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
-        help_notebook.add(proc_frame, text=" Elaborazione ")
-        proc_text = """
-1. Trascina i file PDF o le cartelle nella zona tratteggiata della tab 'Elaborazione'.
-2. Oppure usa i pulsanti 'Seleziona PDF' o 'Seleziona Cartella'.
-3. Inserisci il codice ODC desiderato (es. 5400).
-4. Il software processerà ogni pagina e creerà nuovi file nella stessa cartella dell'originale.
-5. Se una pagina non viene riconosciuta, al termine apparirà una finestra di 'Revisione Manuale'.
-"""
-        st = scrolledtext.ScrolledText(proc_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
-        st.insert('1.0', proc_text)
-        st.config(state='disabled')
-        st.pack(fill='both', expand=True)
+    def _apply_help_styles(self):
+        # Headers
+        count = tk.IntVar()
+        start = "1.0"
+        while True:
+            pos = self.help_detail_text.search(r"^# .*", start, stopindex="end", count=count, regexp=True)
+            if not pos: break
+            end = f"{pos}+{count.get()}c"
+            self.help_detail_text.tag_add("h1", pos, end)
+            self.help_detail_text.tag_config("h1", font=FONTS['heading'], foreground=COLORS['accent'])
+            start = end
+            
+        # Subheaders
+        start = "1.0"
+        while True:
+            pos = self.help_detail_text.search(r"^### .*", start, stopindex="end", count=count, regexp=True)
+            if not pos: break
+            end = f"{pos}+{count.get()}c"
+            self.help_detail_text.tag_add("h3", pos, end)
+            self.help_detail_text.tag_config("h3", font=FONTS['subheading'], foreground=COLORS['text_primary'])
+            start = end
+
+        # Bold
+        start = "1.0"
+        while True:
+            pos = self.help_detail_text.search(r"\*\*.*?\*\*", start, stopindex="end", count=count, regexp=True)
+            if not pos: break
+            end = f"{pos}+{count.get()}c"
+            self.help_detail_text.tag_add("bold", pos, end)
+            self.help_detail_text.tag_config("bold", font=FONTS['body_bold'])
+            start = end
+
 
     def _display_license_info(self):
         try:
@@ -863,6 +967,13 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
         elif level == "WARNING": prefix = "[!] "
         elif level == "SUCCESS": prefix = "[OK] "
         elif level == "HEADER": prefix = "=== "
+        
+        # Trigger notifica toast per eventi importanti
+        if level in ["SUCCESS", "ERROR"] and hasattr(self, 'notifier'):
+            # Filtra messaggi troppo frequenti o tecnici
+            if "File completato" in message or "ELABORAZIONE COMPLETATA" in message or "Errore" in message:
+                self.notifier.notify(level, message, level)
+
         self.log_area.insert('end', f"[{timestamp}] {prefix}{message}\n", level)
         self.log_area.config(state='disabled')
         self.log_area.see('end')
@@ -883,6 +994,19 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
                     elif action == 'update_progress':
                         self._target_progress = item.get('value', 0)
                         self.progress_label.config(text=item.get('text', ''))
+                        
+                        # Gestione ETA se presente
+                        eta_seconds = item.get('eta_seconds')
+                        if eta_seconds is not None:
+                            if eta_seconds > 60:
+                                m, s = divmod(int(eta_seconds), 60)
+                                eta_text = f"Tempo stimato: {m}m {s}s"
+                            else:
+                                eta_text = f"Tempo stimato: {int(eta_seconds)}s"
+                            self.eta_label.config(text=eta_text, foreground=COLORS['accent'])
+                        else:
+                            self.eta_label.config(text="")
+
                     elif action == 'increment_pages':
                         self.pages_processed_count += item.get('count', 1)
                         self.pages_count_label.config(text=str(self.pages_processed_count))
@@ -1020,9 +1144,20 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
                 data = json.load(f)
             
             if data:
-                # Recupera l'ODC se salvato, o chiedi
-                odc = "Unknown" # TODO: salvare ODC nella sessione
-                self._show_unknown_dialog(data, odc)
+                tasks = []
+                odc = "Unknown"
+                
+                # Support both old list format and new dict format
+                if isinstance(data, list):
+                    tasks = data
+                elif isinstance(data, dict):
+                    tasks = data.get('tasks', [])
+                    odc = data.get('odc', "Unknown")
+                
+                if tasks:
+                    self._show_unknown_dialog(tasks, odc)
+                else:
+                    self._clear_session()
             else:
                 self._clear_session()
                 
@@ -1047,7 +1182,8 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
         self._target_progress = 0
         self._current_progress = 0
         self.progress_var.set(0)
-        self.progress_label.config(text="Inizializzazione...")
+        self.progress_label.config(text="Avvio in corso...")
+        self.eta_label.config(text="Calcolo stima...")
         self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
         self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
         self._add_log_message("-" * 60, "INFO")
@@ -1076,20 +1212,71 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
                                     page_progress = int(current) / int(total) * 100
                                     file_progress = (i / total_files) * 100
                                     combined = file_progress + (page_progress / total_files)
+                                    
+                                    # Estrai ETA se presente nella stringa (fallback legacy) o calcola qui
+                                    # Nota: pdf_processor ora dovrebbe passare l'ETA strutturato
+                                    
                                     self.log_queue.put({
                                         'action': 'update_progress',
                                         'value': combined,
-                                        'text': f"File {i+1}/{total_files} - Pagina {current}/{total}"
+                                        'text': f"File {i+1}/{total_files} - Pagina {current}/{total}",
+                                        'eta_seconds': None # Sarà popolato dal processor se supportato
                                     })
                                     self.log_queue.put({'action': 'increment_pages', 'count': 0})
                                     break
                         except:
                             pass
+                
+                # Callback esteso per supportare dati strutturati dal processore
+                def advanced_progress_callback(data, level="INFO"):
+                    if isinstance(data, dict) and data.get('type') == 'page_progress':
+                        # Calcolo progresso globale combinando info file e pagine
+                        current = data.get('current', 0)
+                        total = data.get('total', 1)
+                        eta = data.get('eta_seconds', 0)
+                        phase_pct = data.get('phase_pct', 0)
+                        phase = data.get('phase', 'analysis')
+                        
+                        # Se il processore invia una percentuale di fase esplicita, usala per calcolare
+                        # la porzione relativa a questo file.
+                        # Altrimenti usa il calcolo lineare standard sulle pagine
+                        if phase_pct > 0:
+                            file_internal_progress = phase_pct # 0-100 relativo al singolo file
+                        else:
+                            file_internal_progress = (current / total) * 100
+                            
+                        # Progresso base dei file completati
+                        base_pct = (i / total_files) * 100
+                        # Incremento per il file corrente
+                        file_contribution = (1.0 / total_files) * 100
+                        
+                        combined = base_pct + (file_internal_progress * (1.0/total_files))
+                        
+                        # Testo stato
+                        status_text = f"File {i+1}/{total_files}"
+                        if phase == 'saving':
+                            status_text += " - Salvataggio..."
+                        else:
+                            status_text += f" - Analisi {current}/{total}"
+
+                        self.log_queue.put({
+                            'action': 'update_progress',
+                            'value': combined,
+                            'text': status_text,
+                            'eta_seconds': eta
+                        })
+                        self.log_queue.put({'action': 'increment_pages', 'count': 0})
+                        
+                    elif isinstance(data, dict):
+                        self.log_queue.put(data)
+                    else:
+                        # Fallback per messaggi stringa
+                        progress_callback(str(data), level)
 
                 self.log_queue.put((f"=== FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
 
                 success, message, generated, moved_original_path = pdf_processor.process_pdf(
-                    pdf_path, odc, config, progress_callback)
+                    pdf_path, odc, config, advanced_progress_callback)
 
                 if not success:
                     self.log_queue.put((f"Errore: {message}", "ERROR"))
@@ -1133,8 +1320,14 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
 
         def on_close():
             self._add_log_message("Revisione file sconosciuti completata", "SUCCESS")
+            # Update restore button state when dialog finishes/closes
+            self.root.after(100, self._update_restore_button_state)
 
-        UnknownFilesReviewDialog(self.root, files, on_close)
+        def on_dialog_closed_event():
+            # Called when the dialog window is closed (by user X or finish)
+            self.root.after(100, self._update_restore_button_state)
+
+        UnknownFilesReviewDialog(self.root, files, on_finish=on_close, odc=odc, on_close_callback=on_dialog_closed_event)
 
     def load_settings(self):
         """Carica le impostazioni."""
