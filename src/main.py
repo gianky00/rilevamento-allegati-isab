@@ -352,6 +352,7 @@ class MainApp:
         self._setup_drag_drop()
 
         logger.info("Avvio logica applicazione...")
+        self.update_last_access()
         self.load_settings()
         self._display_license_info()
         self.root.after(100, self._process_log_queue)
@@ -362,6 +363,15 @@ class MainApp:
         if auto_file_path and os.path.exists(auto_file_path):
             self.root.after(500, lambda: self._handle_cli_start(auto_file_path))
         logger.info("MainApp inizializzata con successo")
+
+    def update_last_access(self):
+        """Aggiorna la data dell'ultimo accesso nella configurazione."""
+        try:
+            config = config_manager.load_config()
+            config['last_access'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            config_manager.save_config(config)
+        except Exception as e:
+            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
 
     def setup_icon(self):
         try:
@@ -405,10 +415,43 @@ class MainApp:
         style.configure('Treeview.Heading', font=FONTS['body_bold'], background=COLORS['bg_secondary'], foreground=COLORS['text_primary'])
         style.map('Treeview', background=[('selected', COLORS['accent'])], foreground=[('selected', COLORS['bg_primary'])])
         style.configure('TSeparator', background=COLORS['border'])
+        
+        # Stile Barra di Progresso Verde
+        style.configure("Green.Horizontal.TProgressbar", 
+                        troughcolor=COLORS['bg_tertiary'], 
+                        background=COLORS['success'], 
+                        thickness=20, 
+                        borderwidth=0)
 
     def _setup_drag_drop(self):
         if hasattr(self.root, 'drop_target_register'):
             try:
+                # Bypass UAC per Drag & Drop se su Windows ed elevato
+                if sys.platform == 'win32':
+                    try:
+                        import ctypes
+                        from ctypes import wintypes
+                        
+                        # Definizioni Windows API
+                        WM_DROPFILES = 0x0233
+                        WM_COPYDATA = 0x004A
+                        WM_COPYGLOBALDATA = 0x0049
+                        MSGFLT_ALLOW = 1
+                        
+                        change_msg_filter = ctypes.windll.user32.ChangeWindowMessageFilterEx
+                        hwnd = self.root.winfo_id()
+                        
+                        # Verifica se hwnd è un intero valido (non un mock durante i test)
+                        if isinstance(hwnd, int):
+                            change_msg_filter(hwnd, WM_DROPFILES, MSGFLT_ALLOW, None)
+                            change_msg_filter(hwnd, WM_COPYDATA, MSGFLT_ALLOW, None)
+                            change_msg_filter(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, None)
+                            logger.info("UAC Message Filter bypass applicato per Drag & Drop")
+                        else:
+                            logger.debug("Bypass UAC saltato: hwnd non è un intero (probabile mock in test)")
+                    except Exception as e:
+                        logger.warning(f"Impossibile applicare bypass UAC: {e}")
+
                 target_widget = getattr(self, 'hint_frame', self.processing_tab)
                 target_widget.drop_target_register(DND_FILES)
                 target_widget.dnd_bind('<<Drop>>', self._on_drop)
@@ -447,7 +490,7 @@ class MainApp:
         self.restore_btn.pack(side='left', padx=10)
         license_frame = ttk.LabelFrame(main_frame, text=" Informazioni Licenza ", padding=15)
         license_frame.pack(fill='x', pady=10)
-        self.license_info_text = tk.Text(license_frame, height=4, font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
+        self.license_info_text = tk.Text(license_frame, height=5, font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
         self.license_info_text.pack(fill='x')
         recent_frame = ttk.LabelFrame(main_frame, text=" Attivita' Recente ", padding=15)
         recent_frame.pack(fill='both', expand=True, pady=10)
@@ -498,7 +541,7 @@ class MainApp:
         self.progress_frame = ttk.LabelFrame(main_frame, text=" Progresso ", padding=15)
         self.progress_frame.pack(fill='x', pady=10)
         self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=400, mode='determinate')
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=400, mode='determinate', style="Green.Horizontal.TProgressbar")
         self.progress_bar.pack(fill='x', pady=5)
         self.progress_label = ttk.Label(self.progress_frame, text="In attesa...", style='Muted.TLabel')
         self.progress_label.pack()
@@ -564,29 +607,101 @@ class MainApp:
     def _setup_help_tab(self):
         main_frame = ttk.Frame(self.help_tab, style='Card.TFrame', padding=20)
         main_frame.pack(fill='both', expand=True)
-        ttk.Label(main_frame, text="Guida all'Uso", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
-        help_text = """
-+==============================================================================+
-|                        INTELLEO PDF SPLITTER - GUIDA                         |
-+==============================================================================+
+        
+        header_frame = ttk.Frame(main_frame, style='Card.TFrame')
+        header_frame.pack(fill='x', pady=(0, 15))
+        ttk.Label(header_frame, text="Guida all'Uso", style='Header.TLabel').pack(side='left')
+        
+        ttk.Button(header_frame, text="Apri Cartella Dati", 
+                  command=lambda: os.startfile(APP_DATA_DIR)).pack(side='right')
+
+        # Sottoschede per la Guida
+        help_notebook = ttk.Notebook(main_frame)
+        help_notebook.pack(fill='both', expand=True)
+
+        # Tab: Introduzione
+        intro_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
+        help_notebook.add(intro_frame, text=" Introduzione ")
+        intro_text = """
+Benvenuto in Intelleo PDF Splitter. 
+Questa applicazione ti permette di dividere documenti PDF multipagina in base a regole OCR predefinite.
+
+FUNZIONALITÀ PRINCIPALI:
+• Suddivisione automatica basata su parole chiave.
+• Rilevamento aree specifiche (ROI) tramite OCR Tesseract.
+• Revisione manuale dei file non riconosciuti.
+• Supporto Drag & Drop per file e cartelle.
 """
-        help_area = scrolledtext.ScrolledText(main_frame, wrap='word', font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='normal')
-        help_area.pack(fill='both', expand=True)
-        help_area.insert('1.0', help_text)
-        help_area.config(state='disabled')
-    
+        st = scrolledtext.ScrolledText(intro_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
+        st.insert('1.0', intro_text)
+        st.config(state='disabled')
+        st.pack(fill='both', expand=True)
+
+        # Tab: Configurazione
+        setup_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
+        help_notebook.add(setup_frame, text=" Configurazione ")
+        setup_text = """
+1. TESSERACT OCR:
+Assicurati che Tesseract sia installato e il percorso sia corretto nella tab 'Configurazione'.
+
+2. REGOLE DI CLASSIFICAZIONE:
+Le regole definiscono come il software riconosce i documenti. Ogni regola ha:
+• Nome Categoria: Identifica il tipo di documento.
+• Suffisso: Verrà aggiunto al nome del file generato.
+• Keywords: Parole che il software cercherà nel testo estratto.
+• Colore: Usato per identificare visivamente la regola.
+
+3. UTILITY ROI:
+Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software deve cercare le parole chiave. Questo aumenta drasticamente la precisione.
+"""
+        st = scrolledtext.ScrolledText(setup_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
+        st.insert('1.0', setup_text)
+        st.config(state='disabled')
+        st.pack(fill='both', expand=True)
+
+        # Tab: Elaborazione
+        proc_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
+        help_notebook.add(proc_frame, text=" Elaborazione ")
+        proc_text = """
+1. Trascina i file PDF o le cartelle nella zona tratteggiata della tab 'Elaborazione'.
+2. Oppure usa i pulsanti 'Seleziona PDF' o 'Seleziona Cartella'.
+3. Inserisci il codice ODC desiderato (es. 5400).
+4. Il software processerà ogni pagina e creerà nuovi file nella stessa cartella dell'originale.
+5. Se una pagina non viene riconosciuta, al termine apparirà una finestra di 'Revisione Manuale'.
+"""
+        st = scrolledtext.ScrolledText(proc_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
+        st.insert('1.0', proc_text)
+        st.config(state='disabled')
+        st.pack(fill='both', expand=True)
+
     def _display_license_info(self):
         try:
             payload = license_validator.get_license_info()
+            hw_id = license_validator.get_hardware_id()
+            
+            # Carica ultimo accesso dal config
+            config = config_manager.load_config()
+            last_access = config.get('last_access', 'N/A')
+
             if payload:
                 self.license_status_label.config(text="[OK] Valida", fg=COLORS['success'])
-                info_text = f"Cliente: {payload.get('Cliente', 'N/A')}\nScadenza: {payload.get('Scadenza Licenza', 'N/A')}"
+                info_text = (f"Cliente: {payload.get('Cliente', 'N/A')}\n"
+                           f"Scadenza: {payload.get('Scadenza Licenza', 'N/A')}\n"
+                           f"Hardware ID: {hw_id}\n"
+                           f"Ultimo Accesso: {last_access}")
+                
                 self.license_info_text.config(state='normal')
                 self.license_info_text.delete('1.0', 'end')
                 self.license_info_text.insert('1.0', info_text)
                 self.license_info_text.config(state='disabled')
             else:
                 self.license_status_label.config(text="[!] Non trovata", fg=COLORS['warning'])
+                info_text = (f"Hardware ID: {hw_id}\n"
+                           f"Ultimo Accesso: {last_access}")
+                self.license_info_text.config(state='normal')
+                self.license_info_text.delete('1.0', 'end')
+                self.license_info_text.insert('1.0', info_text)
+                self.license_info_text.config(state='disabled')
         except Exception as e:
             self.license_status_label.config(text="[X] Errore", fg=COLORS['danger'])
 
