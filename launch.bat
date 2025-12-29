@@ -1,11 +1,11 @@
 @echo off
-TITLE Intelleo PDF Splitter v2.0
+TITLE Intelleo PDF Splitter v2.0 - DEBUG MODE
 COLOR 0B
 cls
 
 echo.
 echo  +====================================================================+
-echo  ^|           INTELLEO PDF SPLITTER - LAUNCHER                        ^|
+echo  ^| INTELLEO PDF SPLITTER - LAUNCHER                                   ^|
 echo  +====================================================================+
 echo.
 
@@ -22,7 +22,7 @@ if not exist "%VENV_DIR%\Scripts\activate.bat" (
 
     if not exist "%VENV_DIR%\Scripts\activate.bat" (
         echo.
-        echo  [ERRORE] Impossibile creare l'ambiente virtuale.
+        echo  [ERRORE] Impossibile creare l'ambiente virtuale. 
         echo           Assicurati che Python sia installato correttamente.
         pause
         exit /b 1
@@ -40,6 +40,7 @@ pip install -r src/requirements.txt --quiet --disable-pip-version-check >nul 2>&
 if %errorlevel% neq 0 (
     echo  [SETUP] Installazione dipendenze in corso...
     pip install -r src/requirements.txt
+   
     if %errorlevel% neq 0 (
         echo.
         echo  [ERRORE] Impossibile installare le dipendenze.
@@ -50,15 +51,25 @@ if %errorlevel% neq 0 (
 echo  [SETUP] [OK] Dipendenze verificate
 echo.
 
-:: 4. Launch App using pythonw (no console) and exit
+:: 4. Launch App (Modificato per rilevare errori)
 echo  ======================================================================
 echo  [AVVIO] Avvio applicazione...
 echo  ======================================================================
 echo.
 
-:: Use START with pythonw to launch GUI without keeping console open
-:: pythonw runs Python without a console window
-start "" "%VENV_DIR%\Scripts\pythonw.exe" src/main.py %*
+:: Esecuzione Python e cattura codice di uscita
+"%VENV_DIR%\Scripts\python.exe" src/main.py %*
+set "EXIT_CODE=%errorlevel%"
 
-:: Exit immediately - the app runs independently
-exit /b 0
+echo.
+if %EXIT_CODE% neq 0 (
+    echo  [CRASH] L'applicazione si e' interrotta con codice %EXIT_CODE%
+) else (
+    echo  [INFO] Applicazione terminata (Codice 0).
+)
+
+:: Pausa incondizionata per leggere eventuali traceback
+echo.
+echo  Premere un tasto per chiudere la finestra...
+pause >nul
+exit /b %EXIT_CODE%
