@@ -124,9 +124,9 @@ class TestMainLogic(unittest.TestCase):
 
     def test_process_log_queue_dialog(self):
         self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': ['a.pdf'], 'odc': '123'})
-        with patch.object(self.app, '_show_unknown_dialog') as mock_show:
-            self.app._process_log_queue()
-            mock_show.assert_called_once()
+        self.app._process_log_queue()
+        self.assertIsNotNone(self.app._pending_completion_data)
+        self.assertEqual(self.app._pending_completion_data['action'], 'show_unknown_dialog')
 
     def test_processing_worker(self):
         files = ["test.pdf"]

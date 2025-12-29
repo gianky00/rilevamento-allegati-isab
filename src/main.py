@@ -177,6 +177,11 @@ class UnknownFilesReviewDialog(tk.Toplevel):
     def load_task(self, index):
         if index >= len(self.review_tasks):
             messagebox.showinfo("Completato", "Tutti i file sono stati revisionati con successo!")
+            # Pulizia sessione al termine
+            if os.path.exists(SESSION_FILE):
+                try: os.remove(SESSION_FILE)
+                except: pass
+            
             if self.on_finish:
                 self.on_finish()
             self.destroy()
@@ -186,7 +191,11 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         self.task = self.review_tasks[index]
         self.current_doc_path = self.task['unknown_path']
         
-        if self.current_doc: self.current_doc.close()
+        # Chiusura esplicita documento precedente
+        if self.current_doc: 
+            try: self.current_doc.close()
+            except: pass
+            self.current_doc = None
         
         try:
             self.current_doc = fitz.open(self.current_doc_path)
@@ -301,8 +310,12 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             messagebox.showerror("Errore", f"Errore durante il salvataggio del file:\n{e}")
 
     def finish_task(self):
-        if self.current_doc: self.current_doc.close()
-        self.current_doc = None
+        # Chiusura documento prima di rimuovere il file
+        if self.current_doc: 
+            try: self.current_doc.close()
+            except: pass
+            self.current_doc = None
+            
         try:
             if os.path.exists(self.current_doc_path):
                 os.remove(self.current_doc_path)
@@ -311,6 +324,16 @@ class UnknownFilesReviewDialog(tk.Toplevel):
         
         if 0 <= self.task_index < len(self.review_tasks):
             del self.review_tasks[self.task_index]
+            # Sincronizzazione persistente sessione
+            if self.review_tasks:
+                try:
+                    with open(SESSION_FILE, 'w') as f:
+                        json.dump(self.review_tasks, f, indent=4)
+                except: pass
+            else:
+                if os.path.exists(SESSION_FILE):
+                    try: os.remove(SESSION_FILE)
+                    except: pass
             self.load_task(self.task_index)
         else:
             self.load_task(0) 
@@ -324,8 +347,22 @@ class UnknownFilesReviewDialog(tk.Toplevel):
 
     def start_pan(self, event): self.canvas.scan_mark(event.x, event.y)
     def pan(self, event): self.canvas.scan_dragto(event.x, event.y, gain=1)
+    
     def on_close(self):
-        if self.current_doc: self.current_doc.close()
+        """Salva lo stato corrente prima della chiusura forzata."""
+        if self.current_doc: 
+            try: self.current_doc.close()
+            except: pass
+            self.current_doc = None
+            
+        if self.review_tasks:
+            try:
+                os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
+                with open(SESSION_FILE, 'w') as f:
+                    json.dump(self.review_tasks, f, indent=4)
+                logger.info(f"Sessione salvata: {len(self.review_tasks)} task rimasti.")
+            except Exception as e:
+                logger.error(f"Errore salvataggio sessione in chiusura: {e}")
         self.destroy()
 
 class MainApp:
@@ -344,6 +381,7 @@ class MainApp:
         self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self._spinner_idx = 0
         self._is_processing = False
+        self._pending_completion_data = None
 
         logger.info("Configurazione stili e UI...")
         self._setup_styles()
@@ -373,13 +411,18 @@ class MainApp:
 
     def _smooth_progress_tick(self):
         """Anima la barra di progresso verso il target in modo fluido."""
-        if abs(self._current_progress - self._target_progress) > 0.1:
-            step = (self._target_progress - self._current_progress) * 0.15
+        if abs(self._current_progress - self._target_progress) > 0.05:
+            step = (self._target_progress - self._current_progress) * 0.2
             self._current_progress += step
             self.progress_var.set(self._current_progress)
         elif self._current_progress != self._target_progress:
             self._current_progress = self._target_progress
             self.progress_var.set(self._current_progress)
+            
+            # Se siamo arrivati al 100% e abbiamo dati pendenti, finalizza
+            if self._current_progress >= 99.9 and self._pending_completion_data:
+                self._finalize_processing()
+                
         self.root.after(30, self._smooth_progress_tick)
 
     def _spinner_tick(self):
@@ -490,56 +533,84 @@ class MainApp:
                 logger.warning(f"Drag & Drop non disponibile: {e}", exc_info=True)
 
     def _setup_dashboard_tab(self):
-        main_frame = ttk.Frame(self.dashboard_tab, style='Card.TFrame', padding=20)
+        main_frame = ttk.Frame(self.dashboard_tab, style='Card.TFrame', padding=25)
         main_frame.pack(fill='both', expand=True)
+        
         header_frame = ttk.Frame(main_frame, style='Card.TFrame')
-        header_frame.pack(fill='x', pady=(0, 20))
-        ttk.Label(header_frame, text="Dashboard", style='Header.TLabel').pack(side='left')
-        self.clock_label = ttk.Label(header_frame, text="", style='Muted.TLabel')
+        header_frame.pack(fill='x', pady=(0, 25))
+        ttk.Label(header_frame, text="SISTEMA DI ELABORAZIONE INTELLIGENTE", style='Header.TLabel').pack(side='left')
+        
+        self.clock_label = ttk.Label(header_frame, text="", font=FONTS['mono_bold'], foreground=COLORS['text_secondary'])
         self.clock_label.pack(side='right')
         self._update_clock()
+        
+        # Statistiche in alto
         cards_frame = ttk.Frame(main_frame, style='Card.TFrame')
-        cards_frame.pack(fill='x', pady=10)
+        cards_frame.pack(fill='x', pady=(0, 20))
         cards_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform='card')
-        self._create_stat_card(cards_frame, 0, "Licenza", "license_status", "Verificando...")
-        self._create_stat_card(cards_frame, 1, "File Elaborati", "files_count", "0")
-        self._create_stat_card(cards_frame, 2, "Pagine Totali", "pages_count", "0")
-        self._create_stat_card(cards_frame, 3, "Regole Attive", "rules_count", "0")
-        actions_frame = ttk.LabelFrame(main_frame, text=" Azioni Rapide ", padding=15)
-        actions_frame.pack(fill='x', pady=20)
-        btn_frame = ttk.Frame(actions_frame)
-        btn_frame.pack()
-        ttk.Button(btn_frame, text="Seleziona PDF", command=self._quick_select_pdf).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="Configura Regole", command=lambda: self.notebook.select(self.config_tab)).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="Apri Utility ROI", command=self._launch_roi_utility).pack(side='left', padx=10)
-        ttk.Separator(btn_frame, orient='vertical').pack(side='left', fill='y', padx=15, pady=5)
-        self.restore_btn = ttk.Button(btn_frame, text="Ripristina Sessione", command=self._restore_session, state='disabled')
-        self.restore_btn.pack(side='left', padx=10)
+        self._create_stat_card(cards_frame, 0, "STATO LICENZA", "license_status", "Verificando...")
+        self._create_stat_card(cards_frame, 1, "DOC ANALIZZATI", "files_count", "0")
+        self._create_stat_card(cards_frame, 2, "PAGINE TOTALI", "pages_count", "0")
+        self._create_stat_card(cards_frame, 3, "REGOLE ATTIVE", "rules_count", "0")
+
+        # Layout Centrale: Licenza e Azioni
+        middle_container = ttk.Frame(main_frame, style='Card.TFrame')
+        middle_container.pack(fill='both', expand=True)
+        middle_container.columnconfigure(0, weight=3)
+        middle_container.columnconfigure(1, weight=1)
+
+        # Sezione Licenza d'Elite
+        self.license_container = ttk.LabelFrame(middle_container, text=" PARAMETRI DI AUTENTICAZIONE E SICUREZZA ", padding=20)
+        self.license_container.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
         
-        # Sezione Licenza Professionale
-        self.license_container = ttk.LabelFrame(main_frame, text=" STATO DEL SISTEMA E LICENZA ", padding=15)
-        self.license_container.pack(fill='x', pady=10)
-        
-        info_inner = tk.Frame(self.license_container, bg=COLORS['bg_secondary'], padx=10, pady=10)
-        info_inner.pack(fill='x')
+        info_grid = tk.Frame(self.license_container, bg=COLORS['bg_primary'])
+        info_grid.pack(fill='both', expand=True)
         
         self.license_fields = {}
-        fields = [("CLIENTE", "cliente"), ("SCADENZA", "scadenza"), ("HARDWARE ID", "hwid"), ("ULTIMO ACCESSO", "last_access")]
+        fields = [
+            ("UTENTE REGISTRATO", "cliente", "👤"), 
+            ("TERMINE VALIDITÀ", "scadenza", "📅"), 
+            ("HARDWARE IDENTIFIER", "hwid", "🆔"), 
+            ("ULTIMO ACCESSO RILEVATO", "last_access", "🕒")
+        ]
         
-        for i, (label, key) in enumerate(fields):
+        for i, (label, key, icon) in enumerate(fields):
             row, col = divmod(i, 2)
-            f = tk.Frame(info_inner, bg=COLORS['bg_secondary'])
-            f.grid(row=row, column=col, sticky='nsew', padx=20, pady=5)
-            tk.Label(f, text=label, font=FONTS['small'], fg=COLORS['text_secondary'], bg=COLORS['bg_secondary']).pack(anchor='w')
-            v_lab = tk.Label(f, text="---", font=FONTS['mono_bold'], fg=COLORS['accent'], bg=COLORS['bg_secondary'])
-            v_lab.pack(anchor='w')
+            card = tk.Frame(info_grid, bg=COLORS['bg_secondary'], padx=15, pady=12, 
+                           highlightthickness=1, highlightbackground=COLORS['border'])
+            card.grid(row=row, column=col, sticky='nsew', padx=8, pady=8)
+            
+            top_f = tk.Frame(card, bg=COLORS['bg_secondary'])
+            top_f.pack(fill='x')
+            tk.Label(top_f, text=icon, font=('Segoe UI Emoji', 11), bg=COLORS['bg_secondary']).pack(side='left', padx=(0, 8))
+            tk.Label(top_f, text=label, font=FONTS['small'], fg=COLORS['text_secondary'], bg=COLORS['bg_secondary']).pack(side='left')
+            
+            v_lab = tk.Label(card, text="ATTESA DATI...", font=FONTS['mono_bold'], fg=COLORS['accent'], bg=COLORS['bg_secondary'])
+            v_lab.pack(anchor='w', pady=(5, 0))
             self.license_fields[key] = v_lab
             
-        info_inner.columnconfigure((0, 1), weight=1)
+        info_grid.columnconfigure((0, 1), weight=1)
+        info_grid.rowconfigure((0, 1), weight=1)
 
-        recent_frame = ttk.LabelFrame(main_frame, text=" Attivita' Recente ", padding=15)
-        recent_frame.pack(fill='both', expand=True, pady=10)
-        self.recent_log = scrolledtext.ScrolledText(recent_frame, height=8, font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
+        # Pannello Azioni
+        actions_panel = ttk.LabelFrame(middle_container, text=" COMANDI RAPIDI ", padding=20)
+        actions_panel.grid(row=0, column=1, sticky='nsew')
+        
+        ttk.Button(actions_panel, text="NUOVA ANALISI", command=self._quick_select_pdf, style='Accent.TButton').pack(fill='x', pady=5)
+        ttk.Button(actions_panel, text="GESTISCI REGOLE", command=lambda: self.notebook.select(self.config_tab)).pack(fill='x', pady=5)
+        ttk.Button(actions_panel, text="UTILITY ROI", command=self._launch_roi_utility).pack(fill='x', pady=5)
+        
+        ttk.Separator(actions_panel, orient='horizontal').pack(fill='x', pady=15)
+        
+        self.restore_btn = ttk.Button(actions_panel, text="RECUPERO SESSIONE", command=self._restore_session, state='disabled')
+        self.restore_btn.pack(fill='x', pady=5)
+
+        # Log attività
+        recent_frame = ttk.LabelFrame(main_frame, text=" TERMINALE ATTIVITÀ ", padding=15)
+        recent_frame.pack(fill='x', pady=(20, 0))
+        self.recent_log = scrolledtext.ScrolledText(recent_frame, height=5, font=FONTS['mono'], 
+                                                  bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], 
+                                                  relief='flat', state='disabled', wrap='word')
         self.recent_log.pack(fill='both', expand=True)
         self.recent_log.tag_config("INFO", foreground=COLORS['text_primary'])
         self.recent_log.tag_config("SUCCESS", foreground=COLORS['success'])
@@ -550,12 +621,12 @@ class MainApp:
         card = tk.Frame(parent, bg=COLORS['bg_secondary'], relief='flat', bd=0, highlightthickness=1, highlightbackground=COLORS['border'])
         card.grid(row=0, column=col, padx=8, pady=5, sticky='nsew')
         tk.Label(card, text=title, font=FONTS['small'], bg=COLORS['bg_secondary'], fg=COLORS['text_secondary']).pack(pady=(15, 5))
-        value_label = tk.Label(card, text=initial_value, font=('Segoe UI', 18, 'bold'), bg=COLORS['bg_secondary'], fg=COLORS['accent'])
+        value_label = tk.Label(card, text=initial_value, font=('Segoe UI', 16, 'bold'), bg=COLORS['bg_secondary'], fg=COLORS['accent'])
         value_label.pack(pady=(0, 15))
         setattr(self, f'{var_name}_label', value_label)
 
     def _update_clock(self):
-        self.clock_label.config(text=datetime.now().strftime("%d/%m/%Y  %H:%M:%S"))
+        self.clock_label.config(text=datetime.now().strftime("%d %b %Y | %H:%M:%S"))
         self.root.after(1000, self._update_clock)
 
     def _quick_select_pdf(self):
@@ -758,19 +829,19 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
             last_access = config.get('last_access', 'N/A')
 
             if payload:
-                self.license_status_label.config(text="[OK] Valida", fg=COLORS['success'])
-                self.license_fields['cliente'].config(text=payload.get('Cliente', 'N/A'))
+                self.license_status_label.config(text="✓ SISTEMA ATTIVO", fg=COLORS['success'])
+                self.license_fields['cliente'].config(text=payload.get('Cliente', 'N/A').upper())
                 self.license_fields['scadenza'].config(text=payload.get('Scadenza Licenza', 'N/A'))
             else:
-                self.license_status_label.config(text="[!] Non trovata", fg=COLORS['warning'])
-                self.license_fields['cliente'].config(text="NON REGISTRATA", fg=COLORS['danger'])
+                self.license_status_label.config(text="⚠ NON LICENZIATO", fg=COLORS['warning'])
+                self.license_fields['cliente'].config(text="UTENTE NON REGISTRATO", fg=COLORS['danger'])
                 self.license_fields['scadenza'].config(text="---")
             
             self.license_fields['hwid'].config(text=hw_id)
             self.license_fields['last_access'].config(text=last_access)
             
         except Exception as e:
-            self.license_status_label.config(text="[X] Errore", fg=COLORS['danger'])
+            self.license_status_label.config(text="✖ ERRORE CRITICO", fg=COLORS['danger'])
 
     def _add_recent_log(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -807,7 +878,8 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
                 elif isinstance(item, dict):
                     action = item.get('action')
                     if action == 'show_unknown_dialog':
-                        self._show_unknown_dialog(item['files'], item.get('odc', ''))
+                        # Non mostriamo subito il dialog, attendiamo il 100% della barra
+                        self._pending_completion_data = item
                     elif action == 'update_progress':
                         self._target_progress = item.get('value', 0)
                         self.progress_label.config(text=item.get('text', ''))
@@ -820,6 +892,25 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
             pass
         finally:
             self.root.after(50, self._process_log_queue)
+
+    def _finalize_processing(self):
+        """Esegue le azioni finali dopo che l'animazione del progresso è terminata."""
+        if not self._pending_completion_data:
+            return
+            
+        data = self._pending_completion_data
+        self._pending_completion_data = None
+        
+        # Mostra dialog solo se ci sono effettivamente file da revisionare
+        if data.get('action') == 'show_unknown_dialog' and data.get('files'):
+            self._show_unknown_dialog(data['files'], data.get('odc', ''))
+        
+        elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
+        elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
+        
+        self._add_log_message("-" * 60, "INFO")
+        self._add_log_message(f"ELABORAZIONE COMPLETATA IN {elapsed_str}", "HEADER")
+        self._is_processing = False
 
     def _check_for_updates(self):
         if os.path.exists(SIGNAL_FILE):
