@@ -106,7 +106,7 @@ def check_grace_period():
             )
             
         remaining_days = 3 - days_offline
-        print(f"[LICENZA] Modalità offline: {remaining_days} giorni rimanenti")
+        print(f"[LICENZA] Modalita' offline: {remaining_days} giorni rimanenti")
         return True
         
     except Exception as e:
@@ -124,7 +124,7 @@ def run_update():
     - Se qualche file manca (404), mantiene i file locali
     - In caso di errore di rete, verifica il periodo di grazia
     """
-    print("[LICENZA] ══════════════════════════════════════════════")
+    print("[LICENZA] ======================================================")
     print("[LICENZA] Controllo aggiornamenti licenza...")
     
     hw_id = license_validator.get_hardware_id().strip().rstrip('.')
@@ -166,9 +166,9 @@ def run_update():
             
             if response.status_code == 200:
                 downloaded_content[local_name] = response.content
-                print(f"[LICENZA] ✓ {remote_name} scaricato")
+                print(f"[LICENZA] [OK] {remote_name} scaricato")
             elif response.status_code == 404:
-                print(f"[LICENZA] ⚠ {remote_name} non trovato")
+                print(f"[LICENZA] [!] {remote_name} non trovato")
                 incomplete_update = True
             elif response.status_code == 401:
                 print("[ERRORE] Token autenticazione non valido")
@@ -184,7 +184,7 @@ def run_update():
             break
             
     if network_error_occurred:
-        print("[LICENZA] Modalità offline - verifica periodo di grazia...")
+        print("[LICENZA] Modalita' offline - verifica periodo di grazia...")
         check_grace_period()
     else:
         if incomplete_update:
@@ -196,12 +196,12 @@ def run_update():
                     full_path = os.path.join(license_dir, local_name)
                     with open(full_path, "wb") as f:
                         f.write(content)
-                print("[LICENZA] ✓ Aggiornamento completato")
+                print("[LICENZA] [OK] Aggiornamento completato")
                 update_grace_timestamp()
             except OSError as e:
                 print(f"[ERRORE] Scrittura file licenza: {e}")
 
-    print("[LICENZA] ══════════════════════════════════════════════")
+    print("[LICENZA] ======================================================")
 
 
 if __name__ == "__main__":
