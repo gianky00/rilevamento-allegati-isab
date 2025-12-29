@@ -714,26 +714,57 @@ class MainApp:
         else:
             messagebox.showinfo("Info", "Nessun file PDF trovato.")
     
-    def _check_for_restore(self):
-        """Verifica se esiste una sessione da ripristinare."""
+    def _update_restore_button_state(self):
+        """Aggiorna lo stato del pulsante di ripristino."""
         if os.path.exists(SESSION_FILE):
             self.restore_btn.config(state='normal')
         else:
             self.restore_btn.config(state='disabled')
 
+    def _check_for_restore(self):
+        """Verifica se esiste una sessione da ripristinare."""
+        self._update_restore_button_state()
+        if os.path.exists(SESSION_FILE):
+            if messagebox.askyesno("Ripristino Sessione", "Trovata una sessione precedente non completata.\nVuoi ripristinare i file da revisionare?"):
+                 self._restore_session()
+
+    def _clear_session(self):
+        """Rimuove il file di sessione."""
+        if os.path.exists(SESSION_FILE):
+            try:
+                os.remove(SESSION_FILE)
+            except OSError as e:
+                logger.error(f"Errore rimozione session file: {e}")
+        self._update_restore_button_state()
+
     def _restore_session(self):
         """Ripristina la sessione precedente."""
         if not os.path.exists(SESSION_FILE):
             return
+        
         try:
             with open(SESSION_FILE, 'r') as f:
                 data = json.load(f)
-            # Placeholder per logica ripristino
-            messagebox.showinfo("Ripristino", "Funzionalità di ripristino in lavorazione.")
+            
+            if data:
+                # Recupera l'ODC se salvato, o chiedi
+                odc = "Unknown" # TODO: salvare ODC nella sessione
+                self._show_unknown_dialog(data, odc)
+            else:
+                self._clear_session()
+                
         except Exception as e:
             logger.error(f"Errore ripristino sessione: {e}")
+            messagebox.showerror("Errore", f"Impossibile ripristinare la sessione:\n{e}")
+            self._clear_session()
 
     def _start_processing(self):
+        """Avvia l'elaborazione dei PDF."""
+        odc_input = self.odc_var.get().strip()
+        if not odc_input:
+            messagebox.showerror("Errore", "Inserire un codice ODC valido.")
+            return
+
         if not self.pdf_files:
             messagebox.showerror("Errore", "Seleziona almeno un file PDF.")
             return
