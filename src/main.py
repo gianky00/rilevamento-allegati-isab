@@ -339,6 +339,11 @@ class MainApp:
         
         self.config, self.pdf_files, self.log_queue = {}, [], queue.Queue()
         self.processing_start_time, self.files_processed_count, self.pages_processed_count = None, 0, 0
+        self._target_progress = 0
+        self._current_progress = 0
+        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx = 0
+        self._is_processing = False
 
         logger.info("Configurazione stili e UI...")
         self._setup_styles()
@@ -358,11 +363,33 @@ class MainApp:
         self.root.after(100, self._process_log_queue)
         self.root.after(150, self._check_for_updates)
         self.root.after(500, self._check_for_restore)
+        self.root.after(50, self._smooth_progress_tick)
+        self.root.after(100, self._spinner_tick)
         self.root.after(3000, lambda: app_updater.check_for_updates(silent=True, on_confirm=self._auto_save_settings))
 
         if auto_file_path and os.path.exists(auto_file_path):
             self.root.after(500, lambda: self._handle_cli_start(auto_file_path))
         logger.info("MainApp inizializzata con successo")
+
+    def _smooth_progress_tick(self):
+        """Anima la barra di progresso verso il target in modo fluido."""
+        if abs(self._current_progress - self._target_progress) > 0.1:
+            step = (self._target_progress - self._current_progress) * 0.15
+            self._current_progress += step
+            self.progress_var.set(self._current_progress)
+        elif self._current_progress != self._target_progress:
+            self._current_progress = self._target_progress
+            self.progress_var.set(self._current_progress)
+        self.root.after(30, self._smooth_progress_tick)
+
+    def _spinner_tick(self):
+        """Anima lo spinner di caricamento se l'elaborazione è attiva."""
+        if self._is_processing:
+            self._spinner_idx = (self._spinner_idx + 1) % len(self._spinner_frames)
+            self.spinner_label.config(text=self._spinner_frames[self._spinner_idx])
+        else:
+            self.spinner_label.config(text="")
+        self.root.after(100, self._spinner_tick)
 
     def update_last_access(self):
         """Aggiorna la data dell'ultimo accesso nella configurazione."""
@@ -420,7 +447,7 @@ class MainApp:
         style.configure("Green.Horizontal.TProgressbar", 
                         troughcolor=COLORS['bg_tertiary'], 
                         background=COLORS['success'], 
-                        thickness=20, 
+                        thickness=18, 
                         borderwidth=0)
 
     def _setup_drag_drop(self):
@@ -488,10 +515,28 @@ class MainApp:
         ttk.Separator(btn_frame, orient='vertical').pack(side='left', fill='y', padx=15, pady=5)
         self.restore_btn = ttk.Button(btn_frame, text="Ripristina Sessione", command=self._restore_session, state='disabled')
         self.restore_btn.pack(side='left', padx=10)
-        license_frame = ttk.LabelFrame(main_frame, text=" Informazioni Licenza ", padding=15)
-        license_frame.pack(fill='x', pady=10)
-        self.license_info_text = tk.Text(license_frame, height=5, font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
-        self.license_info_text.pack(fill='x')
+        
+        # Sezione Licenza Professionale
+        self.license_container = ttk.LabelFrame(main_frame, text=" STATO DEL SISTEMA E LICENZA ", padding=15)
+        self.license_container.pack(fill='x', pady=10)
+        
+        info_inner = tk.Frame(self.license_container, bg=COLORS['bg_secondary'], padx=10, pady=10)
+        info_inner.pack(fill='x')
+        
+        self.license_fields = {}
+        fields = [("CLIENTE", "cliente"), ("SCADENZA", "scadenza"), ("HARDWARE ID", "hwid"), ("ULTIMO ACCESSO", "last_access")]
+        
+        for i, (label, key) in enumerate(fields):
+            row, col = divmod(i, 2)
+            f = tk.Frame(info_inner, bg=COLORS['bg_secondary'])
+            f.grid(row=row, column=col, sticky='nsew', padx=20, pady=5)
+            tk.Label(f, text=label, font=FONTS['small'], fg=COLORS['text_secondary'], bg=COLORS['bg_secondary']).pack(anchor='w')
+            v_lab = tk.Label(f, text="---", font=FONTS['mono_bold'], fg=COLORS['accent'], bg=COLORS['bg_secondary'])
+            v_lab.pack(anchor='w')
+            self.license_fields[key] = v_lab
+            
+        info_inner.columnconfigure((0, 1), weight=1)
+
         recent_frame = ttk.LabelFrame(main_frame, text=" Attivita' Recente ", padding=15)
         recent_frame.pack(fill='both', expand=True, pady=10)
         self.recent_log = scrolledtext.ScrolledText(recent_frame, height=8, font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
@@ -520,7 +565,13 @@ class MainApp:
     def _setup_processing_tab(self):
         main_frame = ttk.Frame(self.processing_tab, style='Card.TFrame', padding=20)
         main_frame.pack(fill='both', expand=True)
-        ttk.Label(main_frame, text="Elaborazione PDF", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
+        
+        header_p = ttk.Frame(main_frame, style='Card.TFrame')
+        header_p.pack(fill='x', pady=(0, 20))
+        ttk.Label(header_p, text="Elaborazione PDF", style='Header.TLabel').pack(side='left')
+        self.spinner_label = tk.Label(header_p, text="", font=('Consolas', 14, 'bold'), fg=COLORS['accent'], bg=COLORS['bg_primary'])
+        self.spinner_label.pack(side='left', padx=15)
+
         input_frame = ttk.LabelFrame(main_frame, text=" Input ", padding=15)
         input_frame.pack(fill='x', pady=(0, 15))
         odc_frame = ttk.Frame(input_frame)
@@ -637,6 +688,31 @@ FUNZIONALITÀ PRINCIPALI:
         st.config(state='disabled')
         st.pack(fill='both', expand=True)
 
+        # Tab: Tesseract OCR
+        tess_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
+        help_notebook.add(tess_frame, text=" Installazione Tesseract ")
+        
+        tess_text = """
+L'applicazione richiede Tesseract OCR per funzionare correttamente. 
+Seleziona il tuo sistema operativo per le istruzioni:
+
+--- WINDOWS ---
+1. Scarica l'installer ufficiale: https://github.com/UB-Mannheim/tesseract/wiki
+2. Esegui l'installazione e segna il percorso (es. C:\\Program Files\\Tesseract-OCR).
+3. Inserisci il percorso nella tab 'Configurazione' di questa app.
+
+--- MACOS ---
+1. Installa Homebrew se non presente: https://brew.sh
+2. Apri il terminale ed esegui: brew install tesseract
+
+--- LINUX (Ubuntu/Debian) ---
+1. Apri il terminale ed esegui: sudo apt update && sudo apt install tesseract-ocr
+"""
+        st = scrolledtext.ScrolledText(tess_frame, wrap='word', font=FONTS['body'], bg=COLORS['bg_secondary'], relief='flat')
+        st.insert('1.0', tess_text)
+        st.config(state='disabled')
+        st.pack(fill='both', expand=True)
+
         # Tab: Configurazione
         setup_frame = ttk.Frame(help_notebook, style='Card.TFrame', padding=15)
         help_notebook.add(setup_frame, text=" Configurazione ")
@@ -678,30 +754,21 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
         try:
             payload = license_validator.get_license_info()
             hw_id = license_validator.get_hardware_id()
-            
-            # Carica ultimo accesso dal config
             config = config_manager.load_config()
             last_access = config.get('last_access', 'N/A')
 
             if payload:
                 self.license_status_label.config(text="[OK] Valida", fg=COLORS['success'])
-                info_text = (f"Cliente: {payload.get('Cliente', 'N/A')}\n"
-                           f"Scadenza: {payload.get('Scadenza Licenza', 'N/A')}\n"
-                           f"Hardware ID: {hw_id}\n"
-                           f"Ultimo Accesso: {last_access}")
-                
-                self.license_info_text.config(state='normal')
-                self.license_info_text.delete('1.0', 'end')
-                self.license_info_text.insert('1.0', info_text)
-                self.license_info_text.config(state='disabled')
+                self.license_fields['cliente'].config(text=payload.get('Cliente', 'N/A'))
+                self.license_fields['scadenza'].config(text=payload.get('Scadenza Licenza', 'N/A'))
             else:
                 self.license_status_label.config(text="[!] Non trovata", fg=COLORS['warning'])
-                info_text = (f"Hardware ID: {hw_id}\n"
-                           f"Ultimo Accesso: {last_access}")
-                self.license_info_text.config(state='normal')
-                self.license_info_text.delete('1.0', 'end')
-                self.license_info_text.insert('1.0', info_text)
-                self.license_info_text.config(state='disabled')
+                self.license_fields['cliente'].config(text="NON REGISTRATA", fg=COLORS['danger'])
+                self.license_fields['scadenza'].config(text="---")
+            
+            self.license_fields['hwid'].config(text=hw_id)
+            self.license_fields['last_access'].config(text=last_access)
+            
         except Exception as e:
             self.license_status_label.config(text="[X] Errore", fg=COLORS['danger'])
 
@@ -742,7 +809,7 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
                     if action == 'show_unknown_dialog':
                         self._show_unknown_dialog(item['files'], item.get('odc', ''))
                     elif action == 'update_progress':
-                        self.progress_var.set(item.get('value', 0))
+                        self._target_progress = item.get('value', 0)
                         self.progress_label.config(text=item.get('text', ''))
                     elif action == 'increment_pages':
                         self.pages_processed_count += item.get('count', 1)
@@ -886,81 +953,87 @@ Usa l'Utility ROI per disegnare rettangoli sulle zone del PDF dove il software d
         self.log_area.config(state='normal')
         self.log_area.delete('1.0', 'end')
         self.log_area.config(state='disabled')
+        self._target_progress = 0
+        self._current_progress = 0
         self.progress_var.set(0)
         self.progress_label.config(text="Inizializzazione...")
         self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
         self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
         self._add_log_message("-" * 60, "INFO")
         self.processing_start_time = datetime.now()
+        self._is_processing = True
         thread = threading.Thread(target=self._processing_worker, args=(list(self.pdf_files), self.odc_var.get(), self.config))
         thread.daemon = True
         thread.start()
 
     def _processing_worker(self, pdf_files, odc, config):
         """Worker thread per l'elaborazione PDF."""
-        unknown_files = []
-        total_files = len(pdf_files)
+        try:
+            unknown_files = []
+            total_files = len(pdf_files)
 
-        for i, pdf_path in enumerate(pdf_files):
-            def progress_callback(message, level="INFO"):
-                self.log_queue.put((message, level))
-                
-                if "Elaborazione pagina" in message:
-                    try:
-                        parts = message.split()
-                        for p in parts:
-                            if "/" in p:
-                                current, total = p.split("/")
-                                page_progress = int(current) / int(total) * 100
-                                file_progress = (i / total_files) * 100
-                                combined = file_progress + (page_progress / total_files)
-                                self.log_queue.put({
-                                    'action': 'update_progress',
-                                    'value': combined,
-                                    'text': f"File {i+1}/{total_files} - Pagina {current}/{total}"
-                                })
-                                self.log_queue.put({'action': 'increment_pages', 'count': 0})
-                                break
-                    except:
-                        pass
+            for i, pdf_path in enumerate(pdf_files):
+                def progress_callback(message, level="INFO"):
+                    self.log_queue.put((message, level))
+                    
+                    if "Elaborazione pagina" in message:
+                        try:
+                            parts = message.split()
+                            for p in parts:
+                                if "/" in p:
+                                    current, total = p.split("/")
+                                    page_progress = int(current) / int(total) * 100
+                                    file_progress = (i / total_files) * 100
+                                    combined = file_progress + (page_progress / total_files)
+                                    self.log_queue.put({
+                                        'action': 'update_progress',
+                                        'value': combined,
+                                        'text': f"File {i+1}/{total_files} - Pagina {current}/{total}"
+                                    })
+                                    self.log_queue.put({'action': 'increment_pages', 'count': 0})
+                                    break
+                        except:
+                            pass
 
-            self.log_queue.put((f"=== FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
+                self.log_queue.put((f"=== FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
 
-            success, message, generated, moved_original_path = pdf_processor.process_pdf(
-                pdf_path, odc, config, progress_callback)
+                success, message, generated, moved_original_path = pdf_processor.process_pdf(
+                    pdf_path, odc, config, progress_callback)
 
-            if not success:
-                self.log_queue.put((f"Errore: {message}", "ERROR"))
-            else:
-                self.files_processed_count += 1
-                self.log_queue.put((f"File completato con successo", "SUCCESS"))
+                if not success:
+                    self.log_queue.put((f"Errore: {message}", "ERROR"))
+                else:
+                    self.files_processed_count += 1
+                    self.log_queue.put((f"File completato con successo", "SUCCESS"))
 
-                has_unknown = any(f['category'] == 'sconosciuto' for f in generated)
-                if has_unknown:
-                    unknown_paths = [f['path'] for f in generated if f['category'] == 'sconosciuto']
-                    siblings = [f['path'] for f in generated if f['category'] != 'sconosciuto']
+                    has_unknown = any(f['category'] == 'sconosciuto' for f in generated)
+                    if has_unknown:
+                        unknown_paths = [f['path'] for f in generated if f['category'] == 'sconosciuto']
+                        siblings = [f['path'] for f in generated if f['category'] != 'sconosciuto']
 
-                    for u_path in unknown_paths:
-                        unknown_files.append({
-                            'unknown_path': u_path,
-                            'source_path': moved_original_path,
-                            'siblings': siblings
-                        })
+                        for u_path in unknown_paths:
+                            unknown_files.append({
+                                'unknown_path': u_path,
+                                'source_path': moved_original_path,
+                                'siblings': siblings
+                            })
 
-        self.log_queue.put({'action': 'update_progress', 'value': 100, 'text': 'Completato!'})
-        
-        elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
-        elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
-        
-        self.log_queue.put(("-" * 60, "INFO"))
-        self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
-        self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
+            self.log_queue.put({'action': 'update_progress', 'value': 100, 'text': 'Completato!'})
+            
+            elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
+            elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
+            
+            self.log_queue.put(("-" * 60, "INFO"))
+            self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
+            self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
 
-        if unknown_files:
-            self.log_queue.put({'action': 'show_unknown_dialog', 'files': unknown_files, 'odc': odc})
+            if unknown_files:
+                self.log_queue.put({'action': 'show_unknown_dialog', 'files': unknown_files, 'odc': odc})
 
-        self.root.after(0, lambda: self.files_count_label.config(text=str(self.files_processed_count)))
-        self.root.after(0, lambda: self.odc_var.set("5400"))
+            self.root.after(0, lambda: self.files_count_label.config(text=str(self.files_processed_count)))
+            self.root.after(0, lambda: self.odc_var.set("5400"))
+        finally:
+            self._is_processing = False
 
     def _show_unknown_dialog(self, files, odc):
         """Mostra il dialog per file sconosciuti."""
