@@ -31,8 +31,8 @@ AppCopyright=Copyright (C) 2024 {#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 
-; Richiedi privilegi di amministratore solo se necessario
-PrivilegesRequired=lowest
+; Richiedi privilegi di amministratore per l'installazione e l'esecuzione
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; === OUTPUT DIRECTORY ===
@@ -89,10 +89,10 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Avvia l'app dopo l'installazione (GUI standard)
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; Avvia l'app dopo l'installazione usando shellexec per gestire correttamente l'elevazione UAC
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: shellexec postinstall skipifsilent
 ; Riavvio automatico dopo update (attivato da flag /FORCESTART)
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: IsForceStart
+Filename: "{app}\{#MyAppExeName}"; Flags: shellexec; Check: IsForceStart
 
 [Code]
 function IsForceStart: Boolean;
@@ -114,4 +114,12 @@ end;
 ; === PULIZIA ===
 Type: files; Name: "{app}\*.log"
 Type: filesandordirs; Name: "{app}\Licenza"
+
+; === PULIZIA DATI UTENTE (PRESERVA CONFIG.JSON) ===
+; Cancella solo il file di sessione, lasciando il resto.
+Type: files; Name: "{userappdata}\{#MyAppName}\session.json"
+; Cancella la cartella dei log.
+Type: filesandordirs; Name: "{userappdata}\{#MyAppName}\Log"
+
+; Rimuove la cartella principale dell'applicazione alla fine
 Type: filesandordirs; Name: "{app}"

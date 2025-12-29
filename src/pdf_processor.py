@@ -64,7 +64,7 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         # ====================================================================
         # FASE 2: ANALISI OCR DELLE PAGINE
         # ====================================================================
-        log("🔍 ANALISI OCR IN CORSO...", "INFO")
+        log("🔍 ANALISI OCR IN CORSO (Modalita' Smart)...", "INFO")
         
         page_groups = {}
         rules = config.get("classification_rules", [])
@@ -72,20 +72,44 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
         
         log(f"   Regole di classificazione: {rules_count}", "INFO")
 
+        # Variabili per calcolo ETA
+        avg_time_per_page = 0.0
+        alpha = 0.3  # Fattore smorzamento media mobile (0.0-1.0)
+
         for i, page in enumerate(pdf_doc):
-            log(f"Elaborazione pagina {i + 1}/{total_pages}...", "PROGRESS")
+            page_start_time = time.time()
+            
+            # Calcolo ETA
+            eta_str = ""
+            if i > 0 and avg_time_per_page > 0:
+                remaining_pages = total_pages - i
+                eta_seconds = remaining_pages * avg_time_per_page
+                
+                if eta_seconds > 60:
+                    eta_minutes = int(eta_seconds // 60)
+                    eta_secs = int(eta_seconds % 60)
+                    eta_str = f" | Tempo Stimato: {eta_minutes}m {eta_secs}s"
+                else:
+                    eta_str = f" | Tempo Stimato: {int(eta_seconds)}s"
+
+            log(f"Elaborazione pagina {i + 1}/{total_pages}{eta_str}...", "PROGRESS")
 
             page_category = "sconosciuto"
             page_rect = page.rect
+            page_found = False  # Flag per uscita rapida se trovato match
 
             # Itera attraverso ogni regola
             for rule in rules:
+                if page_found: break
+                
                 rois = rule.get("rois", [])
                 keywords = [k.lower() for k in rule.get("keywords", [])]
                 category_name = rule.get("category_name")
 
                 # Cicla attraverso ogni ROI definita
                 for roi in rois:
+                    if page_found: break
+
                     if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
                         continue
 
@@ -95,34 +119,82 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
                     if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
                         continue
 
-                    # Renderizza l'area ROI a 300 DPI in scala di grigi
-                    mat = fitz.Matrix(300/72, 300/72)
+                    # OTTIMIZZAZIONE 1: Risoluzione Bilanciata (400 DPI)
+                    # 400 DPI offre un compromesso eccellente tra velocità e precisione
                     try:
+                        mat = fitz.Matrix(400/72, 400/72)
                         pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
                         
                         if pix.width < 1 or pix.height < 1:
                             continue
 
-                        cropped_img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+                        base_img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                     except Exception as e:
                         log(f"⚠ Rendering ROI '{category_name}': {e}", "WARNING")
                         continue
 
-                    # OCR con rotazione automatica
-                    for angle in [0, -90]:
-                        img_to_scan = cropped_img
-                        if angle != 0:
-                            img_to_scan = cropped_img.rotate(angle, expand=True)
-
+                    # OTTIMIZZAZIONE 2: "LAZY EVALUATION" (A Cascata)
+                    # Helper functions per varianti immagine
+                    def get_binary(img):
+                        return img.point(lambda x: 0 if x < 128 else 255, '1')
+                    
+                    def get_contrast(img):
                         try:
-                            ocr_text = pytesseract.image_to_string(
-                                img_to_scan, lang='ita', timeout=30).lower()
-                            
-                            if any(keyword in ocr_text for keyword in keywords):
-                                page_category = category_name
-                                break
-                        except Exception as ocr_error:
-                            log(f"⚠ OCR '{category_name}': {ocr_error}", "WARNING")
+                            from PIL import ImageOps
+                            return ImageOps.autocontrast(img)
+                        except:
+                            return img
+
+                    # Strategia a passaggi successivi
+                    steps = [
+                        # Passo 1: Veloce. Immagine originale, angoli standard. 
+                        # Copre il 90% dei casi.
+                        {'name': 'Standard', 'img': base_img, 'angles': [0, -90]},
+                        
+                        # Passo 2: Contrasto forte (Binarizzata). 
+                        # Per testi sbiaditi o scuri su fondo chiaro.
+                        {'name': 'Binary', 'img': get_binary(base_img), 'angles': [0, -90]},
+                        
+                        # Passo 3: Disperato. Angoli "strani" (90, 180).
+                        # Copre documenti capovolti o ruotati a destra.
+                        {'name': 'DeepRotate', 'img': get_binary(base_img), 'angles': [90, 180]},
+                        
+                        # Passo 4: Ultima spiaggia. Autocontrast.
+                        {'name': 'Contrast', 'img': get_contrast(base_img), 'angles': [0, -90]}
+                    ]
+
+                    roi_found = False
+
+                    for step in steps:
+                        if roi_found: break
+                        
+                        current_img = step['img']
+                        
+                        for angle in step['angles']:
+                            if roi_found: break
+
+                            # Ruota l'immagine solo se necessario
+                            img_to_scan = current_img
+                            if angle != 0:
+                                img_to_scan = current_img.rotate(angle, expand=True)
+
+                            try:
+                                # Configurazione Tesseract Ottimizzata per ROI:
+                                # --psm 6: Assume un singolo blocco di testo uniforme (ideale per ROI)
+                                ocr_text = pytesseract.image_to_string(
+                                    img_to_scan, 
+                                    lang='ita', 
+                                    config='--psm 6',
+                                    timeout=15  # Timeout ridotto per non bloccare
+                                ).lower()
+                                
+                                if any(keyword in ocr_text for keyword in keywords):
+                                    page_category = category_name
+                                    roi_found = True
+                                    page_found = True
+                                    break
+                            except Exception:
+                                pass
 
                     if page_category == category_name:
                         break
@@ -134,6 +206,14 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             if page_category not in page_groups:
                 page_groups[page_category] = []
             page_groups[page_category].append(i)
+
+            # Aggiornamento statistiche tempo (Media Mobile)
+            page_end_time = time.time()
+            this_page_time = page_end_time - page_start_time
+            if i == 0:
+                avg_time_per_page = this_page_time
+            else:
+                avg_time_per_page = (alpha * this_page_time) + ((1 - alpha) * avg_time_per_page)
 
         # Sommario classificazione
         log_separator()

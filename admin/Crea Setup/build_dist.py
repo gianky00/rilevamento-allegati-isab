@@ -218,7 +218,9 @@ def build():
             f"--workpath={os.path.join(DIST_DIR, 'build')}",
             f"--paths={OBF_DIR}", # Look for modules in OBF_DIR
             "--onedir",
-            "--collect-all=tkinterdnd2", # Ensures drag and drop binaries are included
+            "--collect-all=tkinterdnd2", # Buono, ma l'hook è più robusto
+            f"--additional-hooks-dir={os.path.abspath(os.path.join(os.path.dirname(__file__), 'hooks'))}",
+            "--uac-admin" # FORCE ADMIN PRIVILEGES (UAC)
         ]
 
         # Add resources data
@@ -312,6 +314,17 @@ def build():
         setup_filename = None
         if iscc_exe:
             iss_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "setup_script.iss"))
+            setup_output_dir = os.path.join(os.path.dirname(__file__), "Setup")
+
+            # Clean previous setup files to avoid version mix-up
+            if os.path.exists(setup_output_dir):
+                for f in os.listdir(setup_output_dir):
+                    if f.endswith(".exe"):
+                        try:
+                            os.remove(os.path.join(setup_output_dir, f))
+                            log_and_print(f"Cleaned old setup: {f}")
+                        except Exception as e:
+                            log_and_print(f"Warning: Could not delete old setup {f}: {e}", "WARNING")
 
             if not os.path.exists(iss_path):
                 log_and_print(f"Setup script not found at: {iss_path}", "ERROR")
@@ -328,17 +341,15 @@ def build():
             run_command(cmd_iscc, env=env)
 
             # Locate the generated setup file
-            # Setup script is configured to output to "Setup" (relative to itself).
-            # Itself is in "admin/Crea Setup". So output is "admin/Crea Setup/Setup".
-            setup_output_dir = os.path.join(os.path.dirname(__file__), "Setup")
             if os.path.exists(setup_output_dir):
                 log_and_print(f"Installer generated in: {setup_output_dir}")
-                # Find the latest setup file
-                for f in os.listdir(setup_output_dir):
-                    if f.endswith(".exe"):
-                        setup_filename = f
-                        log_and_print(f" - Found setup: {f}")
-                        break
+                
+                # Find the latest setup file (Sort by modification time, newest first)
+                exe_files = [f for f in os.listdir(setup_output_dir) if f.endswith(".exe")]
+                if exe_files:
+                    exe_files.sort(key=lambda x: os.path.getmtime(os.path.join(setup_output_dir, x)), reverse=True)
+                    setup_filename = exe_files[0]
+                    log_and_print(f" - Found newest setup: {setup_filename}")
 
             if not setup_filename:
                 log_and_print(f"WARNING: No executable found in {setup_output_dir}", "WARNING")
@@ -346,9 +357,13 @@ def build():
              log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
         # --- Step 8: Netlify Deployment Preparation & Upload ---
-        if setup_filename:
+        skip_deploy = "--no-deploy" in sys.argv
+        
+        if setup_filename and not skip_deploy:
             log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
             prepare_and_deploy_netlify(setup_output_dir, setup_filename)
+        elif skip_deploy:
+            log_and_print("\n[INFO] Skipping Netlify deployment (--no-deploy flag detected).", "INFO")
         else:
             log_and_print("\n[WARNING] Skipping Netlify deployment because installer was not found.", "WARNING")
 

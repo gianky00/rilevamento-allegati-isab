@@ -9,17 +9,18 @@ import sys
 
 def get_config_path():
     """
-    Restituisce il percorso del file di configurazione.
+    Restituisce il percorso del file di configurazione in APPDATA.
     
-    Gestisce sia l'esecuzione come script che come eseguibile PyInstaller.
+    Questo garantisce che l'applicazione abbia sempre i permessi di scrittura
+    e che la configurazione sia specifica dell'utente.
     """
-    if getattr(sys, 'frozen', False):
-        # Eseguibile PyInstaller
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # Script Python: config.json is in root (one level up from src/)
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, 'config.json')
+    # Usa la stessa cartella dei log e della licenza per coerenza
+    app_data_dir = os.path.join(os.getenv('APPDATA'), 'Intelleo PDF Splitter')
+    
+    # Crea la directory se non esiste
+    os.makedirs(app_data_dir, exist_ok=True)
+    
+    return os.path.join(app_data_dir, 'config.json')
 
 
 CONFIG_FILE = get_config_path()
