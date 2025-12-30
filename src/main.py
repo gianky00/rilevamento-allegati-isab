@@ -400,7 +400,16 @@ class MainApp:
         self._setup_styles()
         
         # Inizializza notifiche PRIMA di setup_ui_layout (perché usato in dashboard_tab)
-        self.notifier = notification_manager.NotificationManager(self.root)
+        nm_module = globals().get('notification_manager')
+        if nm_module:
+            try:
+                self.notifier = nm_module.NotificationManager(self.root)
+            except Exception as e:
+                self.notifier = None
+                logger.error(f"Errore inizializzazione notifiche: {e}")
+        else:
+            self.notifier = None
+            logger.warning("Notification Manager non disponibile (import fallito)")
         
         self._setup_ui_layout()
         self._setup_dashboard_tab()
@@ -559,7 +568,7 @@ class MainApp:
         ttk.Label(header_frame, text="SISTEMA DI ELABORAZIONE INTELLIGENTE", style='Header.TLabel').pack(side='left')
         
         # Bell Icon Container (sarà popolato dal manager)
-        if hasattr(self, 'notifier'):
+        if getattr(self, 'notifier', None):
             self.notifier.setup_bell_icon(header_frame)
 
         self.clock_label = ttk.Label(header_frame, text="", font=FONTS['mono_bold'], foreground=COLORS['text_secondary'])
@@ -969,7 +978,7 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
         elif level == "HEADER": prefix = "=== "
         
         # Trigger notifica toast per eventi importanti
-        if level in ["SUCCESS", "ERROR"] and hasattr(self, 'notifier'):
+        if level in ["SUCCESS", "ERROR"] and getattr(self, 'notifier', None):
             # Filtra messaggi troppo frequenti o tecnici
             if "File completato" in message or "ELABORAZIONE COMPLETATA" in message or "Errore" in message:
                 self.notifier.notify(level, message, level)
