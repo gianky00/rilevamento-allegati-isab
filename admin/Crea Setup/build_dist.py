@@ -158,7 +158,8 @@ def build():
             os.path.join(ROOT_DIR, "src", "license_validator.py"),
             os.path.join(ROOT_DIR, "src", "license_updater.py"),
             os.path.join(ROOT_DIR, "src", "app_updater.py"),
-            os.path.join(ROOT_DIR, "src", "version.py")
+            os.path.join(ROOT_DIR, "src", "version.py"),
+            os.path.join(ROOT_DIR, "src", "notification_manager.py")
         ]
 
         # Check if files exist
@@ -262,6 +263,7 @@ def build():
             "license_updater",
             "app_updater",
             "version",
+            "notification_manager",
             # PyArmor runtime
             runtime_dir
         ]
