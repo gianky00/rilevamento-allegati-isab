@@ -73,15 +73,21 @@ Root: HKCU; Subkey: "Software\Classes\Directory\shell\IntelleoPDFSplitter"; Valu
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\IntelleoPDFSplitter\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
 [Files]
-; === CONFIGURATION FILE (PRESERVE IF EXISTS) ===
+; === CONFIGURATION FILE ===
+; Installa nella cartella dell'applicazione (Fallback/Template per Admin)
 Source: "{#BuildDir}\config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+
+; Installa nella cartella APPDATA dell'utente che esegue l'installazione (Priorità Utente)
+; Nota: In installazioni amministrative, questo andrà nel profilo dell'Admin.
+Source: "{#BuildDir}\config.json"; DestDir: "{userappdata}\{#MyAppName}"; Flags: onlyifdoesntexist uninsneveruninstall
 
 ; === ESEGUIBILE E DIPENDENZE PYTHON (EXCLUDE CONFIG.JSON TO AVOID DUPLICATION/OVERWRITE) ===
 ; Excludes allows us to handle config.json separately above
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Excludes: "config.json,admin"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
-; Crea la directory per i log con permessi utente
+; Crea le directory necessarie in APPDATA
+Name: "{userappdata}\{#MyAppName}"; Flags: uninsneveruninstall
 Name: "{userappdata}\{#MyAppName}\Log"; Flags: uninsneveruninstall
 
 [Icons]

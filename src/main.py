@@ -47,7 +47,7 @@ SIGNAL_FILE = ".update_signal"
 
 
 # Costanti per la gestione della sessione
-APP_DATA_DIR = os.path.join(os.getenv('APPDATA'), 'Intelleo PDF Splitter')
+APP_DATA_DIR = config_manager.CONFIG_DIR
 SESSION_FILE = os.path.join(APP_DATA_DIR, "session.json")
 
 
