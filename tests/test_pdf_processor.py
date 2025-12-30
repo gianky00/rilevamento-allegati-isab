@@ -125,6 +125,7 @@ class TestPdfProcessor(unittest.TestCase):
         # Test error inside ROI loop should continue to next ROI/Rule
         mock_doc = MagicMock()
         mock_page = MagicMock()
+        mock_doc.__len__.return_value = 1
         mock_doc.__iter__.return_value = iter([mock_page])
         mock_page.rect.width = 500
         mock_page.rect.height = 500
@@ -145,7 +146,7 @@ class TestPdfProcessor(unittest.TestCase):
             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
             # Should finish successfully (categorized as unknown because ROI failed)
-            self.assertTrue(success)
+            self.assertTrue(success, msg)
             self.assertEqual(files[0]['category'], "sconosciuto")
 
     @patch("pdf_processor.fitz.open")
@@ -163,7 +164,7 @@ class TestPdfProcessor(unittest.TestCase):
                 with patch("time.sleep") as mock_sleep:
                     success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
-                    self.assertTrue(success)
+                    self.assertTrue(success, msg)
                     self.assertEqual(mock_move.call_count, 3)
                     self.assertEqual(mock_sleep.call_count, 2)
 
@@ -175,6 +176,7 @@ class TestPdfProcessor(unittest.TestCase):
         # OCR fails on first attempt (0 deg), succeeds on second (-90 deg)
         mock_doc = MagicMock()
         mock_page = MagicMock()
+        mock_doc.__len__.return_value = 1
         mock_doc.__iter__.return_value = iter([mock_page])
         mock_page.rect.width = 500
         mock_page.rect.height = 500
@@ -194,7 +196,7 @@ class TestPdfProcessor(unittest.TestCase):
         with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
 
-            self.assertTrue(success)
+            self.assertTrue(success, msg)
             self.assertIn("Invoice", files[0]['category'])
             self.assertEqual(mock_ocr.call_count, 2)
 
@@ -209,6 +211,7 @@ class TestPdfProcessor(unittest.TestCase):
         }
         mock_doc = MagicMock()
         mock_page = MagicMock()
+        mock_doc.__len__.return_value = 1
         mock_doc.__iter__.return_value = iter([mock_page])
         mock_page.rect.width = 500
         mock_page.rect.height = 500
@@ -218,7 +221,7 @@ class TestPdfProcessor(unittest.TestCase):
             success, msg, files, moved = pdf_processor.process_pdf("dummy.pdf", "ODC", bad_config)
 
             # Should ignore invalid ROI and end up as unknown
-            self.assertTrue(success)
+            self.assertTrue(success, msg)
             self.assertEqual(files[0]['category'], "sconosciuto")
             mock_page.get_pixmap.assert_not_called()
 

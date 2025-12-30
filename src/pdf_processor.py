@@ -245,23 +245,23 @@ def process_pdf(pdf_path, odc, config, progress_callback=None):
             icon = "✓" if cat != "sconosciuto" else "?"
             log(f"   {icon} {cat}: {len(pages)} pagine", "INFO")
 
-            # ====================================================================
-            # FASE 3: SALVATAGGIO DEI PDF DIVISI
-            # ====================================================================
-            log_separator()
-            log("💾 SALVATAGGIO FILE...", "INFO")
-            
-            if progress_callback:
-                progress_callback({
-                    'type': 'page_progress',
-                    'current': total_pages,
-                    'total': total_pages,
-                    'eta_seconds': 0,
-                    'phase': 'saving',
-                    'phase_pct': 95  # Jump to 95% during saving
-                })
+        # ====================================================================
+        # FASE 3: SALVATAGGIO DEI PDF DIVISI
+        # ====================================================================
+        log_separator()
+        log("💾 SALVATAGGIO FILE...", "INFO")
+        
+        if progress_callback:
+            progress_callback({
+                'type': 'page_progress',
+                'current': total_pages,
+                'total': total_pages,
+                'eta_seconds': 0,
+                'phase': 'saving',
+                'phase_pct': 95  # Jump to 95% during saving
+            })
 
-            base_output_dir = os.path.dirname(pdf_path)
+        base_output_dir = os.path.dirname(pdf_path)
 
         for category, pages in page_groups.items():
             if not pages:
