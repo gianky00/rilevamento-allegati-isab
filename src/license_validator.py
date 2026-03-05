@@ -101,7 +101,7 @@ def get_hardware_id():
     # Fallback universale: UUID basato su MAC address
     with suppress(Exception):
         return str(uuid.getnode())
-        
+
     return "ERROR_GETTING_ID"
 
 

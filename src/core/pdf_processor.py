@@ -37,7 +37,7 @@ def process_pdf(
         tesseract_path_str = config.get("tesseract_path")
         if not tesseract_path_str:
             return False, "Percorso Tesseract non definito", [], None
-            
+
         tesseract_path = Path(tesseract_path_str)
         if not tesseract_path.is_file():
             return False, "Percorso Tesseract non valido", [], None

@@ -8,7 +8,6 @@ from PySide6.QtCore import (
     QParallelAnimationGroup,
     QPoint,
     QPropertyAnimation,
-    Qt,
 )
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
@@ -21,16 +20,16 @@ class UIAnimations:
         """Applica un effetto di fade-in a un widget e lo pulisce al termine."""
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
-        
+
         anim = QPropertyAnimation(effect, b"opacity")
         anim.setDuration(duration)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        
+
         # Pulizia dell'effetto al termine per ripristinare il rendering nativo
         # Questo risolve il problema della GUI nera su alcuni sistemi Windows
-        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+        anim.finished.connect(lambda: widget.setGraphicsEffect(None))  # type: ignore
         anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     @staticmethod
@@ -39,42 +38,42 @@ class UIAnimations:
         # Fade-out vecchio widget
         old_effect = QGraphicsOpacityEffect(old_widget)
         old_widget.setGraphicsEffect(old_effect)
-        
+
         # Fade-in e slide nuovo widget
         new_effect = QGraphicsOpacityEffect(new_widget)
         new_widget.setGraphicsEffect(new_effect)
-        
+
         group = QParallelAnimationGroup(new_widget)
-        
+
         # Animazione Opacità
         fade_anim = QPropertyAnimation(new_effect, b"opacity")
         fade_anim.setDuration(300)
         fade_anim.setStartValue(0.0)
         fade_anim.setEndValue(1.0)
         fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        
+
         # Animazione Posizione (Slight slide)
         slide_anim = QPropertyAnimation(new_widget, b"pos")
         slide_anim.setDuration(350)
-        
+
         offset = 25 if direction == "right" else -25
         start_pos = new_widget.pos() + QPoint(offset, 0)
         end_pos = new_widget.pos()
-        
+
         slide_anim.setStartValue(start_pos)
         slide_anim.setEndValue(end_pos)
         slide_anim.setEasingCurve(QEasingCurve.Type.OutBack)
-        
+
         group.addAnimation(fade_anim)
         group.addAnimation(slide_anim)
-        
+
         # Pulizia effetti al termine
         def cleanup():
-            new_widget.setGraphicsEffect(None)
-            old_widget.setGraphicsEffect(None)
-            
+            new_widget.setGraphicsEffect(None)  # type: ignore
+            old_widget.setGraphicsEffect(None)  # type: ignore
+
         group.finished.connect(cleanup)
-        
+
         new_widget.show()
         group.start(QParallelAnimationGroup.DeletionPolicy.DeleteWhenStopped)
 
@@ -85,14 +84,14 @@ class UIAnimations:
             widget.show()
             effect = QGraphicsOpacityEffect(widget)
             widget.setGraphicsEffect(effect)
-            
+
             fade = QPropertyAnimation(effect, b"opacity")
             fade.setDuration(duration)
             fade.setStartValue(0.0)
             fade.setEndValue(1.0)
             fade.setEasingCurve(QEasingCurve.Type.OutCubic)
-            
-            fade.finished.connect(lambda: widget.setGraphicsEffect(None))
+
+            fade.finished.connect(lambda: widget.setGraphicsEffect(None))  # type: ignore
             fade.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
         else:
             widget.hide()
@@ -102,7 +101,7 @@ class UIAnimations:
         """Applica un effetto di pulsazione (opacità) al widget."""
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
-        
+
         anim = QPropertyAnimation(effect, b"opacity")
         anim.setDuration(duration)
         anim.setStartValue(0.6)

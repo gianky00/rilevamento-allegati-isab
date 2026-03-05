@@ -5,7 +5,6 @@ Gestisce l'inizializzazione del sistema, la licenza e il lancio della GUI o dell
 
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Gestione crash precoci prima dell'inizializzazione del logger
@@ -33,9 +32,9 @@ logger = logging.getLogger("LAUNCHER")
 def run_app() -> None:
     """Configura e avvia l'applicazione principale con Splash Screen."""
     from gui.theme import GLOBAL_QSS
+    from gui.widgets.splash_screen import SplashScreen
     from main import MainApp
     from shared.constants import SIGNAL_FILE
-    from gui.widgets.splash_screen import SplashScreen
 
     logger.info("=" * 68)
     logger.info("           INTELLEO PDF SPLITTER - AVVIO SISTEMA")
@@ -91,12 +90,16 @@ def run_app() -> None:
 
     # 4. Lancio MainApp
     window = MainApp(auto_file_path=cli_path)
-    
+
     splash.set_progress(100, "Pronto!")
-    
-    # Piccola pausa per mostrare il 100%
+
+    # Piccola pausa per mostrare il 100% prima di mostrare la finestra principale
+    def finalize_startup():
+        splash.close()
+        window.showMaximized()
+
     from PySide6.QtCore import QTimer
-    QTimer.singleShot(500, lambda: (splash.close(), window.showMaximized()))
+    QTimer.singleShot(500, finalize_startup)
 
     logger.info("Avvio event loop")
     sys.exit(qt_app.exec())

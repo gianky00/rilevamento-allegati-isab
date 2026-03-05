@@ -147,8 +147,7 @@ class MainApp(QMainWindow):
         self.config_panel = ConfigTab(self.notebook, self)
         self.help_panel = HelpTab(self.notebook, self)
 
-        self.dashboard_tab = self.dashboard
-        self.processing_tab = self.dashboard # Puntiamo alla dashboard per compatibilità
+        self.dashboard_tab = self.processing_tab = self.dashboard # Puntiamo alla dashboard per compatibilità
         self.config_tab = self.config_panel
         self.help_tab = self.help_panel
 
@@ -192,14 +191,14 @@ class MainApp(QMainWindow):
         """Esegue l'animazione di transizione quando l'utente cambia tab."""
         if not hasattr(self, "_prev_tab_index"):
             self._prev_tab_index = 0
-            
+
         new_widget = self.notebook.widget(index)
         old_widget = self.notebook.widget(self._prev_tab_index)
-        
+
         if new_widget and old_widget and index != self._prev_tab_index:
             direction = "right" if index > self._prev_tab_index else "left"
             UIAnimations.slide_fade_transition(old_widget, new_widget, direction)
-            
+
         self._prev_tab_index = index
 
     def _connect_controller_signals(self) -> None:
@@ -314,7 +313,6 @@ class MainApp(QMainWindow):
     def setup_icon(self) -> None:
         """Configura l'icona della finestra."""
         with suppress(Exception):
-            import os
             icon_path = Path(__file__).resolve().parent / "resources" / "icon.ico"
             if hasattr(sys, "_MEIPASS"):
                 icon_path = Path(sys._MEIPASS) / "resources" / "icon.ico"

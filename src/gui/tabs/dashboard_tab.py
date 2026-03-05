@@ -19,9 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme import COLORS, FONTS
-from gui.ui_factory import UIFactory, AnimatedButton
+from gui.ui_factory import AnimatedButton, UIFactory
 from gui.widgets.drop_frame import DropFrame
-from gui.animations import UIAnimations
 
 
 class DashboardTab(QWidget):

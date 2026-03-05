@@ -31,7 +31,7 @@ try:
 except ImportError:
     import fitz
 
-from gui.theme import COLORS, FONTS
+from gui.theme import FONTS
 from gui.ui_factory import AnimatedButton
 from gui.widgets.preview_view import PreviewGraphicsView
 from shared.constants import SESSION_FILE
@@ -286,9 +286,8 @@ class UnknownFilesReviewDialog(QDialog):
             del self.review_tasks[self.task_index]
             session_path = Path(SESSION_FILE)
             if self.review_tasks:
-                with suppress(Exception):
-                    with session_path.open("w", encoding="utf-8") as f:
-                        json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
+                with suppress(Exception), session_path.open("w", encoding="utf-8") as f:
+                    json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
             elif session_path.exists():
                 with suppress(Exception):
                     session_path.unlink()

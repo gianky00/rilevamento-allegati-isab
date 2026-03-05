@@ -19,7 +19,7 @@ def get_app_base_dir() -> str:
         if current.parent == current:
             break
         current = current.parent
-        
+
     return str(Path(__file__).resolve().parents[2])
 
 
@@ -37,7 +37,7 @@ def get_asset_path(filename: str) -> str:
     # Supporto per PyInstaller
     if hasattr(sys, "_MEIPASS"):
         return str(Path(sys._MEIPASS) / "assets" / filename)
-    
+
     base = Path(get_app_base_dir())
     return str(base / "assets" / filename)
 
@@ -46,6 +46,6 @@ def get_resource_path(filename: str) -> str:
     """Restituisce il percorso di una risorsa interna (es. icon.ico)."""
     if hasattr(sys, "_MEIPASS"):
         return str(Path(sys._MEIPASS) / "src" / "resources" / filename)
-        
+
     base = Path(get_app_base_dir())
     return str(base / "src" / "resources" / filename)

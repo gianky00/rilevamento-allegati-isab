@@ -3,6 +3,7 @@ Intelleo PDF Splitter - App Updater (PySide6)
 Gestisce il controllo e la notifica di aggiornamenti dell'applicazione.
 """
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -16,7 +17,6 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout
 
 import version
-import contextlib
 
 
 def check_for_updates(silent=True, on_confirm=None):
@@ -90,10 +90,10 @@ def check_for_updates(silent=True, on_confirm=None):
     except requests.Timeout:
         if not silent:
             pass
-    except requests.RequestException as e:
+    except requests.RequestException:
         if not silent:
             pass
-    except Exception as e:
+    except Exception:
         if not silent:
             pass
 

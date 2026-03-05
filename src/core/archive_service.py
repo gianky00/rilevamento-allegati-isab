@@ -16,7 +16,7 @@ class ArchiveService:
         """Sposta il file nella sottocartella ORIGINALI."""
         if not filepath:
             return None
-            
+
         src_path = Path(filepath)
         if not src_path.exists():
             return None

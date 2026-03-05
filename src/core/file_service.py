@@ -15,7 +15,7 @@ class FileService:
 
         if not path:
             return found_pdfs
-            
+
         p = Path(path)
         if not p.exists():
             return found_pdfs

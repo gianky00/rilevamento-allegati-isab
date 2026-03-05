@@ -3,10 +3,10 @@ Fabbrica per i componenti dell'interfaccia utente (SRP).
 Riduce il boilerplate in MainApp gestendo la creazione di layout complessi.
 """
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Property
+from PySide6.QtCore import Property, QPropertyAnimation, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QPushButton
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout
 
 from core.path_manager import get_asset_path
 from gui.theme import COLORS, FONTS
@@ -45,7 +45,7 @@ class AnimatedButton(QPushButton):
         super().leaveEvent(event)
 
     def animate_color(self, target_color_hex):
-        self._anim = QPropertyAnimation(self, b"backgroundColor")
+        self._anim = QPropertyAnimation(self, b"background_color")
         self._anim.setDuration(200)
         self._anim.setEndValue(QColor(target_color_hex))
         self._anim.start()
@@ -57,7 +57,7 @@ class AnimatedButton(QPushButton):
         self._bg_color = color
         self._update_style()
 
-    backgroundColor = Property(QColor, get_bg_color, set_bg_color)
+    background_color = Property(QColor, get_bg_color, set_bg_color)
 
 
 class UIFactory:
