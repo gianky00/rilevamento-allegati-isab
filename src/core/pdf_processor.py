@@ -43,9 +43,6 @@ def process_pdf(
         _log(f"🔍 Analisi Smart in parallelo...")
         page_groups = analyzer.analyze_pdf(pdf_path, progress_callback, cancel_check)
         
-        # DEBUG
-        print(f"DEBUG: page_groups={page_groups}")
-
         # 3. Divisione e Salvataggio
         doc = fitz.open(pdf_path)
         _log("💾 Salvataggio file divisi...")

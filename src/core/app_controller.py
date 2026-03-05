@@ -119,6 +119,10 @@ class AppController(QObject):
                 self.unknown_files_found.emit(unknown_files, odc)
             self.log_received.emit("ELABORAZIONE COMPLETATA", "HEADER")
 
+        # Configura timer per drenaggio log se non attivo
+        if not self._log_timer.isActive():
+            self._log_timer.start(100)
+
         self._current_worker = PdfProcessingWorker(
             self.log_queue, 
             list(self.pdf_files), 
@@ -141,7 +145,21 @@ class AppController(QObject):
             while not self.log_queue.empty():
                 item = self.log_queue.get_nowait()
                 if isinstance(item, tuple):
-                    self.log_received.emit(item[0], item[1])
+                    # Se è un dizionario di progresso impacchettato in una tupla (da AnalysisService)
+                    msg, level = item
+                    if isinstance(msg, dict) and msg.get("type") == "page_progress":
+                        current = msg.get("current", 0)
+                        total = msg.get("total", 0)
+                        phase = msg.get("phase", "scansione")
+                        pct = msg.get("phase_pct", 0)
+                        
+                        # Log granulare nel terminale per feedback immediato
+                        self.log_received.emit(f"  > Pagina {current}/{total} ({phase})", "PROGRESS")
+                        
+                        # Aggiorna anche la barra di progresso
+                        self.progress_updated.emit(pct, f"Analisi: {current}/{total}", msg.get("eta_seconds"))
+                    else:
+                        self.log_received.emit(str(msg), level)
                 elif isinstance(item, dict):
                     action = item.get("action")
                     if action == "update_progress":
@@ -150,7 +168,6 @@ class AppController(QObject):
                             str(item.get("text", "")),
                             item.get("eta_seconds")
                         )
-                    # Altre azioni possono essere aggiunte qui
         except queue.Empty:
             pass
 

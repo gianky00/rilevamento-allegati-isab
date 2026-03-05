@@ -69,6 +69,7 @@ try:
     from core.rule_service import RuleService
     from core.tesseract_manager import TesseractManager
     from core.app_controller import AppController
+    import roi_utility
 
     logger.info("Tutti i moduli importati con successo")
 except Exception as e:
@@ -103,6 +104,8 @@ class MainApp(QMainWindow):
         self._is_processing: bool = False
         self._pending_completion_data: Optional[Dict[str, Any]] = None
         self._is_initial_session_check: bool = True
+        self._roi_window: Optional[roi_utility.ROIDrawingApp] = None
+        self._remaining_eta: float = 0.0
 
         # Widget UI (Inizializzati dalle Tab)
         self.dashboard: Any = None
@@ -255,12 +258,22 @@ class MainApp(QMainWindow):
         """Aggiorna i widget di progresso durante l'elaborazione."""
         self._target_progress = value
         self.progress_label.setText(text)
+        
         if eta_seconds is not None:
-             m, s = divmod(int(eta_seconds), 60)
-             self.eta_label.setText(f"Tempo stimato: {m}m {s}s" if m > 0 else f"Tempo stimato: {s}s")
-             self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
+             # Imposta l'ETA rimanente che verrà scalata dal timer orologio
+             self._remaining_eta = float(eta_seconds)
+             self._refresh_eta_label()
         else:
              self.eta_label.setText("")
+
+    def _refresh_eta_label(self) -> None:
+        """Aggiorna graficamente la label dell'ETA basandosi sul valore interno."""
+        if self._remaining_eta > 0 and self._is_processing:
+            m, s = divmod(int(self._remaining_eta), 60)
+            self.eta_label.setText(f"Tempo stimato: {m}m {s}s" if m > 0 else f"Tempo stimato: {s}s")
+            self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
+        else:
+            self.eta_label.setText("")
 
     def setup_icon(self) -> None:
         """Configura l'icona della finestra."""
@@ -275,9 +288,15 @@ class MainApp(QMainWindow):
 
     # ======== DASHBOARD ========
     def _update_clock(self) -> None:
-        """Aggiorna l'orologio della dashboard."""
+        """Aggiorna l'orologio della dashboard e decrementa l'ETA se attivo."""
+        now = datetime.now()
         if hasattr(self, "dashboard"):
-            self.dashboard.clock_label.setText(datetime.now().strftime("%d %b %Y | %H:%M:%S"))
+            self.dashboard.clock_label.setText(now.strftime("%d %b %Y | %H:%M:%S"))
+            
+        # Gestione decremento ETA ogni secondo
+        if self._is_processing and self._remaining_eta > 0:
+            self._remaining_eta = max(0, self._remaining_eta - 1)
+            self._refresh_eta_label()
 
     def _quick_select_pdf(self) -> None:
         """Passa all'elaborazione e apre il selettore file."""
@@ -359,13 +378,17 @@ class MainApp(QMainWindow):
 
     def _smooth_progress_tick(self) -> None:
         """Aggiorna la barra di progresso con un'animazione fluida."""
-        if abs(self._current_progress - self._target_progress) > 0.05:
-            step = (self._target_progress - self._current_progress) * 0.2
-            self._current_progress += step
-            self.progress_bar.setValue(int(self._current_progress * 10))
-        elif self._current_progress != self._target_progress:
-            self._current_progress = self._target_progress
-            self.progress_bar.setValue(int(self._current_progress * 10))
+        # Se siamo già quasi al target, settiamo direttamente per evitare oscillazioni o rallentamenti
+        if abs(self._current_progress - self._target_progress) < 0.1:
+            if self._current_progress != self._target_progress:
+                self._current_progress = self._target_progress
+                self.progress_bar.setValue(int(self._current_progress * 10))
+            return
+
+        # Animazione più veloce (0.3 invece di 0.2)
+        step = (self._target_progress - self._current_progress) * 0.3
+        self._current_progress += step
+        self.progress_bar.setValue(int(self._current_progress * 10))
 
     def _finalize_processing(self) -> None:
         """Completa le operazioni post-elaborazione."""
@@ -426,6 +449,14 @@ class MainApp(QMainWindow):
             
         self.log_area.clear()
         self.processing_start_time = datetime.now()
+        
+        # Reset progress state
+        self._target_progress = 0.0
+        self._current_progress = 0.0
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("Inizializzazione...")
+        self.eta_label.setText("")
+        
         self.controller.start_processing(odc)
 
     def _stop_processing(self) -> None:
@@ -582,14 +613,21 @@ class MainApp(QMainWindow):
             self.rules_count_label.setText(str(len(self.controller.rule_service.get_rules())))
 
     def _launch_roi_utility(self) -> None:
-        """Avvia l'utility esterna per la definizione delle ROI."""
+        """Avvia o visualizza l'utility per la definizione delle ROI (Singleton)."""
         try:
-            if getattr(sys, "frozen", False):
-                subprocess.Popen([sys.executable, "--utility"])
+            # Se la finestra non esiste o è stata chiusa (distrutta), creala
+            if self._roi_window is None:
+                self._roi_window = roi_utility.ROIDrawingApp()
+                self._roi_window.show()
+                self._add_log_message("Utility ROI avviata", "SUCCESS")
             else:
-                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "roi_utility.py")
-                subprocess.Popen([sys.executable, script_path])
-            self._add_log_message("Utility ROI avviata", "SUCCESS")
+                # Se esiste, portala in primo piano
+                if self._roi_window.isHidden():
+                    self._roi_window.show()
+                self._roi_window.raise_()
+                self._roi_window.activateWindow()
+                self._add_log_message("Utility ROI già attiva, portata in primo piano", "INFO")
         except Exception as e:
+            logger.error(f"Errore durante l'avvio dell'utility ROI: {e}")
             QMessageBox.critical(self, "Errore", f"Impossibile avviare l'utility ROI:\n{e}")
 

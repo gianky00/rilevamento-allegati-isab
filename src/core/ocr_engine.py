@@ -14,6 +14,12 @@ class OcrEngine:
         """Inizializza il motore OCR e imposta il percorso dell'eseguibile Tesseract."""
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        
+        # Ottimizzazione: limita il numero di thread interni di Tesseract (OpenMP)
+        # Quando eseguiamo analisi in parallelo a livello di pagina, 
+        # Tesseract non deve cercare di usare tutti i core per ogni singola chiamata OCR.
+        os.environ["OMP_THREAD_LIMIT"] = "1"
+        os.environ["TESSDATA_PREFIX"] = os.path.dirname(tesseract_path) if tesseract_path else ""
 
     @staticmethod
     def get_binary(img: Image.Image) -> Image.Image:

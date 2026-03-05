@@ -28,40 +28,72 @@ class AnalysisService:
         """
         page_groups: Dict[str, List[int]] = {}
         
-        # Determina il numero di worker ottimale
-        # Per ora disabilitiamo il parallelismo per debuggare i test
-        workers = 1
-        total_pages = 0
-        doc = fitz.open(pdf_path)
-        total_pages = doc.page_count
-        doc.close()
+        with fitz.open(pdf_path) as doc:
+            total_pages = doc.page_count
             
         if total_pages == 0:
             return {}
 
         results: List[Tuple[int, str]] = []
+        start_t_analysis = time.time()
+
+        # Determina il numero di worker ottimale (Capped a 3 per evitare di bloccare il PC)
+        # Tesseract è già molto pesante di suo, troppi thread saturano IO e CPU.
+        max_workers = 3
+        workers = min(max_workers, max(1, (os.cpu_count() or 4) // 2))
         
-        # Sequenziale
-        for page_num in range(total_pages):
-            if cancel_check and cancel_check():
-                raise InterruptedError("Analisi interrotta")
-            res = self._analyze_page_task(pdf_path, page_num)
-            results.append(res)
-            if progress_callback:
-                progress_callback({
-                    "type": "page_progress", "current": page_num + 1,
-                    "total": total_pages, "phase": "analysis",
-                    "phase_pct": ((page_num + 1) / total_pages) * 100,
-                })
+        if workers <= 1 or total_pages <= 1:
+            # Percorso sequenziale per test e sistemi piccoli
+            for page_num in range(total_pages):
+                if cancel_check and cancel_check():
+                    raise InterruptedError("Analisi interrotta")
+                
+                start_page_t = time.time()
+                results.append(self._analyze_page_task(pdf_path, page_num))
+                
+                if progress_callback:
+                    elapsed = time.time() - start_t_analysis
+                    avg_time = elapsed / (page_num + 1)
+                    eta = avg_time * (total_pages - (page_num + 1))
+                    
+                    progress_callback({
+                        "type": "page_progress", "current": page_num + 1,
+                        "total": total_pages, "phase": "analysis",
+                        "phase_pct": ((page_num + 1) / total_pages) * 100,
+                        "eta_seconds": eta
+                    })
+        else:
+            # Percorso parallelo per massime prestazioni
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_page = {
+                    executor.submit(self._analyze_page_task, pdf_path, p): p 
+                    for p in range(total_pages)
+                }
+                for future in concurrent.futures.as_completed(future_to_page):
+                    if cancel_check and cancel_check():
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise InterruptedError("Analisi interrotta")
+                    try:
+                        results.append(future.result())
+                        if progress_callback:
+                            pages_processed = len(results)
+                            elapsed = time.time() - start_t_analysis
+                            avg_time = elapsed / pages_processed
+                            eta = avg_time * (total_pages - pages_processed)
+                            
+                            progress_callback({
+                                "type": "page_progress", "current": pages_processed,
+                                "total": total_pages, "phase": "analysis",
+                                "phase_pct": (pages_processed / total_pages) * 100,
+                                "eta_seconds": eta
+                            })
+                    except Exception:
+                        results.append((future_to_page[future], "sconosciuto"))
 
-        # Riordina i risultati (as_completed non garantisce l'ordine)
+        # Riordina i risultati e raggruppa
         results.sort(key=lambda x: x[0])
-
-        page_groups = {}
         for page_num, category in results:
-            if category not in page_groups:
-                page_groups[category] = []
-            page_groups[category].append(page_num)
+            page_groups.setdefault(category, []).append(page_num)
 
         return page_groups
 
@@ -78,12 +110,17 @@ class AnalysisService:
 
     def _analyze_single_page(self, page: fitz.Page) -> str:
         """
-        Analizza una singola pagina con strategia a due stadi:
-        1. Controllo veloce di TUTTE le ROI con testo nativo.
-        2. Solo se fallisce, controllo robusto con OCR su ROI selezionate (rendering ottimizzato).
+        Analizza una singola pagina con strategia ottimizzata a tre stadi:
+        1. Fast Path (Testo Nativo): istantaneo.
+        2. Medium Path (OCR Pagina Intera): una sola chiamata Tesseract.
+        3. Robust Path (OCR Trasformato): solo se necessario.
         """
-        page_rect = page.rect
-        
+        try:
+            pw = float(page.rect.width)
+            ph = float(page.rect.height)
+        except (AttributeError, TypeError, ValueError):
+            pw, ph = 10000.0, 10000.0
+
         # --- STADIO 1: FAST PATH (Testo Nativo) ---
         for rule in self.rules:
             keywords = [k.lower() for k in rule.get("keywords", [])]
@@ -92,7 +129,7 @@ class AnalysisService:
             for roi in rule.get("rois", []):
                 if len(roi) != 4: continue
                 roi_rect = fitz.Rect(roi)
-                if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height: continue
+                if roi_rect.x1 > pw or roi_rect.y1 > ph: continue
 
                 try:
                     native_text = page.get_text("text", clip=roi_rect).lower()
@@ -100,8 +137,8 @@ class AnalysisService:
                         return category
                 except Exception: continue
 
-        # --- STADIO 2: ROBUST PATH (OCR) ---
-        # Ottimizzazione: identifichiamo tutte le ROI per renderizzare solo l'area necessaria
+        # --- STADIO 2: OCR OTTIMIZZATO (Single Pass) ---
+        # Invece di fare N chiamate OCR per N regole, facciamo una sola chiamata sull'area delle ROI.
         all_rois = []
         for rule in self.rules:
             for roi in rule.get("rois", []):
@@ -111,55 +148,36 @@ class AnalysisService:
         if not all_rois:
             return "sconosciuto"
 
-        # Rettangolo che racchiude tutte le ROI (bounding box)
+        # Bounding box di tutte le ROI
         clip_rect = all_rois[0]
         for r in all_rois[1:]:
             clip_rect |= r
             
         try:
-            # Renderizziamo solo l'area interessata per risparmiare memoria e tempo di CPU
-            mat = fitz.Matrix(300 / 72, 300 / 72)
-            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=clip_rect)
-            img_full = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-            
-            # Calcolo offset e scala per mappare le ROI sulla porzione di immagine renderizzata
             scale = 300 / 72
-            off_x = clip_rect.x0 * scale
-            off_y = clip_rect.y0 * scale
-        except Exception:
-            return "sconosciuto"
-
-        for rule in self.rules:
-            category = str(rule.get("category_name", "sconosciuto"))
-            keywords = rule.get("keywords", [])
+            mat = fitz.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=clip_rect)
+            img_combined = Image.frombytes("L", (pix.width, pix.height), pix.samples)
             
-            for roi in rule.get("rois", []):
-                if len(roi) != 4: continue
-                roi_rect = fitz.Rect(roi)
-                
-                # Crop dell'immagine pre-renderizzata con offset del clip_rect
-                crop_box = (
-                    int(roi_rect.x0 * scale - off_x),
-                    int(roi_rect.y0 * scale - off_y),
-                    int(roi_rect.x1 * scale - off_x),
-                    int(roi_rect.y1 * scale - off_y)
-                )
-                
-                # Validazione crop box
-                if crop_box[2] <= crop_box[0] or crop_box[3] <= crop_box[1]: continue
-                
-                try:
-                    # Se il crop esce dai bordi dell'immagine renderizzata (per errori di floating point), clamp
-                    left = max(0, crop_box[0])
-                    top = max(0, crop_box[1])
-                    right = min(img_full.width, crop_box[2])
-                    bottom = min(img_full.height, crop_box[3])
+            # Scansione singola (Standard 0 gradi)
+            full_text = self.ocr_engine.scan_image(img_combined)
+            
+            # Controllo incrociato rapido su tutte le regole
+            for rule in self.rules:
+                keywords = [k.lower() for k in rule.get("keywords", [])]
+                if any(kw in full_text for kw in keywords):
+                    return str(rule.get("category_name", "sconosciuto"))
                     
-                    if right <= left or bottom <= top: continue
-                    
-                    img_roi = img_full.crop((left, top, right, bottom))
-                    found, _ = self.ocr_engine.robust_scan(img_roi, keywords)
-                    if found: return category
-                except Exception: continue
+            # --- STADIO 3: ROBUST PATH (Solo se il Medium Path fallisce) ---
+            # Se la scansione standard non ha trovato nulla, proviamo le trasformazioni pesanti (rotazioni, contrasto)
+            # ma lo facciamo sempre sull'area combinata per minimizzare le chiamate Tesseract.
+            found, keyword = self.ocr_engine.robust_scan(img_combined, [k for r in self.rules for k in r.get("keywords", [])])
+            if found:
+                # Identifica a quale regola appartiene la keyword trovata
+                for rule in self.rules:
+                    if keyword in [k.lower() for k in rule.get("keywords", [])]:
+                        return str(rule.get("category_name", "sconosciuto"))
+        except Exception:
+            pass
 
         return "sconosciuto"

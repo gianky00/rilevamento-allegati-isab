@@ -81,11 +81,16 @@ class PdfProcessingWorker:
                     eta = data.get("eta_seconds", 0)
                     phase_pct = data.get("phase_pct", 0)
                     phase = data.get("phase", "analysis")
+                    
+                    # Log granulare per feedback immediato
+                    self.log_queue.put((f"  > Pagina {current_page}/{total_p} ({phase})", "PROGRESS"))
+                    
                     file_internal_progress = phase_pct if phase_pct > 0 else (current_page / total_p) * 100
                     base_pct = (current_idx / total) * 100
                     combined = base_pct + (file_internal_progress * (1.0 / total))
                     status_text = f"File {current_idx + 1}/{total}"
                     status_text += " - Salvataggio..." if phase == "saving" else f" - Analisi {current_page}/{total_p}"
+                    
                     self.log_queue.put(
                         {"action": "update_progress", "value": combined, "text": status_text, "eta_seconds": eta}
                     )

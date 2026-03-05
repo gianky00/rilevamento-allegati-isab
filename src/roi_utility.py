@@ -79,6 +79,7 @@ class ROIDrawingApp(QMainWindow):
         self._pixmap_item: Optional[QGraphicsPixmapItem] = None
         self.delete_mode = False
         self.roi_item_map: Dict[Any, Dict[str, int]] = {}
+        self._filter_category: Optional[str] = None
 
         self._setup_ui()
         self._setup_shortcuts()
@@ -200,6 +201,7 @@ class ROIDrawingApp(QMainWindow):
 
         self.rules_listbox = QListWidget()
         self.rules_listbox.setFont(FONTS["body"])
+        self.rules_listbox.itemDoubleClicked.connect(self._on_rule_double_clicked)
         self.rules_listbox.setStyleSheet(f"""
             QListWidget {{
                 background-color: {COLORS["bg_secondary"]};
@@ -296,7 +298,36 @@ class ROIDrawingApp(QMainWindow):
         for rule in self.controller.get_rules():
             name = rule.get("category_name", "N/A")
             roi_count = len(rule.get("rois", []))
-            self.rules_listbox.addItem(f"  {name} ({roi_count} ROI)")
+            item_text = f"  {name} ({roi_count} ROI)"
+            
+            from PySide6.QtWidgets import QListWidgetItem
+            item = QListWidgetItem(item_text)
+            
+            # Evidenzia se filtrata
+            if self._filter_category == name:
+                item.setBackground(QColor(COLORS["accent"]))
+                item.setForeground(QColor("white"))
+                item.setText(f"👁 {name} ({roi_count} ROI) [FILTRO ATTIVO]")
+            
+            self.rules_listbox.addItem(item)
+
+    def _on_rule_double_clicked(self, item: Any) -> None:
+        """Gestisce il doppio click su una regola per attivare/disattivare il filtro."""
+        text = item.text()
+        # Estrai il nome della categoria (gestendo il prefisso 👁 e il suffisso [FILTRO...])
+        clean_name = text.replace("👁 ", "").split(" (")[0].strip()
+        
+        if self._filter_category == clean_name:
+            # Rimuove filtro
+            self._filter_category = None
+            self.status_bar.setText("[INFO] Filtro rimosso. Visualizzazione di tutte le ROI.")
+        else:
+            # Applica filtro
+            self._filter_category = clean_name
+            self.status_bar.setText(f"[INFO] Filtro attivato: visualizzazione esclusiva per '{clean_name}'")
+            
+        self._update_rules_list()
+        self.draw_existing_rois()
 
     def toggle_delete_mode(self, checked: bool) -> None:
         """Attiva/disattiva la modalità cancellazione."""
@@ -335,7 +366,7 @@ class ROIDrawingApp(QMainWindow):
         self.controller.render_current_page()
 
     def draw_existing_rois(self) -> None:
-        """Disegna le ROI esistenti delegando al renderer."""
+        """Disegna le ROI esistenti delegando al renderer, rispettando eventuali filtri."""
         scene = self.canvas.scene_ref
         
         # Pulizia item ROI precedenti
@@ -348,6 +379,11 @@ class ROIDrawingApp(QMainWindow):
         
         for rule_index, rule in enumerate(self.controller.get_rules()):
             category_name = rule.get("category_name", "N/A")
+            
+            # Applica filtro se attivo
+            if self._filter_category and self._filter_category != category_name:
+                continue
+
             color_hex = rule.get("color", "#FF0000")
 
             for roi_index, roi in enumerate(rule.get("rois", [])):
