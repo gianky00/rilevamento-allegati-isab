@@ -19,7 +19,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(os.path.join(ROOT_DIR, "src"))
 import version
 
-ENTRY_SCRIPT = "src/main.py"
+ENTRY_SCRIPT = "src/app_launcher.py"
 APP_NAME = "Intelleo PDF Splitter"
 APP_VERSION = version.__version__
 DIST_DIR = os.path.join(ROOT_DIR, "dist")
@@ -146,37 +146,18 @@ def build():
 
         os.makedirs(OBF_DIR, exist_ok=True)
 
-        log_and_print("\n--- Step 3/7: Obfuscating with PyArmor ---")
+        log_and_print("\n--- Step 3/7: Obfuscating Entire SRC recursively with PyArmor ---")
 
-        # Files to obfuscate
-        target_files = [
-            os.path.join(ROOT_DIR, "src", "main.py"),
-            os.path.join(ROOT_DIR, "src", "app_logger.py"),
-            os.path.join(ROOT_DIR, "src", "pdf_processor.py"),
-            os.path.join(ROOT_DIR, "src", "config_manager.py"),
-            os.path.join(ROOT_DIR, "src", "roi_utility.py"),
-            os.path.join(ROOT_DIR, "src", "license_validator.py"),
-            os.path.join(ROOT_DIR, "src", "license_updater.py"),
-            os.path.join(ROOT_DIR, "src", "app_updater.py"),
-            os.path.join(ROOT_DIR, "src", "version.py"),
-            os.path.join(ROOT_DIR, "src", "notification_manager.py")
-        ]
-
-        # Check if files exist
-        valid_targets = [f for f in target_files if os.path.exists(f)]
-        
-        # Log which files will be obfuscated
-        log_and_print(f"Files to obfuscate: {len(valid_targets)}")
-        for f in valid_targets:
-            log_and_print(f"  - {os.path.basename(f)}")
-
+        # Obfuscate the entire src directory recursively
+        # Run from 'src' to avoid 'src/' prefix in OBF_DIR
         cmd_pyarmor = [
             sys.executable, "-m", "pyarmor.cli", "gen",
-            "-O", OBF_DIR,
+            "-r",                  # RECURSIVE
+            "-O", OBF_DIR,         # OUTPUT DIR
+            "."                    # SOURCE
         ]
-        cmd_pyarmor.extend(valid_targets)
 
-        run_command(cmd_pyarmor)
+        run_command(cmd_pyarmor, cwd=os.path.join(ROOT_DIR, "src"))
 
         log_and_print("\n--- Step 4/7: Preparing Assets for Packaging ---")
 
@@ -219,7 +200,8 @@ def build():
             f"--workpath={os.path.join(DIST_DIR, 'build')}",
             f"--paths={OBF_DIR}", # Look for modules in OBF_DIR
             "--onedir",
-            "--collect-all=tkinterdnd2", # Buono, ma l'hook è più robusto
+            "--collect-all=PySide6",
+            "--collect-all=pymupdf",
             f"--additional-hooks-dir={os.path.abspath(os.path.join(os.path.dirname(__file__), 'hooks'))}",
             "--uac-admin" # FORCE ADMIN PRIVILEGES (UAC)
         ]
@@ -240,30 +222,58 @@ def build():
         # because PyInstaller cannot analyze imports inside obfuscated code.
         hidden_imports = [
             "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet",
-            "numpy", "tkinterdnd2", "requests", "logging", "traceback",
-            # Standard library modules (missed due to obfuscation)
-            "uuid",
-            "platform",
-            "hashlib",
-            "shutil",
-            # Tkinter submodules (often missed in obfuscated/frozen builds)
-            "tkinter",
-            "tkinter.ttk",
-            "tkinter.filedialog",
-            "tkinter.messagebox",
-            "tkinter.scrolledtext",
-            "tkinter.colorchooser",
-            "tkinter.simpledialog",
-            # Local modules
-            "app_logger",
-            "config_manager",
-            "pdf_processor",
-            "roi_utility",
-            "license_validator",
-            "license_updater",
-            "app_updater",
-            "version",
-            "notification_manager",
+            "numpy", "requests", "logging", "traceback", "uuid", "platform", "hashlib", "shutil", "json", "datetime", "queue", "threading", "subprocess",
+            
+            # PySide6
+            "PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtSvgWidgets",
+            "pymupdf",
+
+            # Top level modules
+            "main", "app_launcher", "app_logger", "config_manager", "roi_utility", "license_validator", "license_updater", "app_updater", "version",
+
+            # Core package
+            "core",
+            "core.analysis_service",
+            "core.app_controller",
+            "core.archive_service",
+            "core.classifier",
+            "core.file_service",
+            "core.notification_manager",
+            "core.ocr_engine",
+            "core.path_manager",
+            "core.pdf_manager",
+            "core.pdf_processor",
+            "core.pdf_splitter",
+            "core.processing_worker",
+            "core.roi_controller",
+            "core.roi_manager",
+            "core.rule_service",
+            "core.session_manager",
+            "core.tesseract_manager",
+
+            # GUI package
+            "gui",
+            "gui.theme",
+            "gui.ui_factory",
+            "gui.dialogs",
+            "gui.dialogs.roi_selector_dialog",
+            "gui.dialogs.rule_editor",
+            "gui.dialogs.unknown_review",
+            "gui.tabs",
+            "gui.tabs.config_tab",
+            "gui.tabs.dashboard_tab",
+            "gui.tabs.help_tab",
+            "gui.tabs.processing_tab",
+            "gui.widgets",
+            "gui.widgets.drop_frame",
+            "gui.widgets.pdf_graphics_view",
+            "gui.widgets.preview_view",
+            "gui.widgets.roi_renderer",
+
+            # Shared package
+            "shared",
+            "shared.constants",
+
             # PyArmor runtime
             runtime_dir
         ]
@@ -271,17 +281,19 @@ def build():
         for mod in hidden_imports:
             cmd_pyinstaller.append(f"--hidden-import={mod}")
 
-        # Entry point (the obfuscated main.py) - ENTRY_SCRIPT is src/main.py
-        # OBF_DIR contains the flat structure or structure matching source?
-        # PyArmor gen -O OBF_DIR src/main.py -> creates OBF_DIR/src/main.py if recursion is on, or flat?
-        # PyArmor gen -O obf file.py -> obf/file.py.
-        # We passed full paths to files.
-        # If we passed "src/main.py", pyarmor might replicate structure?
-        # Let's assume flat for now or check pyarmor behavior.
-        # Actually, we passed valid_targets which are absolute paths.
-        # PyArmor usually outputs flat unless recursive.
-        # We will point to OBF_DIR/main.py assuming flat output.
-        cmd_pyinstaller.append(os.path.join(OBF_DIR, "main.py"))
+        # Entry point: use the obfuscated app_launcher.py
+        # Check if it's in OBF_DIR/app_launcher.py or OBF_DIR/src/app_launcher.py
+        entry_point = os.path.join(OBF_DIR, "app_launcher.py")
+        if not os.path.exists(entry_point):
+            entry_point = os.path.join(OBF_DIR, "src", "app_launcher.py")
+            # If it's in src/, we need to add OBF_DIR/src to paths
+            if os.path.exists(entry_point):
+                cmd_pyinstaller.append(f"--paths={os.path.join(OBF_DIR, 'src')}")
+            else:
+                log_and_print(f"ERROR: Could not find obfuscated entry point app_launcher.py in {OBF_DIR}", "ERROR")
+                sys.exit(1)
+
+        cmd_pyinstaller.append(entry_point)
 
         # Add PYTHONPATH to include OBF_DIR
         env = os.environ.copy()

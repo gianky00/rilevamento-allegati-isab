@@ -23,7 +23,7 @@ if not exist "%VENV_DIR%\Scripts\activate.bat" (
 call "%VENV_DIR%\Scripts\activate.bat"
 
 echo Updating dependencies...
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r src/requirements.txt
 if %errorlevel% neq 0 (
     echo Error installing dependencies!

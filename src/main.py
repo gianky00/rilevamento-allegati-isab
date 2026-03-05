@@ -114,8 +114,10 @@ class MainApp(QMainWindow):
         self.help_panel: Any = None
         self.license_status_label: QLabel
         self.license_fields: Dict[str, QLabel] = {}
-        self.files_count_label: QLabel
-        self.pages_count_label: QLabel
+        self.files_count_sess_label: QLabel
+        self.files_count_tot_label: QLabel
+        self.pages_count_sess_label: QLabel
+        self.pages_count_tot_label: QLabel
         self.rules_count_label: QLabel
         self.recent_log: QTextEdit
         self.log_area: QTextEdit
@@ -150,23 +152,23 @@ class MainApp(QMainWindow):
 
         self.notebook = QTabWidget()
         main_layout.addWidget(self.notebook)
-        
+
         # —————— Tab Initialization ——————
         self.dashboard = DashboardTab(None, self)
         self.processing = ProcessingTab(None, self)
         self.config_panel = ConfigTab(None, self)
         self.help_panel = HelpTab(None, self)
-        
+
         self.dashboard_tab = self.dashboard
         self.processing_tab = self.processing
         self.config_tab = self.config_panel
         self.help_tab = self.help_panel
-        
+
         self.notebook.addTab(self.dashboard, "Dashboard")
         self.notebook.addTab(self.processing, "Elaborazione")
         self.notebook.addTab(self.config_panel, "Configurazione")
         self.notebook.addTab(self.help_panel, "Guida")
-        
+
         # —————— Final Initialization ——————
         self.load_settings()
         self._display_license_info()
@@ -210,10 +212,15 @@ class MainApp(QMainWindow):
 
     def _on_stats_updated(self, session_docs: int, session_pages: int, global_docs: int, global_pages: int) -> None:
         """Aggiorna le card statistiche nella dashboard con valori di sessione e globali."""
-        if hasattr(self, "files_count_label"):
-            self.files_count_label.setText(f"{session_docs} / {global_docs}")
-        if hasattr(self, "pages_count_label"):
-            self.pages_count_label.setText(f"{session_pages} / {global_pages}")
+        if hasattr(self, "files_count_sess_label"):
+            self.files_count_sess_label.setText(str(session_docs))
+        if hasattr(self, "files_count_tot_label"):
+            self.files_count_tot_label.setText(str(global_docs))
+            
+        if hasattr(self, "pages_count_sess_label"):
+            self.pages_count_sess_label.setText(str(session_pages))
+        if hasattr(self, "pages_count_tot_label"):
+            self.pages_count_tot_label.setText(str(global_pages))
 
     def _on_rules_updated(self) -> None:
         """Aggiorna l'interfaccia utente quando le regole di classificazione cambiano."""
@@ -268,16 +275,31 @@ class MainApp(QMainWindow):
         self.progress_label.setText(text)
         
         if eta_seconds is not None:
-             # Imposta l'ETA rimanente che verrà scalata dal timer orologio
-             self._remaining_eta = float(eta_seconds)
+             new_eta = float(eta_seconds)
+             
+             # Se siamo nelle fasi finali ma ancora in elaborazione, garantiamo un minimo di 1s
+             if self._target_progress > 90.0 and new_eta < 1.0 and self._is_processing:
+                 new_eta = 1.0
+
+             # Smoothing asimmetrico: molto lento a salire, reattivo a scendere
+             if self._remaining_eta <= 0 or self._current_progress <= 1.0:
+                 self._remaining_eta = new_eta
+             else:
+                 if new_eta > self._remaining_eta:
+                     # Sale molto lentamente (pesa solo il 5% il nuovo valore)
+                     self._remaining_eta = (0.05 * new_eta) + (0.95 * self._remaining_eta)
+                 else:
+                     # Scende normalmente (pesa il 20%)
+                     self._remaining_eta = (0.2 * new_eta) + (0.80 * self._remaining_eta)
+             
              self._refresh_eta_label()
-        else:
-             self.eta_label.setText("")
 
     def _refresh_eta_label(self) -> None:
         """Aggiorna graficamente la label dell'ETA basandosi sul valore interno."""
-        if self._remaining_eta > 0 and self._is_processing:
-            m, s = divmod(int(self._remaining_eta), 60)
+        if self._is_processing:
+            # Garantiamo che il tempo sia almeno 1s finché non finisce
+            display_eta = max(1, int(self._remaining_eta))
+            m, s = divmod(display_eta, 60)
             self.eta_label.setText(f"Tempo stimato: {m}m {s}s" if m > 0 else f"Tempo stimato: {s}s")
             self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
         else:
@@ -412,7 +434,9 @@ class MainApp(QMainWindow):
         """Completa le operazioni post-elaborazione."""
         self._is_processing = False
         self._current_progress = 100.0
+        self._remaining_eta = 0.0
         self.progress_bar.setValue(1000)
+        self._refresh_eta_label()
 
     def _spinner_tick(self) -> None:
         """Aggiorna lo spinner di caricamento."""
@@ -443,6 +467,9 @@ class MainApp(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._restore_session()
+            else:
+                logger.info("Utente ha rifiutato il ripristino sessione. Pulizia in corso...")
+                self.controller.clear_session()
         elif self._is_initial_session_check:
             self._is_initial_session_check = False
 
@@ -636,12 +663,12 @@ class MainApp(QMainWindow):
             # Se la finestra non esiste o è stata chiusa (distrutta), creala
             if self._roi_window is None:
                 self._roi_window = roi_utility.ROIDrawingApp()
-                self._roi_window.show()
+                self._roi_window.showMaximized()
                 self._add_log_message("Utility ROI avviata", "SUCCESS")
             else:
                 # Se esiste, portala in primo piano
                 if self._roi_window.isHidden():
-                    self._roi_window.show()
+                    self._roi_window.showMaximized()
                 self._roi_window.raise_()
                 self._roi_window.activateWindow()
                 self._add_log_message("Utility ROI già attiva, portata in primo piano", "INFO")

@@ -8,6 +8,7 @@ import logging
 import os
 
 from typing import Any, Dict, List, Optional
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -44,8 +45,12 @@ class UnknownFilesReviewDialog(QDialog):
     def __init__(self, parent: Any, review_tasks: List[Dict[str, Any]], on_finish: Optional[Any] = None, odc: Optional[str] = None, on_close_callback: Optional[Any] = None) -> None:
         """Inizializza il dialog per la revisione manuale dei documenti non classificati."""
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowMinimizeButtonHint)
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
-        self.showMaximized()
+        
+        # Posticipa la massimizzazione al caricamento completato
+        import PySide6.QtCore as QtCore
+        QtCore.QTimer.singleShot(0, self.showMaximized)
         self.review_tasks = review_tasks
         self.on_finish = on_finish
         self.odc = odc
@@ -105,6 +110,14 @@ class UnknownFilesReviewDialog(QDialog):
 
     def load_task(self, index: int) -> None:
         """Carica il documento PDF corrispondente all'indice della lista dei task."""
+        # Rilascia sempre il documento precedente prima di caricare il nuovo o chiudere
+        if self.current_doc:
+            try:
+                self.current_doc.close()
+            except Exception:
+                pass
+            self.current_doc = None
+
         if index >= len(self.review_tasks):
             QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
             if os.path.exists(SESSION_FILE):
@@ -118,11 +131,6 @@ class UnknownFilesReviewDialog(QDialog):
         self.task_index = index
         self.task = self.review_tasks[index]
         self.current_doc_path = self.task["unknown_path"]
-
-        if self.current_doc:
-            with contextlib.suppress(Exception):
-                self.current_doc.close()
-            self.current_doc = None
 
         try:
             self.current_doc = fitz.open(self.current_doc_path)
@@ -182,7 +190,7 @@ class UnknownFilesReviewDialog(QDialog):
 
         grid = QGridLayout()
         grid.addWidget(QLabel("Codice ODC:"), 0, 0)
-        odc_entry = QLineEdit()
+        odc_entry = QLineEdit(self.odc or "")
         odc_entry.setFocus()
         grid.addWidget(odc_entry, 0, 1)
         grid.addWidget(QLabel("Suffisso:"), 1, 0)

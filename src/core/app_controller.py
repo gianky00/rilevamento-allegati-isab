@@ -61,7 +61,7 @@ class AppController(QObject):
             self.config = config_manager.load_config()
             self.rule_service = RuleService(self.config)
             self.rules_updated.emit()
-            self.session_status_changed.emit(SessionManager.has_session())
+            # session_status_changed NON deve essere emesso qui per evitare dialog blocchi durante init
             self.emit_stats()
         except Exception as e:
             logger.error(f"Errore caricamento settings: {e}")

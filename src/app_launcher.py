@@ -6,13 +6,21 @@ import sys
 import os
 import logging
 from datetime import datetime
-from PySide6.QtWidgets import QApplication, QMessageBox
 
-# Importazioni locali
-import app_logger
-import version
-import license_updater
-import license_validator
+# Gestione crash precoci prima dell'inizializzazione del logger
+try:
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    # Importazioni locali
+    import app_logger
+    import version
+    import license_updater
+    import license_validator
+except Exception as e:
+    with open("crash_startup.txt", "w") as f:
+        f.write(f"CRITICAL ERROR DURING EARLY IMPORT: {e}\n")
+        import traceback
+        f.write(traceback.format_exc())
+    sys.exit(1)
 
 # Inizializza log prima di caricare MainApp (che dipende dal logger)
 LOG_PATH = app_logger.initialize()

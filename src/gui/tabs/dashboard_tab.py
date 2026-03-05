@@ -43,38 +43,18 @@ class DashboardTab(QWidget):
 
         # Stat cards
         cards = QHBoxLayout()
-        card_analizzati, self.main_app.files_count_label = UIFactory.create_stat_card("DOC ANALIZZATI", "0 / 0")
-        card_pagine, self.main_app.pages_count_label = UIFactory.create_stat_card("PAGINE TOTALI", "0 / 0")
+        cards.setSpacing(15)
+        
+        # CARD 1: DOC E PAGINE (COMBINATA)
+        card_stats, self.main_app.files_count_sess_label, self.main_app.files_count_tot_label, \
+        self.main_app.pages_count_sess_label, self.main_app.pages_count_tot_label = UIFactory.create_combined_stat_card("VOLUME ELABORAZIONE")
+        
+        # CARD 2: REGOLE ATTIVE
         card_regole, self.main_app.rules_count_label = UIFactory.create_stat_card("REGOLE ATTIVE", "0")
         
-        cards.addWidget(card_analizzati, 1)
-        cards.addWidget(card_pagine, 1)
-        cards.addWidget(card_regole, 1)
-        layout.addLayout(cards)
-
-        # Middle: License + Actions
-        middle = QHBoxLayout()
-
-        # License panel (Compact Version)
-        lic_group = QGroupBox(" STATO LICENZA E INFORMAZIONI ")
-        lic_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; border: 1px solid {COLORS['border']}; border-radius: 6px; margin-top: 10px; }}")
-        lic_layout = QVBoxLayout(lic_group)
-        lic_layout.setContentsMargins(15, 15, 15, 10)
-        lic_layout.setSpacing(4)
+        # CARD 3: LICENZA E INFO
+        card_licenza, self.main_app.license_status_label, lic_content_layout = UIFactory.create_license_card("STATO LICENZA E INFO")
         
-        # Stato Licenza Primario
-        self.main_app.license_status_label = QLabel("Verificando...")
-        from PySide6.QtGui import QFont
-        self.main_app.license_status_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        self.main_app.license_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_app.license_status_label.setStyleSheet(f"color: {COLORS['text_muted']}; border: none; padding-bottom: 8px;")
-        lic_layout.addWidget(self.main_app.license_status_label)
-        
-        sep_line = QFrame()
-        sep_line.setFrameShape(QFrame.Shape.HLine)
-        sep_line.setStyleSheet(f"border-top: 1px solid {COLORS['border']}; margin-bottom: 5px;")
-        lic_layout.addWidget(sep_line)
-
         self.main_app.license_fields = {}
         fields = [
             ("UTENTE", "cliente", "user.svg"),
@@ -85,15 +65,23 @@ class DashboardTab(QWidget):
         for label, key, icon in fields:
             row, v_lab = UIFactory.create_compact_info_row(label, icon)
             self.main_app.license_fields[key] = v_lab
-            lic_layout.addWidget(row)
-        
-        
-        lic_layout.addStretch()
-        middle.addWidget(lic_group, 2)
+            lic_content_layout.addWidget(row)
+
+        cards.addWidget(card_stats, 3)
+        cards.addWidget(card_regole, 2)
+        cards.addWidget(card_licenza, 4)
+        layout.addLayout(cards)
+
+        # Middle: Actions only now
+        middle = QHBoxLayout()
 
         # Actions
         actions_group = QGroupBox(" COMANDI RAPIDI ")
-        act_layout = QVBoxLayout(actions_group)
+        actions_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; border: 1px solid {COLORS['border']}; border-radius: 6px; margin-top: 10px; }}")
+        act_layout = QHBoxLayout(actions_group) # Horizontal for better space usage
+        act_layout.setContentsMargins(15, 15, 15, 15)
+        act_layout.setSpacing(10)
+
         self.main_app.dashboard_start_btn = QPushButton("NUOVA ANALISI")
         self.main_app.dashboard_start_btn.setFont(FONTS["body_bold"])
         self.main_app.dashboard_start_btn.setStyleSheet(f"background-color: {COLORS['accent']}; color: white;")
@@ -108,18 +96,13 @@ class DashboardTab(QWidget):
         btn_roi.clicked.connect(self.main_app._launch_roi_utility)
         act_layout.addWidget(btn_roi)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        act_layout.addWidget(sep)
-
         self.main_app.restore_btn = QPushButton("RECUPERO SESSIONE")
         self.main_app.restore_btn.setEnabled(False)
         self.main_app.restore_btn.clicked.connect(self.main_app._restore_session)
         act_layout.addWidget(self.main_app.restore_btn)
-        act_layout.addStretch()
         
-        middle.addWidget(actions_group, 1)
-        layout.addLayout(middle, 1)
+        middle.addWidget(actions_group)
+        layout.addLayout(middle)
 
         # Activity log
         log_group = QGroupBox(" TERMINALE ATTIVITÀ ")

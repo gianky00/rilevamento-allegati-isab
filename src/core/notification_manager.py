@@ -221,37 +221,77 @@ class NotificationManager:
             self.bell_count_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
 
     def show_history(self, event=None):
-        """Reset del contatore notifiche e mostra la cronologia all'utente."""
+        """Reset del contatore notifiche e mostra la cronologia all'utente in un popup interno."""
         self.unread_count = 0
         self._update_bell()
         
         if not hasattr(self, "history") or not self.history:
-            # Import differito per evitare circular imports o rallentamenti
-            from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(self.parent, "Notifiche", "Nessuna notifica ricevuta.")
             return
             
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton
-        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QFrame
+        from PySide6.QtGui import QFont, QColor
+        from PySide6.QtCore import Qt
         
-        dlg = QDialog(self.parent)
-        dlg.setWindowTitle("Centro Notifiche")
-        dlg.resize(400, 300)
-        
-        layout = QVBoxLayout(dlg)
-        list_widget = QListWidget()
-        list_widget.setFont(QFont("Segoe UI", 10))
-        
-        # Mostriamo le notifiche in ordine inverso (le più recenti prima)
+        # Crea il popup se non esiste
+        if not hasattr(self, "_history_popup") or self._history_popup is None:
+            self._history_popup = QFrame(self.parent, Qt.WindowType.Popup)
+            self._history_popup.setFixedWidth(350)
+            self._history_popup.setMinimumHeight(200)
+            self._history_popup.setMaximumHeight(400)
+            self._history_popup.setStyleSheet("""
+                QFrame {
+                    background-color: #2D2D30;
+                    border: 1px solid #444444;
+                    border-radius: 6px;
+                }
+                QListWidget {
+                    background-color: #2D2D30;
+                    border: none;
+                    color: #E0E0E0;
+                    outline: none;
+                }
+                QListWidget::item {
+                    border-bottom: 1px solid #333333;
+                    padding: 8px;
+                }
+                QListWidget::item:hover {
+                    background-color: #3E3E42;
+                }
+            """)
+            
+            layout = QVBoxLayout(self._history_popup)
+            layout.setContentsMargins(5, 5, 5, 5)
+            layout.setSpacing(0)
+            
+            # Label intestazione
+            from PySide6.QtWidgets import QLabel
+            header = QLabel(" Centro Notifiche ")
+            header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            header.setStyleSheet("color: #0d6efd; padding: 5px; border-bottom: 1px solid #444444;")
+            layout.addWidget(header)
+            
+            self._history_list = QListWidget()
+            self._history_list.setFont(QFont("Segoe UI", 9))
+            self._history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            layout.addWidget(self._history_list)
+        else:
+            self._history_list.clear()
+            
+        # Popola la lista in ordine inverso
         for notif in reversed(self.history):
             time_str = time.strftime('%H:%M:%S', time.localtime(notif['time']))
             level_emoji = "✅" if notif['title'] == "SUCCESS" else "⚠️" if notif['title'] == "WARNING" else "🛑" if notif['title'] == "ERROR" else "ℹ️"
-            list_widget.addItem(f"{time_str} - {level_emoji} {notif['msg']}")
             
-        layout.addWidget(list_widget)
-        
-        close_btn = QPushButton("Chiudi")
-        close_btn.clicked.connect(dlg.accept)
-        layout.addWidget(close_btn)
-        
-        dlg.exec()
+            item = QListWidgetItem(f"{time_str} - {level_emoji} {notif['msg']}")
+            # Wrappa il test per favorire la lettura multi-linea
+            item.setToolTip(notif['msg'])
+            self._history_list.addItem(item)
+            
+        # Calcola posizione: in basso a destra rispetto all'icona della campanella
+        if self.bell_container:
+            global_pos = self.bell_container.mapToGlobal(self.bell_container.rect().bottomRight())
+            # Sposta a sinistra della larghezza del popup per farlo allineare a destra
+            global_pos.setX(global_pos.x() - 350)
+            self._history_popup.move(global_pos)
+            
+        self._history_popup.show()

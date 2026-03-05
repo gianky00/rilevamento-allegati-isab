@@ -38,7 +38,13 @@ class PdfSplitter:
             if not pages: continue
             
             suffix = suffix_map.get(category, category)
-            filename = f"{odc}_.pdf" if category == "sconosciuto" else f"{odc}_{suffix}.pdf"
+            if category == "sconosciuto":
+                # Usa il nome del file originale per evitare collisioni tra più documenti processati
+                orig_name = os.path.splitext(os.path.basename(pdf_doc.name))[0]
+                filename = f"{odc}_SCONOSCIUTO_{orig_name}.pdf"
+            else:
+                filename = f"{odc}_{suffix}.pdf"
+            
             path = os.path.join(output_dir, filename)
 
             new_pdf = fitz.open()
