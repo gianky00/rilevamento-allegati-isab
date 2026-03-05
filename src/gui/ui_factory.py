@@ -101,7 +101,6 @@ class UIFactory:
         layout.addWidget(t_label)
         layout.addWidget(v_label)
 
-        UIAnimations.fade_in(card, 500)
         return card, v_label
 
     @staticmethod
@@ -175,7 +174,6 @@ class UIFactory:
         content.addLayout(col_pag)
 
         layout.addLayout(content)
-        UIAnimations.fade_in(card, 600)
         return card, ds, dt, ps, pt
 
     @staticmethod
@@ -211,7 +209,6 @@ class UIFactory:
         grid.setContentsMargins(0, 2, 0, 0)
         layout.addLayout(grid)
 
-        UIAnimations.fade_in(card, 700)
         return card, status_label, grid
 
     @staticmethod

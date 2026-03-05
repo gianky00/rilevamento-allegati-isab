@@ -211,7 +211,6 @@ class DashboardTab(QWidget):
         self.main_app.recent_log = self.main_app.log_area
 
         layout.addWidget(log_group, 1)
-        UIAnimations.fade_in(log_group, 800)
 
         # Aggiungiamo un DropFrame invisibile che copre tutto il layout per facilitare il drag&drop
         self.main_app.drop_frame = DropFrame(self.main_app._on_drop)

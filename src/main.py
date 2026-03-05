@@ -133,9 +133,9 @@ class MainApp(QMainWindow):
         self._connect_controller_signals()
 
         logger.info("Configurazione UI...")
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        main_layout = QVBoxLayout(self.central_widget)
         main_layout.setContentsMargins(15, 15, 15, 15)
 
         self.notebook = QTabWidget()
@@ -161,9 +161,6 @@ class MainApp(QMainWindow):
         self._display_license_info()
         self._populate_rules_tree()
         self.update_last_access()
-
-        # Fade-in finestra principale
-        UIAnimations.fade_in(self, duration=600)
 
         # Timers (Solo quelli UI-only)
         self._update_timer = QTimer(self)

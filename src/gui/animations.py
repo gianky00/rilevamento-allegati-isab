@@ -18,7 +18,7 @@ class UIAnimations:
 
     @staticmethod
     def fade_in(widget: QWidget, duration: int = 400) -> None:
-        """Applica un effetto di fade-in a un widget."""
+        """Applica un effetto di fade-in a un widget e lo pulisce al termine."""
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
         
@@ -27,6 +27,10 @@ class UIAnimations:
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        # Pulizia dell'effetto al termine per ripristinare il rendering nativo
+        # Questo risolve il problema della GUI nera su alcuni sistemi Windows
+        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
         anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     @staticmethod
@@ -53,7 +57,7 @@ class UIAnimations:
         slide_anim = QPropertyAnimation(new_widget, b"pos")
         slide_anim.setDuration(350)
         
-        offset = 20 if direction == "right" else -20
+        offset = 25 if direction == "right" else -25
         start_pos = new_widget.pos() + QPoint(offset, 0)
         end_pos = new_widget.pos()
         
@@ -64,12 +68,19 @@ class UIAnimations:
         group.addAnimation(fade_anim)
         group.addAnimation(slide_anim)
         
+        # Pulizia effetti al termine
+        def cleanup():
+            new_widget.setGraphicsEffect(None)
+            old_widget.setGraphicsEffect(None)
+            
+        group.finished.connect(cleanup)
+        
         new_widget.show()
         group.start(QParallelAnimationGroup.DeletionPolicy.DeleteWhenStopped)
 
     @staticmethod
     def animate_visibility(widget: QWidget, visible: bool, duration: int = 300) -> None:
-        """Mostra o nasconde un widget con un effetto di scorrimento e opacità."""
+        """Mostra o nasconde un widget con un effetto di opacità e pulizia."""
         if visible:
             widget.show()
             effect = QGraphicsOpacityEffect(widget)
@@ -80,6 +91,8 @@ class UIAnimations:
             fade.setStartValue(0.0)
             fade.setEndValue(1.0)
             fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+            
+            fade.finished.connect(lambda: widget.setGraphicsEffect(None))
             fade.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
         else:
             widget.hide()
