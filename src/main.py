@@ -738,7 +738,7 @@ class MainApp(QMainWindow):
             total_files = len(pdf_files)
             for i, pdf_path in enumerate(pdf_files):
 
-                def progress_callback(message, level="INFO"):
+                def progress_callback(message, level="INFO", i=i, total_files=total_files):
                     self.log_queue.put((message, level))
                     if "Elaborazione pagina" in message:
                         try:
@@ -761,7 +761,7 @@ class MainApp(QMainWindow):
                         except Exception:
                             pass
 
-                def advanced_progress_callback(data, level="INFO"):
+                def advanced_progress_callback(data, level="INFO", i=i, total_files=total_files):
                     if isinstance(data, dict) and data.get("type") == "page_progress":
                         current = data.get("current", 0)
                         total = data.get("total", 1)
@@ -884,9 +884,9 @@ class MainApp(QMainWindow):
 
     def _auto_detect_tesseract(self):
         search_paths = [
-            os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"), "Tesseract-OCR", "tesseract.exe"),
             os.path.join(
-                os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"
+                os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"
             ),
             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Tesseract-OCR", "tesseract.exe"),
         ]
@@ -1071,10 +1071,9 @@ if __name__ == "__main__":
     cli_path = None
     if len(sys.argv) > 1:
         potential_path = sys.argv[1]
-        if os.path.exists(potential_path):
-            if os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf"):
-                cli_path = potential_path
-                logger.info(f"Avvio con file: {potential_path}")
+        if os.path.exists(potential_path) and (os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf")):
+            cli_path = potential_path
+            logger.info(f"Avvio con file: {potential_path}")
 
     logger.info("Applicazione pronta")
 

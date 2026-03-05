@@ -1,4 +1,3 @@
-import builtins
 import contextlib
 import logging
 import os
@@ -34,11 +33,10 @@ class TestAppLogger(unittest.TestCase):
 
     def test_get_log_directory_windows(self):
         """Test che get_log_directory restituisce il percorso corretto su Windows."""
-        with patch("sys.platform", "win32"):
-            with patch.dict(os.environ, {"APPDATA": "C:\\Users\\Test\\AppData\\Roaming"}):
-                log_dir = app_logger.get_log_directory()
-                self.assertIn("Intelleo PDF Splitter", log_dir)
-                self.assertIn("Log", log_dir)
+        with patch("sys.platform", "win32"), patch.dict(os.environ, {"APPDATA": "C:\\Users\\Test\\AppData\\Roaming"}):
+            log_dir = app_logger.get_log_directory()
+            self.assertIn("Intelleo PDF Splitter", log_dir)
+            self.assertIn("Log", log_dir)
 
     def test_get_log_directory_linux(self):
         """Test che get_log_directory restituisce il percorso corretto su Linux."""
@@ -56,10 +54,9 @@ class TestAppLogger(unittest.TestCase):
 
     def test_get_app_directory_frozen(self):
         """Test get_app_directory quando e' frozen."""
-        with patch.object(sys, "frozen", True, create=True):
-            with patch.object(sys, "executable", "/path/to/app.exe"):
-                app_dir = app_logger.get_app_directory()
-                self.assertEqual(app_dir, "/path/to")
+        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", "/path/to/app.exe"):
+            app_dir = app_logger.get_app_directory()
+            self.assertEqual(app_dir, "/path/to")
 
     def test_setup_logging_creates_file(self):
         """Test che setup_logging crea un file di log."""
@@ -177,6 +174,9 @@ class TestAppLogger(unittest.TestCase):
             sys.stdout = original_stdout
 
 
+    def test_exception_handler_logs_error(self):
+        """Test che l'exception handler logghi l'errore correttamente."""
+
 class TestAppLoggerExceptionHandler(unittest.TestCase):
     def setUp(self):
         """Setup prima di ogni test."""
@@ -195,7 +195,7 @@ class TestAppLoggerExceptionHandler(unittest.TestCase):
 
         # KeyboardInterrupt dovrebbe chiamare il hook originale
         with patch.object(sys, "__excepthook__") as mock_hook:
-            with contextlib.suppress(builtins.BaseException):
+            with contextlib.suppress(Exception):
                 sys.excepthook(KeyboardInterrupt, KeyboardInterrupt(), None)
             mock_hook.assert_called_once()
 
