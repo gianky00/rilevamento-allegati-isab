@@ -1,16 +1,17 @@
 """
 Gestore Configurazione Tesseract OCR (SRP).
 """
+
 import os
-from typing import List, Optional
+
 
 class TesseractManager:
     """Gestisce il rilevamento e la configurazione del percorso Tesseract."""
 
     @staticmethod
-    def auto_detect() -> Optional[str]:
+    def auto_detect() -> str | None:
         """Tenta di rilevare automaticamente il percorso di tesseract.exe."""
-        search_paths: List[str] = [
+        search_paths: list[str] = [
             os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"), "Tesseract-OCR", "tesseract.exe"),
             os.path.join(
                 os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"

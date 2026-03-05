@@ -24,24 +24,22 @@ _immediate_log_file = None
 
 def _safe_print(message):
     """Print sicuro che non fallisce se stdout non è disponibile."""
-    try:
+    import contextlib
+    with contextlib.suppress(Exception):
         if sys.stdout is not None:
             print(message, flush=True)
-    except Exception:
-        pass
 
 
 def _write_immediate(message):
     """Scrive immediatamente su file senza buffering."""
     global _immediate_log_file
     if _immediate_log_file:
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             _immediate_log_file.write(f"{timestamp} | {message}\n")
             _immediate_log_file.flush()
             os.fsync(_immediate_log_file.fileno())
-        except Exception:
-            pass
 
 
 def get_log_directory():
@@ -95,7 +93,7 @@ def setup_logging():
             os.makedirs(try_dir, exist_ok=True)
             test_path = os.path.join(try_dir, log_filename)
             # Prova ad aprire il file per verificare i permessi
-            _immediate_log_file = open(test_path, "a", encoding="utf-8", buffering=1)
+            _immediate_log_file = open(test_path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
             actual_log_path = test_path
             _write_immediate(f"LOG FILE INIZIALIZZATO: {test_path}")
             _write_immediate(f"Frozen: {getattr(sys, 'frozen', False)}")
@@ -111,7 +109,7 @@ def setup_logging():
 
             temp_dir = tempfile.gettempdir()
             actual_log_path = os.path.join(temp_dir, log_filename)
-            _immediate_log_file = open(actual_log_path, "a", encoding="utf-8", buffering=1)
+            _immediate_log_file = open(actual_log_path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
             _write_immediate(f"LOG FILE (FALLBACK TEMP): {actual_log_path}")
         except Exception:
             pass

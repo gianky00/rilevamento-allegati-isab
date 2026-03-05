@@ -1,17 +1,18 @@
 """
 Dialogo per la selezione della categoria e il salvataggio della ROI (SRP).
 """
-from typing import List, Any
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
-)
+
+from typing import Any
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
 
 class RoiSelectorDialog(QDialog):
     """Dialog per associare una ROI a una categoria."""
 
-    def __init__(self, parent: Any, categories: List[str], roi_coords: List[int], colors: dict) -> None:
+    def __init__(self, parent: Any, categories: list[str], roi_coords: list[int], colors: dict) -> None:
         """Inizializza il dialog per l'associazione di una ROI a una categoria specifica."""
         super().__init__(parent)
         self.categories = categories

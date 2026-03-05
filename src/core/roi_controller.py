@@ -2,37 +2,39 @@
 Controller per l'utility ROI (SRP/SoC).
 Gestisce la logica di navigazione PDF, zoom e coordinamento RoiManager/PdfManager.
 """
+
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage, QPixmap
 
-from core.roi_manager import RoiManager
 from core.pdf_manager import PdfManager
+from core.roi_manager import RoiManager
 
 logger = logging.getLogger("ROI_CONTROLLER")
 SIGNAL_FILE = ".update_signal"
+
 
 class ROIController(QObject):
     """
     Controller che separa la logica di gestione ROI dalla View (ROIDrawingApp).
     """
-    
+
     # Segnali per la View
     page_rendered = Signal(object, int, int)  # QPixmap, current_page, total_pages
     rules_updated = Signal()
     status_message = Signal(str, str)  # message, level
     zoom_changed = Signal(float)
-    roi_data_ready = Signal(list) # categories
+    roi_data_ready = Signal(list)  # categories
 
     def __init__(self) -> None:
         """Inizializza il controller e i gestori per le ROI e i PDF."""
         super().__init__()
         self.roi_manager = RoiManager()
         self.pdf_manager = PdfManager()
-        
+
         self.current_page_index = 0
         self.zoom_level = 1.0
         self.delete_mode = False
@@ -71,7 +73,7 @@ class ROIController(QObject):
         # Conversione in QPixmap (Logica GUI minima necessaria nel controller per efficienza)
         qimage = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
         qpixmap = QPixmap.fromImage(qimage)
-        
+
         self.page_rendered.emit(qpixmap, self.current_page_index, self.pdf_manager.get_page_count())
         self.zoom_changed.emit(self.zoom_level)
 
@@ -104,7 +106,7 @@ class ROIController(QObject):
         """Ripristina lo zoom al 100%."""
         self.set_zoom(1.0)
 
-    def add_roi(self, category: str, coords: List[int]) -> bool:
+    def add_roi(self, category: str, coords: list[int]) -> bool:
         """Aggiunge una ROI e salva."""
         if self.roi_manager.add_roi(category, coords):
             self.save_and_signal()
@@ -130,10 +132,10 @@ class ROIController(QObject):
             logger.error(f"Errore salvataggio ROI: {e}")
             self.status_message.emit(f"Errore salvataggio: {e}", "ERROR")
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self) -> list[dict[str, Any]]:
         """Restituisce l'elenco delle regole di classificazione correnti."""
         return self.roi_manager.get_rules()
 
-    def get_categories(self) -> List[str]:
+    def get_categories(self) -> list[str]:
         """Restituisce i nomi delle categorie disponibili."""
         return self.roi_manager.get_categories()

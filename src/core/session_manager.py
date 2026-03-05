@@ -1,14 +1,16 @@
 """
 Gestione della sessione utente per ripristino interrotto (SRP).
 """
+
 import json
 import logging
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from shared.constants import SESSION_FILE
 
 logger = logging.getLogger("MAIN")
+
 
 class SessionManager:
     """Gestisce il salvataggio e il caricamento del file di sessione."""
@@ -28,16 +30,16 @@ class SessionManager:
                 logger.error(f"Errore rimozione session file: {e}")
 
     @staticmethod
-    def load_session() -> Tuple[List[Dict[str, Any]], str]:
+    def load_session() -> tuple[list[dict[str, Any]], str]:
         """Carica i task salvati dal file di sessione."""
         if not os.path.exists(SESSION_FILE):
             return [], "Unknown"
         try:
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+            with open(SESSION_FILE, encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             if data:
-                tasks: List[Dict[str, Any]] = []
+                tasks: list[dict[str, Any]] = []
                 odc = "Unknown"
                 if isinstance(data, list):
                     tasks = data

@@ -33,6 +33,8 @@ ignore = [
     "B008",     # function call in default argument (comune in Qt)
     "RUF012",   # mutable class default (comune in Qt widget)
     "SIM108",   # ternary operator (leggibilità)
+    "N802",     # function name should be lowercase (Qt overrides use CamelCase)
+    "RUF001",   # ambiguous unicode character (used in UI messages)
 ]
 
 [tool.ruff.lint.isort]

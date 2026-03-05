@@ -6,8 +6,8 @@ Dialog per la revisione manuale dei file sconosciuti (Splitter).
 import json
 import logging
 import os
+from typing import Any
 
-from typing import Any, Dict, List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
@@ -42,23 +42,36 @@ logger = logging.getLogger("MAIN")
 class UnknownFilesReviewDialog(QDialog):
     """Dialog per la revisione manuale (Splitter) dei file sconosciuti."""
 
-    def __init__(self, parent: Any, review_tasks: List[Dict[str, Any]], on_finish: Optional[Any] = None, odc: Optional[str] = None, on_close_callback: Optional[Any] = None) -> None:
+    def __init__(
+        self,
+        parent: Any,
+        review_tasks: list[dict[str, Any]],
+        on_finish: Any | None = None,
+        odc: str | None = None,
+        on_close_callback: Any | None = None,
+    ) -> None:
         """Inizializza il dialog per la revisione manuale dei documenti non classificati."""
         super().__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowMinimizeButtonHint)
+        self.setWindowFlags(
+            self.windowFlags()
+            | Qt.WindowType.Window
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+        )
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
-        
+
         # Posticipa la massimizzazione al caricamento completato
         import PySide6.QtCore as QtCore
+
         QtCore.QTimer.singleShot(0, self.showMaximized)
         self.review_tasks = review_tasks
         self.on_finish = on_finish
         self.odc = odc
         self.on_close_callback = on_close_callback
         self.task_index = 0
-        self.current_doc: Optional[Any] = None
-        self.current_doc_path: Optional[str] = None
-        self.available_pages: List[int] = []
+        self.current_doc: Any | None = None
+        self.current_doc_path: str | None = None
+        self.available_pages: list[int] = []
         self.preview_page_index = 0
 
         self._create_widgets()
@@ -112,10 +125,9 @@ class UnknownFilesReviewDialog(QDialog):
         """Carica il documento PDF corrispondente all'indice della lista dei task."""
         # Rilascia sempre il documento precedente prima di caricare il nuovo o chiudere
         if self.current_doc:
-            try:
+            import contextlib
+            with contextlib.suppress(Exception):
                 self.current_doc.close()
-            except Exception:
-                pass
             self.current_doc = None
 
         if index >= len(self.review_tasks):
@@ -224,6 +236,10 @@ class UnknownFilesReviewDialog(QDialog):
         selected_indices = [self.pages_listbox.row(item) for item in selected]
         selected_real_indices = [self.available_pages[i] for i in selected_indices]
         new_filename = f"{result['odc']}_{result['suffix']}.pdf"
+
+        if not self.current_doc_path:
+            return
+
         dir_path = os.path.dirname(self.current_doc_path)
         output_path = os.path.join(dir_path, new_filename)
 
@@ -260,7 +276,7 @@ class UnknownFilesReviewDialog(QDialog):
                 self.current_doc.close()
             self.current_doc = None
         try:
-            if os.path.exists(self.current_doc_path):
+            if self.current_doc_path and os.path.exists(self.current_doc_path):
                 os.remove(self.current_doc_path)
         except Exception as e:
             logger.error(f"Impossibile cancellare file temp {self.current_doc_path}: {e}")

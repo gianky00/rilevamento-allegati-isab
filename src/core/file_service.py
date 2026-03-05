@@ -1,17 +1,18 @@
 """
 Servizio per la scansione e validazione dei file nel filesystem (SRP).
 """
+
 import os
-from typing import List
+
 
 class FileService:
     """Gestisce la ricerca e la validazione di file PDF."""
 
     @staticmethod
-    def find_pdfs_in_path(path: str) -> List[str]:
+    def find_pdfs_in_path(path: str) -> list[str]:
         """Trova ricorsivamente tutti i file PDF in un percorso (file o cartella)."""
-        found_pdfs: List[str] = []
-        
+        found_pdfs: list[str] = []
+
         if not path or not os.path.exists(path):
             return found_pdfs
 
@@ -26,7 +27,7 @@ class FileService:
                 for name in files:
                     if name.lower().endswith(".pdf"):
                         found_pdfs.append(os.path.abspath(os.path.join(root, name)))
-        
+
         return found_pdfs
 
     @staticmethod

@@ -1,11 +1,13 @@
 """
 Gestisce il workflow di elaborazione threadata, invocando il processore PDF (SRP).
 """
+
 import os
 import threading
+from collections.abc import Callable
 from datetime import datetime
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from core import pdf_processor
 
@@ -13,14 +15,21 @@ from core import pdf_processor
 class PdfProcessingWorker:
     """Esegue l'elaborazione OCR PDF su un thread separato comunicando via coda thread-safe."""
 
-    def __init__(self, log_queue: Queue, pdf_files: List[str], odc: str, config: Dict[str, Any], on_complete: Callable[[int, List[Dict[str, Any]]], None]):
+    def __init__(
+        self,
+        log_queue: Queue,
+        pdf_files: list[str],
+        odc: str,
+        config: dict[str, Any],
+        on_complete: Callable[[int, int, list[dict[str, Any]]], None],
+    ):
         """Inizializza il worker con la coda dei log, i file da elaborare e la callback di completamento."""
         self.log_queue = log_queue
         self.pdf_files = pdf_files
         self.odc = odc
         self.config = config
         self.on_complete = on_complete
-        self.processing_start_time: Optional[datetime] = None
+        self.processing_start_time: datetime | None = None
         self.files_processed_count = 0
         self.pages_processed_count = 0
         self._is_cancelled = False
@@ -42,7 +51,7 @@ class PdfProcessingWorker:
 
     def _run(self) -> None:
         """Loop di elaborazione logico isolato dal front-end GUI."""
-        unknown_files: List[Dict[str, Any]] = []
+        unknown_files: list[dict[str, Any]] = []
         total_files = len(self.pdf_files)
 
         for i, pdf_path in enumerate(self.pdf_files):
@@ -50,7 +59,9 @@ class PdfProcessingWorker:
                 self.log_queue.put(("Operazione annullata dall'utente", "WARNING"))
                 break
 
-            def progress_callback(message: str, level: str = "INFO", current_idx: int = i, total: int = total_files) -> None:
+            def progress_callback(
+                message: str, level: str = "INFO", current_idx: int = i, total: int = total_files
+            ) -> None:
                 """Gestisce i messaggi di log standard durante l'elaborazione."""
                 self.log_queue.put((message, level))
                 if "Elaborazione pagina" in message:
@@ -74,7 +85,9 @@ class PdfProcessingWorker:
                     except Exception:
                         pass
 
-            def advanced_progress_callback(data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files) -> None:
+            def advanced_progress_callback(
+                data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files
+            ) -> None:
                 """Gestisce messaggi di progresso strutturati (percentuali, ETA) per aggiornare la barra di progresso."""
                 if isinstance(data, dict) and data.get("type") == "page_progress":
                     current_page = data.get("current", 0)
@@ -82,20 +95,18 @@ class PdfProcessingWorker:
                     eta = data.get("eta_seconds", 0)
                     phase_pct = data.get("phase_pct", 0)
                     phase = data.get("phase", "analysis")
-                    
+
                     # Log granulare per feedback immediato (sostituisce riga per evitare spam)
-                    self.log_queue.put({
-                        "text": f"  > Pagina {current_page}/{total_p}",
-                        "level": "PROGRESS",
-                        "replace_last": True
-                    })
-                    
+                    self.log_queue.put(
+                        {"text": f"  > Pagina {current_page}/{total_p}", "level": "PROGRESS", "replace_last": True}
+                    )
+
                     file_internal_progress = phase_pct if phase_pct > 0 else (current_page / total_p) * 100
                     base_pct = (current_idx / total) * 100
                     combined = base_pct + (file_internal_progress * (1.0 / total))
                     status_text = f"File {current_idx + 1}/{total}"
                     status_text += " - Salvataggio..." if phase == "saving" else f" - Analisi {current_page}/{total_p}"
-                    
+
                     self.log_queue.put(
                         {"action": "update_progress", "value": combined, "text": status_text, "eta_seconds": eta}
                     )
@@ -115,6 +126,7 @@ class PdfProcessingWorker:
                 self.files_processed_count += 1
                 try:
                     import pymupdf as fitz
+
                     with fitz.open(pdf_path) as d:
                         self.pages_processed_count += d.page_count
                 except Exception:
@@ -132,10 +144,10 @@ class PdfProcessingWorker:
             elapsed_str = str(elapsed).split(".")[0]
         else:
             elapsed_str = "N/A"
-            
+
         self.log_queue.put(("-" * 60, "INFO"))
         self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
         self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
-        
+
         # Invia il trigger di fine processo al main thread (GUI)
         self.on_complete(self.files_processed_count, self.pages_processed_count, unknown_files)

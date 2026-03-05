@@ -2,23 +2,26 @@
 Punto di ingresso principale per l'applicazione (SRP).
 Gestisce l'inizializzazione del sistema, la licenza e il lancio della GUI o dell'Utility ROI.
 """
-import sys
-import os
+
 import logging
+import os
+import sys
 from datetime import datetime
 
 # Gestione crash precoci prima dell'inizializzazione del logger
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
+
     # Importazioni locali
     import app_logger
-    import version
     import license_updater
     import license_validator
+    import version
 except Exception as e:
     with open("crash_startup.txt", "w") as f:
         f.write(f"CRITICAL ERROR DURING EARLY IMPORT: {e}\n")
         import traceback
+
         f.write(traceback.format_exc())
     sys.exit(1)
 
@@ -26,10 +29,11 @@ except Exception as e:
 LOG_PATH = app_logger.initialize()
 logger = logging.getLogger("LAUNCHER")
 
+
 def run_app() -> None:
     """Configura e avvia l'applicazione principale."""
-    from main import MainApp
     from gui.theme import GLOBAL_QSS
+    from main import MainApp
     from shared.constants import SIGNAL_FILE
 
     logger.info("=" * 68)
@@ -70,24 +74,28 @@ def run_app() -> None:
     cli_path = None
     if len(sys.argv) > 1:
         potential_path = sys.argv[1]
-        if os.path.exists(potential_path) and (os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf")):
+        if os.path.exists(potential_path) and (
+            os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf")
+        ):
             cli_path = potential_path
             logger.info(f"Avvio con file: {potential_path}")
 
     window = MainApp(auto_file_path=cli_path)
     window.showMaximized()
-    
+
     logger.info("Avvio event loop")
     sys.exit(qt_app.exec())
+
 
 if __name__ == "__main__":
     # Check for ROI Utility launch flag
     if "--utility" in sys.argv:
         try:
             import roi_utility
+
             roi_utility.run_utility()
         except Exception as e:
             logger.critical(f"Failed to launch ROI utility: {e}", exc_info=True)
         sys.exit(0)
-    
+
     run_app()

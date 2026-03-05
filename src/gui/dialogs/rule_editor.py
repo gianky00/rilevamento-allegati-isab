@@ -1,18 +1,29 @@
 """
 Dialogo per la creazione e modifica delle regole di classificazione (SRP).
 """
-from typing import Any, Dict, List, Optional
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, 
-    QPushButton, QColorDialog, QHBoxLayout, QMessageBox
-)
+
+from typing import Any
+
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QColorDialog,
+    QDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
+
 from core.rule_service import RuleService
+
 
 class RuleEditorDialog(QDialog):
     """Dialogo specializzato per l'editing delle regole."""
 
-    def __init__(self, parent: Any, rule_service: RuleService, rule: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, parent: Any, rule_service: RuleService, rule: dict[str, Any] | None = None) -> None:
         """Inizializza l'editor per una regola nuova o esistente."""
         super().__init__(parent)
         self.rule_service = rule_service
@@ -25,12 +36,12 @@ class RuleEditorDialog(QDialog):
         self.setWindowTitle("Modifica Regola" if self.rule else "Nuova Regola")
         self.setFixedSize(500, 400)
         self.setModal(True)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
 
         grid = QGridLayout()
-        
+
         # Categoria
         grid.addWidget(QLabel("Nome Categoria:"), 0, 0)
         self.cat_entry = QLineEdit(self.rule["category_name"] if self.rule else "")
@@ -64,7 +75,7 @@ class RuleEditorDialog(QDialog):
         grid.addWidget(QLabel("Aree ROI:"), 5, 0)
         roi_count = len(self.rule.get("rois", [])) if self.rule else 0
         grid.addWidget(QLabel(f"{roi_count} aree definite"), 5, 1)
-        
+
         layout.addLayout(grid)
 
         # Buttons
@@ -75,7 +86,7 @@ class RuleEditorDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_save)
         btn_layout.addWidget(btn_cancel)
-        
+
         layout.addLayout(btn_layout)
 
     def _choose_color(self) -> None:
@@ -90,25 +101,25 @@ class RuleEditorDialog(QDialog):
         category = self.cat_entry.text().strip()
         suffix = self.suffix_entry.text().strip() or category
         keywords = [k.strip() for k in self.kw_entry.text().split(",") if k.strip()]
-        
+
         if not category or not keywords:
             QMessageBox.critical(self, "Errore", "Nome categoria e almeno una keyword sono obbligatori.")
             return
-            
+
         new_data = {
-            "category_name": category, 
-            "filename_suffix": suffix, 
-            "keywords": keywords, 
+            "category_name": category,
+            "filename_suffix": suffix,
+            "keywords": keywords,
             "color": self.chosen_color,
-            "rois": self.rule.get("rois", []) if self.rule else []
+            "rois": self.rule.get("rois", []) if self.rule else [],
         }
-        
+
         success = False
         if self.rule:
             success = self.rule_service.update_rule(self.rule["category_name"], new_data)
         else:
             success = self.rule_service.add_rule(new_data)
-            
+
         if success:
             self.accept()
         else:

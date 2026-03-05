@@ -1,19 +1,21 @@
 """
 Gestione logica e persistenza delle aree ROI (SRP).
 """
+
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import config_manager
 
 logger = logging.getLogger("MAIN")
+
 
 class RoiManager:
     """Gestisce la logica di business e la persistenza delle ROI."""
 
     def __init__(self) -> None:
         """Inizializza il gestore delle ROI caricando la configurazione."""
-        self.config: Dict[str, Any] = {}
+        self.config: dict[str, Any] = {}
         self.load_config()
 
     def load_config(self) -> None:
@@ -24,11 +26,11 @@ class RoiManager:
         """Salva la configurazione corrente."""
         config_manager.save_config(self.config)
 
-    def get_categories(self) -> List[str]:
+    def get_categories(self) -> list[str]:
         """Restituisce l'elenco delle categorie disponibili."""
         return [rule.get("category_name", "N/A") for rule in self.config.get("classification_rules", [])]
 
-    def add_roi(self, category_name: str, roi_coords: List[int]) -> bool:
+    def add_roi(self, category_name: str, roi_coords: list[int]) -> bool:
         """Aggiunge una ROI a una determinata categoria."""
         rules = self.config.get("classification_rules", [])
         for rule in rules:
@@ -53,7 +55,7 @@ class RoiManager:
             logger.error(f"Errore rimozione ROI: {e}")
             return False
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self) -> list[dict[str, Any]]:
         """Restituisce le regole di classificazione."""
         rules = self.config.get("classification_rules", [])
         return rules if isinstance(rules, list) else []

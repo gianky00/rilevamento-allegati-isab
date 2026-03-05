@@ -3,13 +3,14 @@ Intelleo PDF Splitter - Notification Manager (PySide6)
 Gestisce le notifiche toast a comparsa.
 """
 
+import os
 import time
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
-from PySide6.QtGui import QCursor, QFont, QPixmap
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QCursor, QFont
 from PySide6.QtSvgWidgets import QSvgWidget
-import os
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
 
 class ToastNotification(QWidget):
     """Widget per una singola notifica toast."""
@@ -90,7 +91,7 @@ class NotificationManager:
         self.bell_container = None
         self.bell_svg = None
         self.bell_count_label = None
-        
+
         # Connessione automatica ai segnali del controller se presente
         if hasattr(parent_widget, "controller"):
             parent_widget.controller.log_received.connect(self._on_controller_log)
@@ -117,10 +118,10 @@ class NotificationManager:
         self.bell_count_label = QLabel("0")
         self.bell_count_label.setStyleSheet("color: #6C757D; background: transparent;")
         self.bell_container_layout.addWidget(self.bell_count_label)
-        
+
         self.bell_container.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.bell_container.mousePressEvent = lambda e: self.show_history(e)
-        
+        self.bell_container.mousePressEvent = self.show_history
+
         self._update_bell()
 
         if hasattr(parent_layout_or_widget, "addWidget"):
@@ -178,7 +179,7 @@ class NotificationManager:
         self.history.append({"title": title, "msg": message, "time": time.time(), "level": level})
         if len(self.history) > 50:
             self.history.pop(0)
-            
+
         self.notifications.append({"window": toast, "title": title, "msg": message, "time": time.time()})
 
         # Auto close dopo 5 secondi
@@ -207,16 +208,16 @@ class NotificationManager:
             if self.bell_svg:
                 self.bell_svg.setParent(None)
                 self.bell_svg.deleteLater()
-            
+
             # Crea nuovo SVG
             color = "#DC3545" if self.unread_count > 0 else "#6C757D"
-            
+
             base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             path = os.path.join(base_path, "assets", "bell.svg")
             self.bell_svg = QSvgWidget(path)
             self.bell_svg.setFixedSize(20, 20)
             self.bell_container_layout.insertWidget(0, self.bell_svg)
-            
+
             self.bell_count_label.setText(str(self.unread_count))
             self.bell_count_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
 
@@ -224,14 +225,14 @@ class NotificationManager:
         """Reset del contatore notifiche e mostra la cronologia all'utente in un popup interno."""
         self.unread_count = 0
         self._update_bell()
-        
+
         if not hasattr(self, "history") or not self.history:
             return
-            
-        from PySide6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QFrame
-        from PySide6.QtGui import QFont, QColor
+
         from PySide6.QtCore import Qt
-        
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QFrame, QListWidget, QListWidgetItem, QVBoxLayout
+
         # Crea il popup se non esiste
         if not hasattr(self, "_history_popup") or self._history_popup is None:
             self._history_popup = QFrame(self.parent, Qt.WindowType.Popup)
@@ -258,40 +259,49 @@ class NotificationManager:
                     background-color: #3E3E42;
                 }
             """)
-            
+
             layout = QVBoxLayout(self._history_popup)
             layout.setContentsMargins(5, 5, 5, 5)
             layout.setSpacing(0)
-            
+
             # Label intestazione
             from PySide6.QtWidgets import QLabel
+
             header = QLabel(" Centro Notifiche ")
             header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
             header.setStyleSheet("color: #0d6efd; padding: 5px; border-bottom: 1px solid #444444;")
             layout.addWidget(header)
-            
+
             self._history_list = QListWidget()
             self._history_list.setFont(QFont("Segoe UI", 9))
             self._history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             layout.addWidget(self._history_list)
         else:
             self._history_list.clear()
-            
+
         # Popola la lista in ordine inverso
         for notif in reversed(self.history):
-            time_str = time.strftime('%H:%M:%S', time.localtime(notif['time']))
-            level_emoji = "✅" if notif['title'] == "SUCCESS" else "⚠️" if notif['title'] == "WARNING" else "🛑" if notif['title'] == "ERROR" else "ℹ️"
-            
+            time_str = time.strftime("%H:%M:%S", time.localtime(notif["time"]))
+            level_emoji = (
+                "✅"
+                if notif["title"] == "SUCCESS"
+                else "⚠️"
+                if notif["title"] == "WARNING"
+                else "🛑"
+                if notif["title"] == "ERROR"
+                else "ℹ️"
+            )
+
             item = QListWidgetItem(f"{time_str} - {level_emoji} {notif['msg']}")
             # Wrappa il test per favorire la lettura multi-linea
-            item.setToolTip(notif['msg'])
+            item.setToolTip(notif["msg"])
             self._history_list.addItem(item)
-            
+
         # Calcola posizione: in basso a destra rispetto all'icona della campanella
         if self.bell_container:
             global_pos = self.bell_container.mapToGlobal(self.bell_container.rect().bottomRight())
             # Sposta a sinistra della larghezza del popup per farlo allineare a destra
             global_pos.setX(global_pos.x() - 350)
             self._history_popup.move(global_pos)
-            
+
         self._history_popup.show()

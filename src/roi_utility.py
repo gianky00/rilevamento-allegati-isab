@@ -4,26 +4,17 @@ Gestisce la definizione delle aree ROI per l'OCR.
 """
 
 import contextlib
-import math
-import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import pymupdf as fitz
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QCursor, QFont, QImage, QKeySequence, QPen, QPixmap, QShortcut
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QCursor, QFont, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
-    QDialog,
     QFileDialog,
     QFrame,
     QGraphicsPixmapItem,
-    QGraphicsRectItem,
-    QGraphicsScene,
-    QGraphicsSimpleTextItem,
-    QGraphicsView,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -36,15 +27,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.widgets.pdf_graphics_view import ROIGraphicsView
-from gui.dialogs.roi_selector_dialog import RoiSelectorDialog
-from gui.widgets.roi_renderer import ROIRenderer
 from core.roi_controller import ROIController
+from gui.dialogs.roi_selector_dialog import RoiSelectorDialog
+from gui.theme import COLORS, FONTS
+from gui.widgets.pdf_graphics_view import ROIGraphicsView
+from gui.widgets.roi_renderer import ROIRenderer
 
 SIGNAL_FILE = ".update_signal"
-
-from gui.theme import COLORS, FONTS
-
 
 # ROIGraphicsView estratto in src.gui.widgets.pdf_graphics_view
 
@@ -52,7 +41,7 @@ from gui.theme import COLORS, FONTS
 class ROIDrawingApp(QMainWindow):
     """Applicazione per la gestione delle aree ROI."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Inizializza l'applicazione, il controller e configura la GUI."""
         super().__init__(parent)
         self.setWindowTitle("🎯 Intelleo - Utility Gestione ROI")
@@ -76,10 +65,10 @@ class ROIDrawingApp(QMainWindow):
         self.status_bar: QLabel
 
         # Variabili di stato UI
-        self._pixmap_item: Optional[QGraphicsPixmapItem] = None
+        self._pixmap_item: QGraphicsPixmapItem | None = None
         self.delete_mode = False
-        self.roi_item_map: Dict[Any, Dict[str, int]] = {}
-        self._filter_category: Optional[str] = None
+        self.roi_item_map: dict[Any, dict[str, int]] = {}
+        self._filter_category: str | None = None
 
         self._setup_ui()
         self._setup_shortcuts()
@@ -252,7 +241,6 @@ class ROIDrawingApp(QMainWindow):
 
     def _setup_shortcuts(self) -> None:
         """Configura scorciatoie tastiera."""
-        from PySide6.QtGui import QKeySequence, QShortcut
         QShortcut(QKeySequence(Qt.Key.Key_Left), self, self.prev_page)
         QShortcut(QKeySequence(Qt.Key.Key_Right), self, self.next_page)
         QShortcut(QKeySequence(Qt.Key.Key_Plus), self, self.zoom_in)
@@ -282,14 +270,14 @@ class ROIDrawingApp(QMainWindow):
         self.page_label.setText(f"Pagina {current + 1} / {total}")
         self.prev_page_button.setEnabled(current > 0)
         self.next_page_button.setEnabled(current < total - 1)
-        
+
         # Aggiorna scena
         scene = self.canvas.scene_ref
         scene.clear()
         self.roi_item_map.clear()
         self._pixmap_item = scene.addPixmap(pixmap)
         scene.setSceneRect(pixmap.rect())
-        
+
         self.draw_existing_rois()
 
     def _update_rules_list(self) -> None:
@@ -299,16 +287,17 @@ class ROIDrawingApp(QMainWindow):
             name = rule.get("category_name", "N/A")
             roi_count = len(rule.get("rois", []))
             item_text = f"  {name} ({roi_count} ROI)"
-            
+
             from PySide6.QtWidgets import QListWidgetItem
+
             item = QListWidgetItem(item_text)
-            
+
             # Evidenzia se filtrata
             if self._filter_category == name:
                 item.setBackground(QColor(COLORS["accent"]))
                 item.setForeground(QColor("white"))
                 item.setText(f"👁 {name} ({roi_count} ROI) [FILTRO ATTIVO]")
-            
+
             self.rules_listbox.addItem(item)
 
     def _on_rule_double_clicked(self, item: Any) -> None:
@@ -316,7 +305,7 @@ class ROIDrawingApp(QMainWindow):
         text = item.text()
         # Estrai il nome della categoria (gestendo il prefisso 👁 e il suffisso [FILTRO...])
         clean_name = text.replace("👁 ", "").split(" (")[0].strip()
-        
+
         if self._filter_category == clean_name:
             # Rimuove filtro
             self._filter_category = None
@@ -325,7 +314,7 @@ class ROIDrawingApp(QMainWindow):
             # Applica filtro
             self._filter_category = clean_name
             self.status_bar.setText(f"[INFO] Filtro attivato: visualizzazione esclusiva per '{clean_name}'")
-            
+
         self._update_rules_list()
         self.draw_existing_rois()
 
@@ -368,7 +357,7 @@ class ROIDrawingApp(QMainWindow):
     def draw_existing_rois(self) -> None:
         """Disegna le ROI esistenti delegando al renderer, rispettando eventuali filtri."""
         scene = self.canvas.scene_ref
-        
+
         # Pulizia item ROI precedenti
         for item in list(self.roi_item_map.keys()):
             with contextlib.suppress(Exception):
@@ -376,10 +365,10 @@ class ROIDrawingApp(QMainWindow):
         self.roi_item_map.clear()
 
         renderer = ROIRenderer(scene, self.controller.zoom_level)
-        
+
         for rule_index, rule in enumerate(self.controller.get_rules()):
             category_name = rule.get("category_name", "N/A")
-            
+
             # Applica filtro se attivo
             if self._filter_category and self._filter_category != category_name:
                 continue
@@ -388,7 +377,7 @@ class ROIDrawingApp(QMainWindow):
 
             for roi_index, roi in enumerate(rule.get("rois", [])):
                 items = renderer.draw_roi(rule_index, roi_index, category_name, color_hex, roi)
-                
+
                 # Registra item per interazione (cancellazione)
                 roi_info = {"rule_index": rule_index, "roi_index": roi_index}
                 for item in items:
@@ -425,7 +414,7 @@ class ROIDrawingApp(QMainWindow):
                             self.status_bar.setText(f"[OK] ROI eliminata da '{category_name}'")
                         return
 
-    def prompt_and_save_roi(self, roi_coords: List[int]) -> None:
+    def prompt_and_save_roi(self, roi_coords: list[int]) -> None:
         """Mostra il dialog per salvare la ROI utilizzando RoiSelectorDialog."""
         categories = self.controller.get_categories()
 
@@ -453,7 +442,6 @@ class ROIDrawingApp(QMainWindow):
 
     def update_nav_controls(self) -> None:
         """Vuoto: gestito da _on_page_rendered."""
-        pass
 
 
 def run_utility() -> None:

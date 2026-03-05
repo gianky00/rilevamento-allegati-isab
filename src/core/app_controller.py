@@ -2,54 +2,55 @@
 Controller principale per la logica dell'applicazione (SRP/SoC).
 Gestisce l'elaborazione, le licenze, le sessioni e lo stato applicativo.
 """
+
 import logging
-import queue
 import os
+import queue
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any
 
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, QTimer, Signal
 
+import app_updater
 import config_manager
 import license_validator
-import license_updater
-import app_updater
-from core.session_manager import SessionManager
+from core.file_service import FileService
 from core.processing_worker import PdfProcessingWorker
 from core.rule_service import RuleService
-from core.file_service import FileService
+from core.session_manager import SessionManager
 from shared.constants import SIGNAL_FILE
 
 logger = logging.getLogger("CONTROLLER")
+
 
 class AppController(QObject):
     """
     Controller che separa la logica di business dalla GUI.
     Emette segnali per aggiornare la View.
     """
-    
+
     # Segnali per la View
     log_received = Signal(str, str, bool)  # message, level, replace_last
     progress_updated = Signal(float, str, object)  # value, text, eta_seconds
-    license_status_updated = Signal(dict) # info
-    processing_state_changed = Signal(bool) # is_processing
+    license_status_updated = Signal(dict)  # info
+    processing_state_changed = Signal(bool)  # is_processing
     rules_updated = Signal()
-    session_status_changed = Signal(bool) # has_session
-    unknown_files_found = Signal(list, str) # files, odc
-    stats_updated = Signal(int, int, int, int) # session_docs, session_pages, global_docs, global_pages
+    session_status_changed = Signal(bool)  # has_session
+    unknown_files_found = Signal(list, str)  # files, odc
+    stats_updated = Signal(int, int, int, int)  # session_docs, session_pages, global_docs, global_pages
 
     def __init__(self) -> None:
         """Inizializza il controller e i servizi core associati."""
         super().__init__()
-        self.config: Dict[str, Any] = {}
-        self.rule_service: Optional[RuleService] = None
+        self.config: dict[str, Any] = {}
+        self.rule_service: RuleService | None = None
         self.log_queue: queue.Queue = queue.Queue()
         self._is_processing: bool = False
-        self.pdf_files: List[str] = []
-        self._current_worker: Optional[PdfProcessingWorker] = None
+        self.pdf_files: list[str] = []
+        self._current_worker: PdfProcessingWorker | None = None
         self.session_docs = 0
         self.session_pages = 0
-        
+
         # Timer per il polling della coda log
         self._log_timer = QTimer()
         self._log_timer.timeout.connect(self._process_log_queue)
@@ -80,28 +81,32 @@ class AppController(QObject):
             hw_id = license_validator.get_hardware_id()
             config = config_manager.load_config()
             last_access = str(config.get("last_access", "N/A"))
-            
+
             info = {
                 "is_valid": payload is not None,
                 "cliente": str(payload.get("Cliente", "N/A")).upper() if payload else "UTENTE NON REGISTRATO",
                 "scadenza": str(payload.get("Scadenza Licenza", "N/A")) if payload else "---",
                 "hwid": hw_id,
-                "last_access": last_access
+                "last_access": last_access,
             }
             self.license_status_updated.emit(info)
         except Exception as e:
             logger.error(f"Errore check licenza: {e}")
             self.license_status_updated.emit({"is_valid": False, "error": str(e)})
 
-    def set_pdf_files(self, paths: List[str]) -> None:
+    def set_pdf_files(self, paths: list[str]) -> None:
         """Imposta la lista dei file da elaborare trovandoli nei percorsi forniti."""
         all_pdfs = []
         for p in paths:
             all_pdfs.extend(FileService.find_pdfs_in_path(p))
-        
-        self.pdf_files = list(set(all_pdfs)) # Rimuove duplicati
+
+        self.pdf_files = list(set(all_pdfs))  # Rimuove duplicati
         if self.pdf_files:
-            msg = f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1 else os.path.basename(self.pdf_files[0])
+            msg = (
+                f"{len(self.pdf_files)} file selezionati"
+                if len(self.pdf_files) > 1
+                else os.path.basename(self.pdf_files[0])
+            )
             self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO", False)
         else:
             self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING", False)
@@ -110,28 +115,28 @@ class AppController(QObject):
         """Avvia il workflow di elaborazione threadata."""
         if self._is_processing or not self.pdf_files:
             return False
-            
+
         self._is_processing = True
         self.processing_state_changed.emit(True)
-        
-        def on_worker_complete(processed_docs: int, processed_pages: int, unknown_files: List[Any]) -> None:
+
+        def on_worker_complete(processed_docs: int, processed_pages: int, unknown_files: list[Any]) -> None:
             """Callback invocata al termine del thread di elaborazione PDF."""
             self._is_processing = False
             self._current_worker = None
             self.processing_state_changed.emit(False)
-            
+
             # Aggiorna Statistiche
             self.session_docs += processed_docs
             self.session_pages += processed_pages
-            
+
             global_docs = self.config.get("global_docs", 0) + processed_docs
             global_pages = self.config.get("global_pages", 0) + processed_pages
             self.config["global_docs"] = global_docs
             self.config["global_pages"] = global_pages
             self.save_settings()
-            
+
             self.emit_stats()
-            
+
             if unknown_files:
                 self.unknown_files_found.emit(unknown_files, odc)
             self.log_received.emit("ELABORAZIONE COMPLETATA", "HEADER", False)
@@ -141,11 +146,7 @@ class AppController(QObject):
             self._log_timer.start(100)
 
         self._current_worker = PdfProcessingWorker(
-            self.log_queue, 
-            list(self.pdf_files), 
-            odc, 
-            self.config,
-            on_worker_complete
+            self.log_queue, list(self.pdf_files), odc, self.config, on_worker_complete
         )
         self._current_worker.start()
         return True
@@ -169,10 +170,10 @@ class AppController(QObject):
                         total = msg.get("total", 0)
                         phase = msg.get("phase", "scansione")
                         pct = msg.get("phase_pct", 0)
-                        
+
                         # Log granulare nel terminale per feedback immediato
                         self.log_received.emit(f"  > Pagina {current}/{total} ({phase})", "PROGRESS", True)
-                        
+
                         # Aggiorna anche la barra di progresso
                         self.progress_updated.emit(pct, f"Analisi: {current}/{total}", msg.get("eta_seconds"))
                     else:
@@ -181,9 +182,7 @@ class AppController(QObject):
                     action = item.get("action")
                     if action == "update_progress":
                         self.progress_updated.emit(
-                            float(item.get("value", 0)),
-                            str(item.get("text", "")),
-                            item.get("eta_seconds")
+                            float(item.get("value", 0)), str(item.get("text", "")), item.get("eta_seconds")
                         )
                     elif item.get("level") == "PROGRESS" and item.get("replace_last"):
                         self.log_received.emit(item.get("text", ""), "PROGRESS", True)
@@ -196,7 +195,7 @@ class AppController(QObject):
         """Verifica se ci sono sessioni da ripristinare."""
         self.session_status_changed.emit(SessionManager.has_session())
 
-    def restore_session(self) -> Optional[tuple]:
+    def restore_session(self) -> tuple | None:
         """Carica i dati della sessione salvata."""
         if SessionManager.has_session():
             return SessionManager.load_session()

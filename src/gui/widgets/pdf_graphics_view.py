@@ -1,11 +1,13 @@
 """
 Vista grafica personalizzata per il disegno di ROI su PDF (SRP).
 """
+
 import math
-from typing import Any, Optional
+from typing import Any
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QCursor, QPen
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QFrame
+from PySide6.QtWidgets import QFrame, QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
 # Colori per il disegno (riflessi dal tema utility)
 COLORS = {
@@ -13,10 +15,11 @@ COLORS = {
     "bg_tertiary": "#E9ECEF",
 }
 
+
 class ROIGraphicsView(QGraphicsView):
     """Vista grafica con supporto a zoom, pan e disegno rettangoli ROI."""
 
-    def __init__(self, app: Any, parent: Optional[Any] = None) -> None:
+    def __init__(self, app: Any, parent: Any | None = None) -> None:
         """Inizializza la vista grafica configurando la scena e lo stile di base."""
         super().__init__(parent)
         self.app = app
@@ -27,10 +30,10 @@ class ROIGraphicsView(QGraphicsView):
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
 
         # Stato disegno
-        self._start_point: Optional[QPointF] = None
-        self._current_rect: Optional[QGraphicsRectItem] = None
+        self._start_point: QPointF | None = None
+        self._current_rect: QGraphicsRectItem | None = None
         self._panning: bool = False
-        self._pan_start: Optional[QPointF] = None
+        self._pan_start: QPointF | None = None
 
     def wheelEvent(self, event: Any) -> None:
         """Gestisce lo zoom con la rotellina del mouse quando Ctrl è premuto."""
@@ -77,7 +80,7 @@ class ROIGraphicsView(QGraphicsView):
             return
 
         scene_pos = self.mapToScene(event.position().toPoint())
-        
+
         # Aggiorna coordinate (comunicazione con l'app principale)
         if hasattr(self.app, "pdf_manager") and self.app.pdf_manager.doc:
             factor = 72 / (150 * self.app.zoom_level)
@@ -97,7 +100,9 @@ class ROIGraphicsView(QGraphicsView):
         """Finalizza il disegno della ROI convertendo le coordinate in formato PDF."""
         if self._panning:
             self._panning = False
-            self.setCursor(QCursor(Qt.CursorShape.CrossCursor if not self.app.delete_mode else Qt.CursorShape.ForbiddenCursor))
+            self.setCursor(
+                QCursor(Qt.CursorShape.CrossCursor if not self.app.delete_mode else Qt.CursorShape.ForbiddenCursor)
+            )
             event.accept()
             return
 

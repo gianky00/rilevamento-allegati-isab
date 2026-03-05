@@ -3,10 +3,12 @@ Motore OCR e Utility di Imaging (SRP).
 Gestisce l'interazione con Tesseract e il pre-processing delle immagini.
 Ottimizzato per massime prestazioni con early-exit e riduzione chiamate OCR.
 """
+
 import os
+
 import pytesseract
 from PIL import Image, ImageOps
-from typing import List, Optional, Dict, Any, Tuple
+
 
 class OcrEngine:
     """Gestisce le operazioni di OCR e trasformazione immagini."""
@@ -15,14 +17,14 @@ class OcrEngine:
     _DEFAULT_TIMEOUT = 8  # Ridotto da 15s: keyword matching non richiede scan lunghi
     _DEFAULT_CONFIG = "--psm 6"  # Page segmentation mode 6: uniform block of text
 
-    def __init__(self, tesseract_path: Optional[str] = None) -> None:
+    def __init__(self, tesseract_path: str | None = None) -> None:
         """Inizializza il motore OCR e imposta il percorso dell'eseguibile Tesseract."""
         self._tesseract_path = tesseract_path or ""
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
-        
+
         # Ottimizzazione: limita il numero di thread interni di Tesseract (OpenMP)
-        # Quando eseguiamo analisi in parallelo a livello di pagina, 
+        # Quando eseguiamo analisi in parallelo a livello di pagina,
         # Tesseract non deve cercare di usare tutti i core per ogni singola chiamata OCR.
         os.environ["OMP_THREAD_LIMIT"] = "1"
 
@@ -43,7 +45,8 @@ class OcrEngine:
         """Esegue l'OCR su una singola immagine."""
         try:
             result = pytesseract.image_to_string(
-                img, lang=lang,
+                img,
+                lang=lang,
                 config=config or self._DEFAULT_CONFIG,
                 timeout=self._DEFAULT_TIMEOUT,
             )
@@ -51,7 +54,7 @@ class OcrEngine:
         except Exception:
             return ""
 
-    def robust_scan(self, base_img: Image.Image, keywords: List[str]) -> Tuple[bool, str]:
+    def robust_scan(self, base_img: Image.Image, keywords: list[str]) -> tuple[bool, str]:
         """
         Esegue una scansione robusta tentando diverse trasformazioni e rotazioni.
         Ottimizzato: 5 step massimi con early-exit (eliminati duplicati dello Stadio 2).
@@ -62,7 +65,7 @@ class OcrEngine:
         keywords_lower = [k.lower() for k in keywords]
 
         # Step ottimizzati: nessun duplicato con lo Stadio 2 (Standard 0° già fatto)
-        steps: List[Tuple[str, Image.Image, List[int]]] = [
+        steps: list[tuple[str, Image.Image, list[int]]] = [
             ("Standard-90", base_img, [-90]),
             ("Binary", self.get_binary(base_img), [0, -90]),
             ("Contrast", self.get_contrast(base_img), [0]),

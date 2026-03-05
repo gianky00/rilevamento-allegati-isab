@@ -192,9 +192,8 @@ def verify_license():
             return False, "Integrità licenza compromessa (config.dat)"
 
         # Verifica hash pyarmor.rkey se presente
-        if "pyarmor.rkey" in manifest and os.path.exists(paths["rkey"]):
-            if _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
-                return False, "Integrità licenza compromessa (pyarmor.rkey)"
+        if "pyarmor.rkey" in manifest and os.path.exists(paths["rkey"]) and _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
+            return False, "Integrità licenza compromessa (pyarmor.rkey)"
 
     except Exception as e:
         return False, f"Errore lettura manifest: {e}"

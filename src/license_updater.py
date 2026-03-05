@@ -147,7 +147,7 @@ def check_grace_period():
     except Exception as e:
         if any(x in str(e) for x in ["SCADUTO", "incoerenza", "Nessuna validazione"]):
             raise e
-        raise Exception(f"Errore verifica periodo di grazia: {e}")
+        raise Exception(f"Errore verifica periodo di grazia: {e}") from e
 
 
 def run_update():

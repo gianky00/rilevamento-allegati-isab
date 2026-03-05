@@ -1,15 +1,16 @@
 """
 Modulo per la Tab Guida (SRP).
 """
-from typing import Any
+
 import os
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QSplitter, QListWidget, QTextEdit
-)
+from typing import Any
+
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QPushButton, QSplitter, QTextEdit, QVBoxLayout, QWidget
+
 from gui.theme import COLORS, FONTS
 from shared.constants import APP_DATA_DIR
+
 
 class HelpTab(QWidget):
     """Gestisce la costruzione e i widget della tab Guida."""
@@ -23,25 +24,28 @@ class HelpTab(QWidget):
     def _init_ui(self) -> None:
         """Configura l'interfaccia utente della guida con il browser dei contenuti."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(15)
+
         header = QHBoxLayout()
-        h = QLabel("Guida all'Uso")
-        h.setFont(FONTS["heading"])
-        h.setStyleSheet(f"color: {COLORS['accent']};")
-        header.addWidget(h)
-        
-        btn_open = QPushButton("Apri Cartella Dati")
+        header.addStretch()
+
+        btn_open = QPushButton("APRI CARTELLA DATI")
         btn_open.clicked.connect(lambda: os.startfile(APP_DATA_DIR))
         header.addWidget(btn_open)
         layout.addLayout(header)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {COLORS['border']}; }}")
+        
         self.help_topics_list = QListWidget()
+        self.help_topics_list.setStyleSheet(f"QListWidget {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 10px; }}")
+        
         self.help_detail_text = QTextEdit()
         self.help_detail_text.setReadOnly(True)
         self.help_detail_text.setFont(FONTS["body"])
-        
+        self.help_detail_text.setStyleSheet(f"QTextEdit {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 15px; }}")
+
         splitter.addWidget(self.help_topics_list)
         splitter.addWidget(self.help_detail_text)
         splitter.setStretchFactor(0, 1)
@@ -49,20 +53,58 @@ class HelpTab(QWidget):
         layout.addWidget(splitter, 1)
 
         self.help_data = {
-            "🚀 Introduzione": "BENVENUTO IN INTELLEO PDF SPLITTER\n\nIntelleo è uno strumento professionale per l'automazione documentale.\nPermette di dividere massicci volumi di scansioni PDF in singoli documenti, classificandoli automaticamente.\n\n✨ FUNZIONALITÀ CHIAVE\n1. Smart Splitting: Riconoscimento intelligente delle pagine tramite parole chiave.\n2. Supporto ROI: Aree di interesse specifiche per aumentare la precisione.\n3. Analisi Ibrida: Combina estrazione testo nativa con OCR Tesseract.\n4. Revisione Manuale: Interfaccia dedicata per gestire i file non riconosciuti.",
-            "⚙️ Configurazione Iniziale": "PRIMA CONFIGURAZIONE\n\n1. Installazione Tesseract OCR\n   Tab 'Configurazione' -> Seleziona il percorso di tesseract.exe.\n   Usa 'Auto-Rileva' per trovarlo automaticamente.\n\n2. Creazione Regole\n   Tab 'Configurazione' -> 'Regole di Classificazione' -> 'Aggiungi'.\n   Imposta Nome Categoria e Parole Chiave.",
-            "🎯 Utility ROI": "UTILITY ROI (Region of Interest)\n\nSe la ricerca generica non basta, usa le ROI.\n\n1. Apri l'utility dal pulsante 'Utility ROI'.\n2. Carica un PDF di esempio.\n3. Disegna un rettangolo sull'area di interesse.\n4. Assegna la ROI alla categoria.",
-            "📂 Elaborazione": "ELABORAZIONE DOCUMENTI\n\n1. Vai alla scheda Elaborazione.\n2. Trascina i file PDF nell'area tratteggiata.\n3. Verifica il codice ODC.\n4. La barra di progresso mostrerà l'avanzamento.",
-            "📝 Revisione Manuale": "REVISIONE FILE SCONOSCIUTI\n\nSe pagine non corrispondono a nessuna regola:\n- Lista a Sinistra: Seleziona le pagine.\n- Anteprima a Destra: Controlla il contenuto.\n- RINOMINA: Crea il file PDF finale.\n- SALTA: Passa al prossimo gruppo.",
+            "🚀 Benvenuto": (
+                "BENVENUTO IN INTELLEO PDF SPLITTER\n\n"
+                "Intelleo è uno strumento professionale per l'automazione documentale, "
+                "progettato per dividere massicci volumi di scansioni PDF in documenti singoli, "
+                "classificandoli automaticamente tramite OCR e intelligenza artificiale.\n\n"
+                "✨ FLUSSO UNIFICATO\n"
+                "L'applicazione è stata ottimizzata per operare interamente dalla Dashboard principale, "
+                "riducendo al minimo i cambi di schermata e massimizzando la produttività."
+            ),
+            "📂 Caricamento e Avvio": (
+                "COME AVVIARE UN'ANALISI\n\n"
+                "Ci sono tre modi rapidi per iniziare il lavoro:\n\n"
+                "1. PULSANTE AVVIA ANALISI: Clicca sul tasto blu principale. Il sistema ti chiederà "
+                "se desideri selezionare singoli 'File PDF' o scansionare un'intera 'Cartella'.\n\n"
+                "2. DRAG & DROP: Trascina i file PDF direttamente nell'area 'DROP' in fondo alla Dashboard. "
+                "L'analisi partirà immediatamente con i parametri correnti.\n\n"
+                "3. COMANDI CLI: Puoi trascinare un file sopra l'icona dell'applicazione per lanciarla "
+                "direttamente su quel documento."
+            ),
+            "⚙️ Configurazione e ODC": (
+                "GESTIONE PARAMETRI\n\n"
+                "• CODICE ODC: Inserisci il codice commessa nel campo dedicato all'interno del gruppo "
+                "'CONFIGURAZIONE' nella Dashboard. Verrà usato come prefisso per ogni file generato.\n\n"
+                "• TESSERACT OCR: Assicurati che il percorso dell'eseguibile sia corretto nella "
+                "tab 'Configurazione'. Usa 'Auto-Rileva' per una configurazione istantanea.\n\n"
+                "• REGOLE: Gestisci le parole chiave e i criteri di classificazione premendo il tasto 'REGOLE'."
+            ),
+            "🎯 Utility ROI": (
+                "AREE DI INTERESSE (ROI)\n\n"
+                "Se i documenti hanno una struttura fissa ma testi difficili da rilevare globalmente, "
+                "usa l'utility ROI:\n\n"
+                "1. Apri 'UTILITY ROI' dalla Dashboard.\n"
+                "2. Carica un PDF e disegna un'area specifica dove il software deve cercare il testo.\n"
+                "3. Assegna l'area a una categoria e salva.\n\n"
+                "Questo aumenta drasticamente la precisione e la velocità di analisi."
+            ),
+            "📝 Sessioni e Revisione": (
+                "SICUREZZA E CONTROLLO\n\n"
+                "• RECUPERA SESSIONE: Se l'app si chiude accidentalmente durante un lavoro, al riavvio "
+                "potrai riprendere esattamente da dove avevi interrotto.\n\n"
+                "• REVISIONE MANUALE: Le pagine non riconosciute automaticamente vengono isolate. "
+                "Al termine del processo si aprirà un'interfaccia dedicata per rinominarle o scartarle manualmentee."
+            ),
         }
-        
+
         for topic in self.help_data:
             self.help_topics_list.addItem(topic)
-            
+
         self.help_topics_list.currentItemChanged.connect(self._on_help_topic_select)
         self.help_topics_list.setCurrentRow(0)
 
-    def _on_help_topic_select(self, current: QListWidget, previous: Any = None) -> None:
+    def _on_help_topic_select(self, current: Any, previous: Any = None) -> None:
         """Gestisce il cambio di topic nella guida."""
-        if current:
+        if current and hasattr(current, "text"):
             self.help_detail_text.setPlainText(self.help_data.get(current.text(), ""))

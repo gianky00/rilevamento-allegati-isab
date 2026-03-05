@@ -2,10 +2,13 @@
 Responsabile del rendering grafico delle aree ROI (SRP).
 Trasforma coordinate PDF in oggetti QGraphicsItem.
 """
-from typing import Any, Dict, List
+
+from typing import Any
+
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPen
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem
+
 
 class ROIRenderer:
     """Gestisce il disegno delle ROI su una QGraphicsScene."""
@@ -17,10 +20,13 @@ class ROIRenderer:
         # Fattore di scala: (DPI_RENDER / DPI_PDF_BASE)
         self.scale_factor = (150 * zoom_level) / 72
 
-    def draw_roi(self, rule_index: int, roi_index: int, category_name: str, color_hex: str, roi_coords: List[int]) -> List[Any]:
+    def draw_roi(
+        self, rule_index: int, roi_index: int, category_name: str, color_hex: str, roi_coords: list[int]
+    ) -> list[Any]:
         """Disegna una singola ROI e la sua etichetta. Restituisce gli item creati."""
-        if len(roi_coords) != 4: return []
-        
+        if len(roi_coords) != 4:
+            return []
+
         color = QColor(color_hex)
         x0, y0, x1, y1 = [c * self.scale_factor for c in roi_coords]
         w, h = x1 - x0, y1 - y0
@@ -33,7 +39,7 @@ class ROIRenderer:
         # 2. Etichetta categoria
         text_width = len(category_name) * 8 + 10
         text_bg = self.scene.addRect(QRectF(x0, y0, text_width, 18), QPen(Qt.PenStyle.NoPen), QBrush(color))
-        
+
         text_color = self._get_contrast_color(color_hex)
         text_item = QGraphicsSimpleTextItem(category_name)
         text_item.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))

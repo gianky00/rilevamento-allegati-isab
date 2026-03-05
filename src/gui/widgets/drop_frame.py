@@ -21,12 +21,16 @@ class DropFrame(QFrame):
         self.on_drop_callback = on_drop_callback
         self.setAcceptDrops(True)
         self._set_default_style()
-        lbl = QLabel("Trascina file o cartelle qui per avviare l'elaborazione automatica", self)
-        lbl.setFont(FONTS["small"])
-        lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl = QLabel("Trascina file o cartelle qui per avviare l'elaborazione automatica", self)
+        self.lbl.setFont(FONTS["small"])
+        self.lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
+        self.lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout = QVBoxLayout(self)
-        layout.addWidget(lbl)
+        layout.addWidget(self.lbl)
+
+    def setText(self, text: str) -> None:
+        """Aggiorna il testo dell'etichetta interna."""
+        self.lbl.setText(text)
 
     def _set_default_style(self):
         """Ripristina lo stile grafico standard (bordo tratteggiato grigio)."""

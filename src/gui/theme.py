@@ -28,14 +28,14 @@ COLORS = {
 # FONT PRESETS
 # ============================================================================
 FONTS = {
-    "heading": QFont("Segoe UI", 16, QFont.Weight.Bold),
-    "subheading": QFont("Segoe UI", 12, QFont.Weight.Bold),
-    "body": QFont("Segoe UI", 10),
-    "body_bold": QFont("Segoe UI", 10, QFont.Weight.Bold),
-    "small": QFont("Segoe UI", 9),
-    "small_bold": QFont("Segoe UI", 9, QFont.Weight.Bold),
-    "mono": QFont("Consolas", 10),
-    "mono_bold": QFont("Consolas", 10, QFont.Weight.Bold),
+    "heading": QFont("Segoe UI", 14, QFont.Weight.Bold),
+    "subheading": QFont("Segoe UI", 11, QFont.Weight.Bold),
+    "body": QFont("Segoe UI", 11),
+    "body_bold": QFont("Segoe UI", 11, QFont.Weight.Bold),
+    "small": QFont("Segoe UI", 11),
+    "small_bold": QFont("Segoe UI", 11, QFont.Weight.Bold),
+    "mono": QFont("Consolas", 11),
+    "mono_bold": QFont("Consolas", 11, QFont.Weight.Bold),
 }
 
 # ============================================================================
@@ -52,28 +52,28 @@ QTabBar::tab {{
 QTabBar::tab:selected {{ background-color: {COLORS["accent"]}; color: white; }}
 QPushButton {{
     font: 10pt "Segoe UI"; padding: 8px 15px;
-    border: 1px solid {COLORS["border"]}; border-radius: 4px;
+    border: none; border-radius: 4px;
     background-color: {COLORS["bg_secondary"]}; color: {COLORS["text_primary"]};
 }}
-QPushButton:hover {{ background-color: {COLORS["accent"]}; color: white; border-color: {COLORS["accent"]}; }}
+QPushButton:hover {{ background-color: {COLORS["accent"]}; color: white; }}
 QLineEdit, QComboBox {{
     font: 10pt "Segoe UI"; padding: 8px;
-    border: 1px solid {COLORS["border"]}; border-radius: 4px;
-    background-color: {COLORS["bg_primary"]};
+    border: none; border-radius: 4px;
+    background-color: {COLORS["bg_secondary"]};
 }}
 QGroupBox {{
-    font: bold 11pt "Segoe UI"; border: 1px solid {COLORS["border"]};
-    border-radius: 4px; margin-top: 10px; padding-top: 15px;
+    font: bold 11pt "Segoe UI"; border: none;
+    border-radius: 8px; margin-top: 0px; padding-top: 15px;
 }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 5px; }}
 QTreeWidget {{
     font: 10pt "Segoe UI"; background-color: {COLORS["bg_primary"]};
-    border: 1px solid {COLORS["border"]}; alternate-background-color: {COLORS["bg_secondary"]};
+    border: none; alternate-background-color: {COLORS["bg_secondary"]};
 }}
 QTreeWidget::item:selected {{ background-color: {COLORS["accent"]}; color: white; }}
 QTreeWidget QHeaderView::section {{
     font: bold 10pt "Segoe UI"; background-color: {COLORS["bg_secondary"]};
-    border: 1px solid {COLORS["border"]}; padding: 5px;
+    border: none; padding: 5px;
 }}
 QProgressBar {{
     border: none; border-radius: 4px; text-align: center;
@@ -82,12 +82,12 @@ QProgressBar {{
 QProgressBar::chunk {{ background-color: {COLORS["success"]}; border-radius: 4px; }}
 QListWidget {{
     font: 10pt "Segoe UI"; background-color: {COLORS["bg_secondary"]};
-    border: 1px solid {COLORS["border"]}; border-radius: 4px;
+    border: none; border-radius: 4px;
 }}
 QListWidget::item:selected {{ background-color: {COLORS["accent"]}; color: white; }}
 QTextEdit {{
     font: 10pt "Consolas"; background-color: {COLORS["bg_secondary"]};
-    color: {COLORS["text_primary"]}; border: 1px solid {COLORS["border"]};
+    color: {COLORS["text_primary"]}; border: none;
     border-radius: 4px;
 }}
 """

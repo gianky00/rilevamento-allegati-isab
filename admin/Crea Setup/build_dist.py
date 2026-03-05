@@ -263,7 +263,6 @@ def build():
             "gui.tabs.config_tab",
             "gui.tabs.dashboard_tab",
             "gui.tabs.help_tab",
-            "gui.tabs.processing_tab",
             "gui.widgets",
             "gui.widgets.drop_frame",
             "gui.widgets.pdf_graphics_view",

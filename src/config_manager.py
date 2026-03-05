@@ -5,21 +5,25 @@ Gestisce il caricamento e salvataggio della configurazione JSON (SRP).
 
 import json
 import os
-from typing import Any, Dict, Tuple
+from typing import Any
+
 from core.path_manager import get_app_base_dir, get_app_data_dir
 
-def get_config_details() -> Tuple[str, str]:
+
+def get_config_details() -> tuple[str, str]:
     """Determina la directory base e il percorso del file di configurazione."""
     app_data_dir = get_app_data_dir()
     return app_data_dir, os.path.join(app_data_dir, "config.json")
 
+
 # Esporta costanti globali
 CONFIG_DIR, CONFIG_FILE = get_config_details()
 
-def load_config() -> Dict[str, Any]:
+
+def load_config() -> dict[str, Any]:
     """Carica la configurazione con logica di fallback."""
-    config_data: Dict[str, Any] = {}
-    
+    config_data: dict[str, Any] = {}
+
     # 1. Tenta il caricamento da APPDATA
     if os.path.exists(CONFIG_FILE):
         try:
@@ -51,7 +55,8 @@ def load_config() -> Dict[str, Any]:
 
     return config_data
 
-def save_config(data: Dict[str, Any]) -> None:
+
+def save_config(data: dict[str, Any]) -> None:
     """Salva la configurazione in modo atomico."""
     tmp_file = CONFIG_FILE + ".tmp"
     try:
@@ -63,6 +68,7 @@ def save_config(data: Dict[str, Any]) -> None:
         os.replace(tmp_file, CONFIG_FILE)
     except Exception as e:
         if os.path.exists(tmp_file):
-            try: os.remove(tmp_file)
-            except OSError: pass
+            import contextlib
+            with contextlib.suppress(OSError):
+                os.remove(tmp_file)
         raise e
