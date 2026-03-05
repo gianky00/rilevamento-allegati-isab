@@ -16,7 +16,8 @@ def process_pdf(
     pdf_path: str,
     odc: str,
     config: Dict[str, Any],
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    cancel_check: Optional[Callable[[], bool]] = None
 ) -> Tuple[bool, str, List[Dict[str, Any]], Optional[str]]:
     """Coordina l'intero workflow di elaborazione di un PDF."""
     
@@ -25,6 +26,9 @@ def process_pdf(
         if progress_callback: progress_callback(msg, lvl)
 
     try:
+        if cancel_check and cancel_check():
+            return False, "Annullato", [], None
+
         tesseract_path = config.get("tesseract_path")
         if not (tesseract_path and os.path.isfile(tesseract_path)):
             return False, "Percorso Tesseract non valido", [], None
@@ -36,11 +40,14 @@ def process_pdf(
         analyzer = AnalysisService(config.get("classification_rules", []), ocr_engine)
         
         # 2. Apertura e Analisi
-        doc = fitz.open(pdf_path)
-        _log(f"🔍 Analisi Smart di {len(doc)} pagine...")
-        page_groups = analyzer.analyze_pdf(doc, progress_callback)
+        _log(f"🔍 Analisi Smart in parallelo...")
+        page_groups = analyzer.analyze_pdf(pdf_path, progress_callback, cancel_check)
         
+        # DEBUG
+        print(f"DEBUG: page_groups={page_groups}")
+
         # 3. Divisione e Salvataggio
+        doc = fitz.open(pdf_path)
         _log("💾 Salvataggio file divisi...")
         base_dir = os.path.dirname(pdf_path)
         generated = PdfSplitter.split_and_save(doc, page_groups, analyzer.rules, base_dir, odc, progress_callback)

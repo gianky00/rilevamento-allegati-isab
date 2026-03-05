@@ -22,6 +22,15 @@ class PdfProcessingWorker:
         self.on_complete = on_complete
         self.processing_start_time: Optional[datetime] = datetime.now()
         self.files_processed_count = 0
+        self._is_cancelled = False
+
+    def cancel(self) -> None:
+        """Richiede l'annullamento dell'elaborazione."""
+        self._is_cancelled = True
+
+    def is_cancelled(self) -> bool:
+        """Verifica se l'elaborazione è stata annullata."""
+        return self._is_cancelled
 
     def start(self) -> threading.Thread:
         """Avvia il thread in background."""
@@ -36,6 +45,9 @@ class PdfProcessingWorker:
         total_files = len(self.pdf_files)
 
         for i, pdf_path in enumerate(self.pdf_files):
+            if self._is_cancelled:
+                self.log_queue.put(("Operazione annullata dall'utente", "WARNING"))
+                break
 
             def progress_callback(message: str, level: str = "INFO", current_idx: int = i, total: int = total_files) -> None:
                 """Gestisce i messaggi di log standard durante l'elaborazione."""
@@ -84,7 +96,7 @@ class PdfProcessingWorker:
 
             self.log_queue.put((f"=== FILE {i + 1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
             success, message, generated, moved = pdf_processor.process_pdf(
-                pdf_path, self.odc, self.config, advanced_progress_callback
+                pdf_path, self.odc, self.config, advanced_progress_callback, self.is_cancelled
             )
 
             if not success:

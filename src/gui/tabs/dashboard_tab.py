@@ -86,11 +86,11 @@ class DashboardTab(QWidget):
         # Actions
         actions_group = QGroupBox(" COMANDI RAPIDI ")
         act_layout = QVBoxLayout(actions_group)
-        btn_new = QPushButton("NUOVA ANALISI")
-        btn_new.setFont(FONTS["body_bold"])
-        btn_new.setStyleSheet(f"background-color: {COLORS['accent']}; color: white;")
-        btn_new.clicked.connect(self.main_app._quick_select_pdf)
-        act_layout.addWidget(btn_new)
+        self.main_app.dashboard_start_btn = QPushButton("NUOVA ANALISI")
+        self.main_app.dashboard_start_btn.setFont(FONTS["body_bold"])
+        self.main_app.dashboard_start_btn.setStyleSheet(f"background-color: {COLORS['accent']}; color: white;")
+        self.main_app.dashboard_start_btn.clicked.connect(self.main_app._quick_select_pdf)
+        act_layout.addWidget(self.main_app.dashboard_start_btn)
         
         btn_rules = QPushButton("GESTISCI REGOLE")
         btn_rules.clicked.connect(lambda: self.main_app.notebook.setCurrentWidget(self.main_app.config_tab))

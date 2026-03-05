@@ -214,8 +214,25 @@ class MainApp(QMainWindow):
             self.rules_count_label.setText(str(len(rs.get_rules())))
 
     def _on_processing_state_changed(self, is_processing: bool) -> None:
-        """Aggiorna lo stato interno di elaborazione e finalizza se necessario."""
+        """Aggiorna lo stato interno di elaborazione e la visibilità dei controlli."""
         self._is_processing = is_processing
+        
+        # Gestione visibilità/abilitazione bottoni
+        if hasattr(self, "stop_btn"):
+            self.stop_btn.setVisible(is_processing)
+        
+        if hasattr(self, "dashboard_start_btn"):
+            self.dashboard_start_btn.setEnabled(not is_processing)
+        
+        if hasattr(self, "select_pdf_btn"):
+            self.select_pdf_btn.setEnabled(not is_processing)
+            
+        if hasattr(self, "select_folder_btn"):
+            self.select_folder_btn.setEnabled(not is_processing)
+            
+        if hasattr(self, "odc_entry"):
+            self.odc_entry.setEnabled(not is_processing)
+            
         # UI updates if needed
         if not is_processing:
             self._finalize_processing()
@@ -410,6 +427,16 @@ class MainApp(QMainWindow):
         self.log_area.clear()
         self.processing_start_time = datetime.now()
         self.controller.start_processing(odc)
+
+    def _stop_processing(self) -> None:
+        """Interrompe l'elaborazione corrente via controller."""
+        reply = QMessageBox.question(
+            self, "Conferma Stop", 
+            "Sei sicuro di voler interrompere l'elaborazione corrente?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.controller.stop_processing()
 
     def _show_unknown_dialog(self, files: List[Any], odc: str) -> None:
         """Visualizza il dialog di revisione per i file non classificati."""

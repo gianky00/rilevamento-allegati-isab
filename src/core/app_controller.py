@@ -45,6 +45,7 @@ class AppController(QObject):
         self.log_queue: queue.Queue = queue.Queue()
         self._is_processing: bool = False
         self.pdf_files: List[str] = []
+        self._current_worker: Optional[PdfProcessingWorker] = None
         
         # Timer per il polling della coda log
         self._log_timer = QTimer()
@@ -112,20 +113,27 @@ class AppController(QObject):
         def on_worker_complete(processed_count: int, unknown_files: List[Any]) -> None:
             """Callback invocata al termine del thread di elaborazione PDF."""
             self._is_processing = False
+            self._current_worker = None
             self.processing_state_changed.emit(False)
             if unknown_files:
                 self.unknown_files_found.emit(unknown_files, odc)
             self.log_received.emit("ELABORAZIONE COMPLETATA", "HEADER")
 
-        worker = PdfProcessingWorker(
+        self._current_worker = PdfProcessingWorker(
             self.log_queue, 
             list(self.pdf_files), 
             odc, 
             self.config,
             on_worker_complete
         )
-        worker.start()
+        self._current_worker.start()
         return True
+
+    def stop_processing(self) -> None:
+        """Richiede l'interruzione immediata del processo di elaborazione."""
+        if self._current_worker:
+            self.log_received.emit("🛑 Richiesta interruzione in corso...", "WARNING")
+            self._current_worker.cancel()
 
     def _process_log_queue(self) -> None:
         """Drena la coda dei log e converte gli item in segnali."""

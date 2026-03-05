@@ -52,13 +52,13 @@ class ProcessingTab(QWidget):
         ilayout.addLayout(odc_row)
 
         file_row = QHBoxLayout()
-        btn_pdf = QPushButton("Seleziona PDF...")
-        btn_pdf.clicked.connect(self.main_app._select_pdf)
-        file_row.addWidget(btn_pdf)
+        self.main_app.select_pdf_btn = QPushButton("Seleziona PDF...")
+        self.main_app.select_pdf_btn.clicked.connect(self.main_app._select_pdf)
+        file_row.addWidget(self.main_app.select_pdf_btn)
         
-        btn_folder = QPushButton("Seleziona Cartella...")
-        btn_folder.clicked.connect(self.main_app._select_folder)
-        file_row.addWidget(btn_folder)
+        self.main_app.select_folder_btn = QPushButton("Seleziona Cartella...")
+        self.main_app.select_folder_btn.clicked.connect(self.main_app._select_folder)
+        file_row.addWidget(self.main_app.select_folder_btn)
         
         self.main_app.pdf_path_label = QLabel("Nessun file selezionato")
         self.main_app.pdf_path_label.setFont(FONTS["body"])
@@ -91,6 +91,18 @@ class ProcessingTab(QWidget):
         self.main_app.progress_bar.setMaximum(1000)
         self.main_app.progress_bar.setValue(0)
         playout.addWidget(self.main_app.progress_bar)
+
+        # Control Buttons (Stop)
+        ctrl_layout = QHBoxLayout()
+        ctrl_layout.addStretch()
+        self.main_app.stop_btn = QPushButton("STOP ELABORAZIONE")
+        self.main_app.stop_btn.setFont(FONTS["body_bold"])
+        self.main_app.stop_btn.setStyleSheet(f"background-color: {COLORS['danger']}; color: white; padding: 8px 20px;")
+        self.main_app.stop_btn.setVisible(False)
+        self.main_app.stop_btn.clicked.connect(self.main_app._stop_processing)
+        ctrl_layout.addWidget(self.main_app.stop_btn)
+        playout.addLayout(ctrl_layout)
+
         layout.addWidget(prog_group)
 
         # Log
