@@ -1,37 +1,40 @@
 """
-Intelleo PDF Splitter - App Updater
+Intelleo PDF Splitter - App Updater (PySide6)
 Gestisce il controllo e la notifica di aggiornamenti dell'applicazione.
 """
 import requests
 import version
 import webbrowser
-from tkinter import messagebox
 from packaging import version as pkg_version
 import tempfile
 import subprocess
 import sys
 import os
 import time
-import tkinter as tk
-from tkinter import ttk
+
+from PySide6.QtWidgets import (
+    QMessageBox, QDialog, QVBoxLayout, QLabel, QProgressBar, QApplication
+)
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 
 
 def check_for_updates(silent=True, on_confirm=None):
     """
     Controlla se è disponibile una nuova versione dell'applicazione.
-    
+
     Interroga un endpoint JSON con formato:
     {
         "version": "2.0.0",
         "url": "https://example.com/download"
     }
-    
+
     Args:
         silent (bool): Se True, non mostra notifiche se non ci sono aggiornamenti
         on_confirm (callable): Funzione da chiamare se l'utente conferma l'aggiornamento (es. salvataggio)
     """
     url = version.UPDATE_URL
-    
+
     if not url or "example.com" in url:
         if not silent:
             print("[INFO] URL aggiornamenti non configurato")
@@ -40,7 +43,7 @@ def check_for_updates(silent=True, on_confirm=None):
     try:
         print("[SISTEMA] Controllo aggiornamenti in corso...")
         response = requests.get(url, timeout=5)
-        
+
         if response.status_code == 200:
             data = response.json()
             remote_ver_str = data.get("version")
@@ -58,8 +61,15 @@ def check_for_updates(silent=True, on_confirm=None):
                         f"L'applicazione verrà chiusa e riavviata automaticamente.\n"
                         f"Vuoi procedere con l'aggiornamento?"
                     )
-                    
-                    if messagebox.askyesno("🔄 Aggiornamento Disponibile", msg):
+
+                    reply = QMessageBox.question(
+                        None,
+                        "🔄 Aggiornamento Disponibile",
+                        msg,
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+
+                    if reply == QMessageBox.StandardButton.Yes:
                         if on_confirm:
                             try:
                                 on_confirm()
@@ -70,14 +80,16 @@ def check_for_updates(silent=True, on_confirm=None):
                         if download_url:
                             perform_auto_update(download_url)
                         else:
-                            messagebox.showinfo(
-                                "ℹ️ Info", 
+                            QMessageBox.information(
+                                None,
+                                "ℹ️ Info",
                                 "Visita il sito per scaricare l'aggiornamento."
                             )
                 else:
                     print("[SISTEMA] ✓ Applicazione aggiornata")
                     if not silent:
-                        messagebox.showinfo(
+                        QMessageBox.information(
+                            None,
                             "✅ Aggiornamento",
                             f"L'applicazione è già aggiornata.\n"
                             f"Versione: {version.__version__}"
@@ -103,35 +115,66 @@ def perform_auto_update(download_url):
     """
     try:
         # Crea finestra di progresso
-        progress_win = tk.Toplevel()
-        progress_win.title("Download Aggiornamento")
-        progress_win.geometry("400x180")
-        progress_win.resizable(False, False)
-        progress_win.attributes("-topmost", True)  # Sempre in primo piano
+        progress_win = QDialog()
+        progress_win.setWindowTitle("Download Aggiornamento")
+        progress_win.setFixedSize(400, 180)
+        progress_win.setWindowFlags(
+            progress_win.windowFlags()
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        # Rimuovi pulsante chiudi (non deve chiudere durante il download)
+        progress_win.setWindowFlags(
+            progress_win.windowFlags()
+            & ~Qt.WindowType.WindowCloseButtonHint
+        )
 
-        # Configurazione Stile Verde per Progressbar
-        style = ttk.Style()
-        style.theme_use('clam')  # 'clam' supporta meglio i colori custom
-        style.configure("Green.Horizontal.TProgressbar", troughcolor='#E0E0E0', background='#198754')
+        layout = QVBoxLayout(progress_win)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
-        # Centra finestra
-        progress_win.update_idletasks()
-        x = (progress_win.winfo_screenwidth() - progress_win.winfo_width()) // 2
-        y = (progress_win.winfo_screenheight() - progress_win.winfo_height()) // 2
-        progress_win.geometry(f"+{x}+{y}")
+        # Label stato
+        lbl = QLabel("Inizializzazione download...")
+        lbl.setFont(QFont("Segoe UI", 10))
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl)
 
-        lbl = ttk.Label(progress_win, text="Inizializzazione download...", font=('Segoe UI', 10))
-        lbl.pack(pady=(20, 10))
+        # Barra di progresso
+        pb = QProgressBar()
+        pb.setMinimum(0)
+        pb.setMaximum(100)
+        pb.setValue(0)
+        pb.setFixedHeight(22)
+        pb.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #E0E0E0;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #E0E0E0;
+            }
+            QProgressBar::chunk {
+                background-color: #198754;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(pb)
 
-        # Barra determinata Verde
-        pb = ttk.Progressbar(progress_win, mode='determinate', length=320, style="Green.Horizontal.TProgressbar")
-        pb.pack(pady=5)
+        # Label dettagli
+        details_lbl = QLabel("")
+        details_lbl.setFont(QFont("Segoe UI", 9))
+        details_lbl.setStyleSheet("color: #666666;")
+        details_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(details_lbl)
 
-        # Label per dettagli
-        details_lbl = ttk.Label(progress_win, text="", font=('Segoe UI', 9), foreground="#666666")
-        details_lbl.pack(pady=5)
+        # Centra la finestra sullo schermo
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geo = screen.availableGeometry()
+            x = (screen_geo.width() - 400) // 2 + screen_geo.x()
+            y = (screen_geo.height() - 180) // 2 + screen_geo.y()
+            progress_win.move(x, y)
 
-        progress_win.update()
+        progress_win.show()
+        QApplication.processEvents()
 
         # Scarica file in temp
         local_filename = download_url.split('/')[-1]
@@ -147,7 +190,8 @@ def perform_auto_update(download_url):
 
         # Ottieni dimensione totale
         total_size = int(response.headers.get('content-length', 0))
-        pb['maximum'] = total_size if total_size > 0 else 100
+        if total_size > 0:
+            pb.setMaximum(total_size)
 
         downloaded = 0
         chunk_size = 8192
@@ -160,15 +204,14 @@ def perform_auto_update(download_url):
                     downloaded += len(chunk)
 
                     # Aggiorna UI
-                    pb['value'] = downloaded
+                    pb.setValue(downloaded)
 
                     elapsed_time = time.time() - start_time
-                    speed = downloaded / elapsed_time if elapsed_time > 0 else 0  # Bytes/s
+                    speed = downloaded / elapsed_time if elapsed_time > 0 else 0
 
                     if total_size > 0:
                         percent = (downloaded / total_size) * 100
                         mb_down = downloaded / (1024 * 1024)
-                        # mb_total = total_size / (1024 * 1024)
 
                         # Stima tempo rimanente
                         remaining_bytes = total_size - downloaded
@@ -179,28 +222,28 @@ def perform_auto_update(download_url):
                         else:
                             eta_str = f"{int(remaining_time // 60)}m {int(remaining_time % 60)}s"
 
-                        lbl.config(text=f"Scaricamento in corso... ({int(percent)}%) - ETA: {eta_str}")
-                        details_lbl.config(text=f"{mb_down:.1f} MB scaricati")
+                        lbl.setText(f"Scaricamento in corso... ({int(percent)}%) - ETA: {eta_str}")
+                        details_lbl.setText(f"{mb_down:.1f} MB scaricati")
                     else:
-                        # Fallback se content-length manca
                         mb_down = downloaded / (1024 * 1024)
-                        lbl.config(text="Scaricamento in corso...")
-                        details_lbl.config(text=f"{mb_down:.1f} MB scaricati")
+                        lbl.setText("Scaricamento in corso...")
+                        details_lbl.setText(f"{mb_down:.1f} MB scaricati")
 
-                    progress_win.update()
+                    QApplication.processEvents()
 
-        progress_win.destroy()
+        progress_win.close()
 
         # Lancia installer in modo silenzioso e chiudi app
-        # /SILENT -> mostra progresso ma non chiede input
-        # /CLOSEAPPLICATIONS -> tenta di chiudere le app in uso (noi)
-        # /FORCESTART -> flag custom per riavviare l'app alla fine (gestito dallo script Inno Setup)
         subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
 
         sys.exit(0)
 
     except Exception as e:
-        messagebox.showerror("Errore Aggiornamento", f"Impossibile completare l'aggiornamento:\n{e}")
+        QMessageBox.critical(
+            None,
+            "Errore Aggiornamento",
+            f"Impossibile completare l'aggiornamento:\n{e}"
+        )
 
 
 if __name__ == "__main__":
