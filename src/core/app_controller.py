@@ -29,13 +29,14 @@ class AppController(QObject):
     """
     
     # Segnali per la View
-    log_received = Signal(str, str)  # message, level
+    log_received = Signal(str, str, bool)  # message, level, replace_last
     progress_updated = Signal(float, str, object)  # value, text, eta_seconds
     license_status_updated = Signal(dict) # info
     processing_state_changed = Signal(bool) # is_processing
     rules_updated = Signal()
     session_status_changed = Signal(bool) # has_session
     unknown_files_found = Signal(list, str) # files, odc
+    stats_updated = Signal(int, int, int, int) # session_docs, session_pages, global_docs, global_pages
 
     def __init__(self) -> None:
         """Inizializza il controller e i servizi core associati."""
@@ -46,6 +47,8 @@ class AppController(QObject):
         self._is_processing: bool = False
         self.pdf_files: List[str] = []
         self._current_worker: Optional[PdfProcessingWorker] = None
+        self.session_docs = 0
+        self.session_pages = 0
         
         # Timer per il polling della coda log
         self._log_timer = QTimer()
@@ -59,6 +62,7 @@ class AppController(QObject):
             self.rule_service = RuleService(self.config)
             self.rules_updated.emit()
             self.session_status_changed.emit(SessionManager.has_session())
+            self.emit_stats()
         except Exception as e:
             logger.error(f"Errore caricamento settings: {e}")
 
@@ -98,9 +102,9 @@ class AppController(QObject):
         self.pdf_files = list(set(all_pdfs)) # Rimuove duplicati
         if self.pdf_files:
             msg = f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1 else os.path.basename(self.pdf_files[0])
-            self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO")
+            self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO", False)
         else:
-            self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING")
+            self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING", False)
 
     def start_processing(self, odc: str) -> bool:
         """Avvia il workflow di elaborazione threadata."""
@@ -110,14 +114,27 @@ class AppController(QObject):
         self._is_processing = True
         self.processing_state_changed.emit(True)
         
-        def on_worker_complete(processed_count: int, unknown_files: List[Any]) -> None:
+        def on_worker_complete(processed_docs: int, processed_pages: int, unknown_files: List[Any]) -> None:
             """Callback invocata al termine del thread di elaborazione PDF."""
             self._is_processing = False
             self._current_worker = None
             self.processing_state_changed.emit(False)
+            
+            # Aggiorna Statistiche
+            self.session_docs += processed_docs
+            self.session_pages += processed_pages
+            
+            global_docs = self.config.get("global_docs", 0) + processed_docs
+            global_pages = self.config.get("global_pages", 0) + processed_pages
+            self.config["global_docs"] = global_docs
+            self.config["global_pages"] = global_pages
+            self.save_settings()
+            
+            self.emit_stats()
+            
             if unknown_files:
                 self.unknown_files_found.emit(unknown_files, odc)
-            self.log_received.emit("ELABORAZIONE COMPLETATA", "HEADER")
+            self.log_received.emit("ELABORAZIONE COMPLETATA", "HEADER", False)
 
         # Configura timer per drenaggio log se non attivo
         if not self._log_timer.isActive():
@@ -136,7 +153,7 @@ class AppController(QObject):
     def stop_processing(self) -> None:
         """Richiede l'interruzione immediata del processo di elaborazione."""
         if self._current_worker:
-            self.log_received.emit("🛑 Richiesta interruzione in corso...", "WARNING")
+            self.log_received.emit("🛑 Richiesta interruzione in corso...", "WARNING", False)
             self._current_worker.cancel()
 
     def _process_log_queue(self) -> None:
@@ -154,12 +171,12 @@ class AppController(QObject):
                         pct = msg.get("phase_pct", 0)
                         
                         # Log granulare nel terminale per feedback immediato
-                        self.log_received.emit(f"  > Pagina {current}/{total} ({phase})", "PROGRESS")
+                        self.log_received.emit(f"  > Pagina {current}/{total} ({phase})", "PROGRESS", True)
                         
                         # Aggiorna anche la barra di progresso
                         self.progress_updated.emit(pct, f"Analisi: {current}/{total}", msg.get("eta_seconds"))
                     else:
-                        self.log_received.emit(str(msg), level)
+                        self.log_received.emit(str(msg), level, False)
                 elif isinstance(item, dict):
                     action = item.get("action")
                     if action == "update_progress":
@@ -168,6 +185,10 @@ class AppController(QObject):
                             str(item.get("text", "")),
                             item.get("eta_seconds")
                         )
+                    elif item.get("level") == "PROGRESS" and item.get("replace_last"):
+                        self.log_received.emit(item.get("text", ""), "PROGRESS", True)
+                    else:
+                        self.log_received.emit(str(item), "INFO", False)
         except queue.Empty:
             pass
 
@@ -200,6 +221,12 @@ class AppController(QObject):
     def check_updates(self, silent: bool = True) -> None:
         """Controlla se ci sono aggiornamenti disponibili."""
         app_updater.check_for_updates(silent=silent, on_confirm=self.save_settings)
+
+    def emit_stats(self) -> None:
+        """Emette i valori attuali delle statistiche (sessione e globali)."""
+        global_docs = self.config.get("global_docs", 0)
+        global_pages = self.config.get("global_pages", 0)
+        self.stats_updated.emit(self.session_docs, self.session_pages, global_docs, global_pages)
 
     def update_last_access(self) -> None:
         """Aggiorna il timestamp dell'ultimo accesso nel file di configurazione."""

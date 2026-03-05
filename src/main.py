@@ -206,6 +206,14 @@ class MainApp(QMainWindow):
         self.controller.rules_updated.connect(self._on_rules_updated)
         self.controller.session_status_changed.connect(self._update_restore_button_state)
         self.controller.unknown_files_found.connect(self._show_unknown_dialog)
+        self.controller.stats_updated.connect(self._on_stats_updated)
+
+    def _on_stats_updated(self, session_docs: int, session_pages: int, global_docs: int, global_pages: int) -> None:
+        """Aggiorna le card statistiche nella dashboard con valori di sessione e globali."""
+        if hasattr(self, "files_count_label"):
+            self.files_count_label.setText(f"{session_docs} / {global_docs}")
+        if hasattr(self, "pages_count_label"):
+            self.pages_count_label.setText(f"{session_pages} / {global_pages}")
 
     def _on_rules_updated(self) -> None:
         """Aggiorna l'interfaccia utente quando le regole di classificazione cambiano."""
@@ -358,8 +366,8 @@ class MainApp(QMainWindow):
         """Delega il controllo licenza al controller."""
         self.controller.check_license()
 
-    def _add_log_message(self, message: str, level: str = "INFO") -> None:
-        """Aggiunge un messaggio al terminale e al log di elaborazione."""
+    def _add_log_message(self, message: str, level: str = "INFO", replace_last: bool = False) -> None:
+        """Aggiunge (o sostituisce) un messaggio al terminale e al log di elaborazione."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         color_map = {
             "ERROR": COLORS["danger"],
@@ -371,7 +379,17 @@ class MainApp(QMainWindow):
         prefix_map = {"ERROR": "[X] ", "WARNING": "[!] ", "SUCCESS": "[OK] ", "HEADER": "=== "}
         prefix = prefix_map.get(level, "")
         color = color_map.get(level, COLORS["text_primary"])
-        self.log_area.append(f'<span style="color:{color}">[{timestamp}] {prefix}{message}</span>')
+        formatted_message = f'<span style="color:{color}">[{timestamp}] {prefix}{message}</span>'
+        
+        if replace_last:
+            # Sostituisce l'ultima riga (utile per PROGRESS continui)
+            cursor = self.log_area.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            cursor.select(cursor.SelectionType.BlockUnderCursor)
+            cursor.removeSelectedText()
+            self.log_area.append(formatted_message)
+        else:
+            self.log_area.append(formatted_message)
         
         if level in ["SUCCESS", "ERROR", "WARNING"]:
             self.recent_log.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')

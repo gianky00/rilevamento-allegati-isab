@@ -20,8 +20,9 @@ class PdfProcessingWorker:
         self.odc = odc
         self.config = config
         self.on_complete = on_complete
-        self.processing_start_time: Optional[datetime] = datetime.now()
+        self.processing_start_time: Optional[datetime] = None
         self.files_processed_count = 0
+        self.pages_processed_count = 0
         self._is_cancelled = False
 
     def cancel(self) -> None:
@@ -82,8 +83,12 @@ class PdfProcessingWorker:
                     phase_pct = data.get("phase_pct", 0)
                     phase = data.get("phase", "analysis")
                     
-                    # Log granulare per feedback immediato
-                    self.log_queue.put((f"  > Pagina {current_page}/{total_p} ({phase})", "PROGRESS"))
+                    # Log granulare per feedback immediato (sostituisce riga per evitare spam)
+                    self.log_queue.put({
+                        "text": f"  > Pagina {current_page}/{total_p}",
+                        "level": "PROGRESS",
+                        "replace_last": True
+                    })
                     
                     file_internal_progress = phase_pct if phase_pct > 0 else (current_page / total_p) * 100
                     base_pct = (current_idx / total) * 100
@@ -108,6 +113,12 @@ class PdfProcessingWorker:
                 self.log_queue.put((f"Errore: {message}", "ERROR"))
             else:
                 self.files_processed_count += 1
+                try:
+                    import pymupdf as fitz
+                    with fitz.open(pdf_path) as d:
+                        self.pages_processed_count += d.page_count
+                except Exception:
+                    pass
                 self.log_queue.put(("File completato con successo", "SUCCESS"))
                 if any(f["category"] == "sconosciuto" for f in generated):
                     unknown_paths = [f["path"] for f in generated if f["category"] == "sconosciuto"]
@@ -127,4 +138,4 @@ class PdfProcessingWorker:
         self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
         
         # Invia il trigger di fine processo al main thread (GUI)
-        self.on_complete(self.files_processed_count, unknown_files)
+        self.on_complete(self.files_processed_count, self.pages_processed_count, unknown_files)

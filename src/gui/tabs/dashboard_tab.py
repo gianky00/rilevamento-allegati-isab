@@ -43,12 +43,10 @@ class DashboardTab(QWidget):
 
         # Stat cards
         cards = QHBoxLayout()
-        card_lic, self.main_app.license_status_label = UIFactory.create_stat_card("STATO LICENZA", "Verificando...")
-        card_analizzati, self.main_app.files_count_label = UIFactory.create_stat_card("DOC ANALIZZATI", "0")
-        card_pagine, self.main_app.pages_count_label = UIFactory.create_stat_card("PAGINE TOTALI", "0")
+        card_analizzati, self.main_app.files_count_label = UIFactory.create_stat_card("DOC ANALIZZATI", "0 / 0")
+        card_pagine, self.main_app.pages_count_label = UIFactory.create_stat_card("PAGINE TOTALI", "0 / 0")
         card_regole, self.main_app.rules_count_label = UIFactory.create_stat_card("REGOLE ATTIVE", "0")
         
-        cards.addWidget(card_lic, 1)
         cards.addWidget(card_analizzati, 1)
         cards.addWidget(card_pagine, 1)
         cards.addWidget(card_regole, 1)
@@ -58,15 +56,24 @@ class DashboardTab(QWidget):
         middle = QHBoxLayout()
 
         # License panel (Compact Version)
-        lic_container = QFrame()
-        lic_layout = QVBoxLayout(lic_container)
-        lic_layout.setContentsMargins(0, 5, 10, 5)
-        lic_layout.setSpacing(6)
+        lic_group = QGroupBox(" STATO LICENZA E INFORMAZIONI ")
+        lic_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; border: 1px solid {COLORS['border']}; border-radius: 6px; margin-top: 10px; }}")
+        lic_layout = QVBoxLayout(lic_group)
+        lic_layout.setContentsMargins(15, 15, 15, 10)
+        lic_layout.setSpacing(4)
         
-        h_lic = QLabel("PARAMETRI DI AUTENTICAZIONE E SICUREZZA")
-        h_lic.setFont(FONTS["small_bold"])
-        h_lic.setStyleSheet(f"color: {COLORS['text_muted']}; border-bottom: 1px solid {COLORS['border']}; padding-bottom: 3px; margin-bottom: 5px;")
-        lic_layout.addWidget(h_lic)
+        # Stato Licenza Primario
+        self.main_app.license_status_label = QLabel("Verificando...")
+        from PySide6.QtGui import QFont
+        self.main_app.license_status_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        self.main_app.license_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_app.license_status_label.setStyleSheet(f"color: {COLORS['text_muted']}; border: none; padding-bottom: 8px;")
+        lic_layout.addWidget(self.main_app.license_status_label)
+        
+        sep_line = QFrame()
+        sep_line.setFrameShape(QFrame.Shape.HLine)
+        sep_line.setStyleSheet(f"border-top: 1px solid {COLORS['border']}; margin-bottom: 5px;")
+        lic_layout.addWidget(sep_line)
 
         self.main_app.license_fields = {}
         fields = [
@@ -80,8 +87,9 @@ class DashboardTab(QWidget):
             self.main_app.license_fields[key] = v_lab
             lic_layout.addWidget(row)
         
+        
         lic_layout.addStretch()
-        middle.addWidget(lic_container, 2)
+        middle.addWidget(lic_group, 2)
 
         # Actions
         actions_group = QGroupBox(" COMANDI RAPIDI ")

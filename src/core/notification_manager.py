@@ -95,7 +95,7 @@ class NotificationManager:
         if hasattr(parent_widget, "controller"):
             parent_widget.controller.log_received.connect(self._on_controller_log)
 
-    def _on_controller_log(self, message: str, level: str) -> None:
+    def _on_controller_log(self, message: str, level: str, replace_last: bool = False) -> None:
         """Riceve log dal controller e mostra notifiche per eventi critici."""
         if level in ["SUCCESS", "ERROR"]:
             # Filtra solo i messaggi più importanti per i toast
@@ -172,7 +172,13 @@ class NotificationManager:
         toast.move(x, y)
         toast.show_animated()
 
-        # Tracking
+        # Tracking e Cronologia (manteniamo le ultime 50 notifiche)
+        if not hasattr(self, "history"):
+            self.history = []
+        self.history.append({"title": title, "msg": message, "time": time.time(), "level": level})
+        if len(self.history) > 50:
+            self.history.pop(0)
+            
         self.notifications.append({"window": toast, "title": title, "msg": message, "time": time.time()})
 
         # Auto close dopo 5 secondi
@@ -215,7 +221,37 @@ class NotificationManager:
             self.bell_count_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
 
     def show_history(self, event=None):
-        """Reset del contatore notifiche."""
+        """Reset del contatore notifiche e mostra la cronologia all'utente."""
         self.unread_count = 0
         self._update_bell()
-        # TODO: Mostrare finestra storico se richiesto (per ora resetta solo)
+        
+        if not hasattr(self, "history") or not self.history:
+            # Import differito per evitare circular imports o rallentamenti
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self.parent, "Notifiche", "Nessuna notifica ricevuta.")
+            return
+            
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton
+        from PySide6.QtGui import QFont
+        
+        dlg = QDialog(self.parent)
+        dlg.setWindowTitle("Centro Notifiche")
+        dlg.resize(400, 300)
+        
+        layout = QVBoxLayout(dlg)
+        list_widget = QListWidget()
+        list_widget.setFont(QFont("Segoe UI", 10))
+        
+        # Mostriamo le notifiche in ordine inverso (le più recenti prima)
+        for notif in reversed(self.history):
+            time_str = time.strftime('%H:%M:%S', time.localtime(notif['time']))
+            level_emoji = "✅" if notif['title'] == "SUCCESS" else "⚠️" if notif['title'] == "WARNING" else "🛑" if notif['title'] == "ERROR" else "ℹ️"
+            list_widget.addItem(f"{time_str} - {level_emoji} {notif['msg']}")
+            
+        layout.addWidget(list_widget)
+        
+        close_btn = QPushButton("Chiudi")
+        close_btn.clicked.connect(dlg.accept)
+        layout.addWidget(close_btn)
+        
+        dlg.exec()
