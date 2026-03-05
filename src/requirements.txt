@@ -4,10 +4,10 @@ pytesseract
 cryptography
 pyarmor
 pyinstaller
-tkinterdnd2
 numpy
 pytest
 pytest-cov
 requests
 packaging
 PySide6
+
