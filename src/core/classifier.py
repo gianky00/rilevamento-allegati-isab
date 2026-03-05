@@ -1,6 +1,7 @@
 """
 Logica di Classificazione Documenti (SRP).
 Gestisce il matching tra testo estratto e regole di classificazione.
+Keywords pre-compilate nel costruttore per massime prestazioni.
 """
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -8,22 +9,26 @@ class DocumentClassifier:
     """Gestisce la classificazione delle pagine basata su regole e keyword."""
 
     def __init__(self, rules: List[Dict[str, Any]]) -> None:
-        """Inizializza il classificatore con le regole di business."""
+        """Inizializza il classificatore pre-compilando le keywords in minuscolo."""
         self.rules = rules
+        # Pre-compila: .lower() una sola volta, non per ogni pagina
+        self._compiled_rules: List[Tuple[str, List[str]]] = []
+        for rule in rules:
+            category = rule.get("category_name")
+            if not isinstance(category, str):
+                category = "sconosciuto"
+            keywords = [k.lower() for k in rule.get("keywords", [])]
+            self._compiled_rules.append((category, keywords))
 
     def classify_text(self, text: str) -> Optional[str]:
         """
         Analizza un blocco di testo e restituisce il nome della categoria se c'è un match.
+        Usa le keywords pre-compilate per evitare .lower() ripetuti.
         """
         text_lower = text.lower()
-        for rule in self.rules:
-            keywords = [k.lower() for k in rule.get("keywords", [])]
-            category_name = rule.get("category_name")
-            if not isinstance(category_name, str):
-                category_name = "sconosciuto"
-            
+        for category, keywords in self._compiled_rules:
             if any(keyword in text_lower for keyword in keywords):
-                return category_name
+                return category
         return None
 
     def get_rule_for_category(self, category_name: str) -> Optional[Dict[str, Any]]:

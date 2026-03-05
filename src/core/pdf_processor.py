@@ -1,6 +1,7 @@
 """
 Intelleo PDF Splitter - Orchestratore Elaborazione
 Coordina i servizi di analisi, divisione e archiviazione (SRP).
+Ottimizzato: eliminata riapertura doppia del documento PDF.
 """
 import os
 import pymupdf as fitz
@@ -39,11 +40,11 @@ def process_pdf(
         ocr_engine = OcrEngine(tesseract_path)
         analyzer = AnalysisService(config.get("classification_rules", []), ocr_engine)
         
-        # 2. Apertura e Analisi
-        _log(f"🔍 Analisi Smart in parallelo...")
+        # 2. Analisi (il documento viene aperto/chiuso internamente)
+        _log("🔍 Analisi Smart in parallelo...")
         page_groups = analyzer.analyze_pdf(pdf_path, progress_callback, cancel_check)
         
-        # 3. Divisione e Salvataggio
+        # 3. Divisione e Salvataggio — apre il documento una sola volta per lo split
         doc = fitz.open(pdf_path)
         _log("💾 Salvataggio file divisi...")
         base_dir = os.path.dirname(pdf_path)

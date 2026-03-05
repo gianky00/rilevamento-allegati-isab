@@ -1,5 +1,6 @@
 """
 Servizio per la divisione fisica e il salvataggio dei file PDF (SRP).
+Ottimizzato con salvataggio deflate e garbage collection.
 """
 import os
 import time
@@ -27,10 +28,16 @@ class PdfSplitter:
                 "current": len(pdf_doc), "total": len(pdf_doc), "eta_seconds": 0
             })
 
+        # Pre-calcola suffix map per evitare lookup ripetuti
+        suffix_map: Dict[str, str] = {}
+        for rule in rules:
+            cat = rule.get("category_name", "")
+            suffix_map[cat] = rule.get("filename_suffix") or cat
+
         for category, pages in page_groups.items():
             if not pages: continue
             
-            suffix = PdfSplitter._get_suffix(category, rules)
+            suffix = suffix_map.get(category, category)
             filename = f"{odc}_.pdf" if category == "sconosciuto" else f"{odc}_{suffix}.pdf"
             path = os.path.join(output_dir, filename)
 
@@ -48,15 +55,6 @@ class PdfSplitter:
         return generated_files
 
     @staticmethod
-    def _get_suffix(category: str, rules: List[Dict[str, Any]]) -> str:
-        """Determina il suffisso del file basandosi sulla categoria e sulle regole."""
-        if category == "sconosciuto": return ""
-        for r in rules:
-            if r.get("category_name") == category:
-                return r.get("filename_suffix") or category
-        return category
-
-    @staticmethod
     def _get_ranges(pages: List[int]) -> List[tuple]:
         """Raggruppa una lista di indici di pagina in tuple (start, end) consecutive."""
         if not pages: return []
@@ -72,10 +70,11 @@ class PdfSplitter:
 
     @staticmethod
     def _safe_save(doc: fitz.Document, path: str, retries: int = 3) -> bool:
-        """Tenta il salvataggio del PDF con gestione dei tentativi in caso di file bloccato."""
+        """Tenta il salvataggio del PDF con deflate e garbage collection."""
         for i in range(retries):
             try:
-                doc.save(path)
+                # deflate=True: compressione stream, garbage=3: rimuove oggetti orfani + compatta xref
+                doc.save(path, deflate=True, garbage=3)
                 return True
             except PermissionError:
                 time.sleep(1.0)

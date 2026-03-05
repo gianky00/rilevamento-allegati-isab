@@ -1,6 +1,7 @@
 """
 Servizio per l'analisi e la classificazione delle pagine PDF (SRP).
 Utilizza OcrEngine e DocumentClassifier.
+Ottimizzato con ThreadPoolExecutor, pre-compilazione regole, OCR per-ROI con early-exit.
 """
 import time
 import os
@@ -10,6 +11,88 @@ import pymupdf as fitz
 from PIL import Image
 from core.ocr_engine import OcrEngine
 from core.classifier import DocumentClassifier
+
+
+def _analyze_single_page_standalone(
+    page: fitz.Page,
+    rules: List[Dict[str, Any]],
+    ocr_engine: OcrEngine,
+) -> str:
+    """
+    Analizza una singola pagina con strategia ottimizzata a tre stadi.
+    
+    1. Fast Path (Testo Nativo): istantaneo.
+    2. Medium Path (OCR per-ROI): una chiamata Tesseract per ROI, con early-exit.
+    3. Robust Path (OCR Trasformato): solo se necessario, per-ROI.
+    """
+    try:
+        pw = float(page.rect.width)
+        ph = float(page.rect.height)
+    except (AttributeError, TypeError, ValueError):
+        pw, ph = 10000.0, 10000.0
+
+    # Pre-compila keywords per ogni regola (evita .lower() ripetuti)
+    compiled_rules: List[Tuple[str, List[str], List[fitz.Rect]]] = []
+    for rule in rules:
+        keywords = [k.lower() for k in rule.get("keywords", [])]
+        category = str(rule.get("category_name", "sconosciuto"))
+        valid_rois = []
+        for roi in rule.get("rois", []):
+            if len(roi) != 4:
+                continue
+            roi_rect = fitz.Rect(roi)
+            if roi_rect.x1 <= pw and roi_rect.y1 <= ph:
+                valid_rois.append(roi_rect)
+        compiled_rules.append((category, keywords, valid_rois))
+
+    # --- STADIO 1: FAST PATH (Testo Nativo) ---
+    for category, keywords, rois in compiled_rules:
+        for roi_rect in rois:
+            try:
+                native_text = page.get_text("text", clip=roi_rect).lower()
+                if any(kw in native_text for kw in keywords):
+                    return category
+            except Exception:
+                continue
+
+    # --- STADIO 2: OCR PER-ROI (Medium Path) ---
+    # OCR su ciascuna ROI individualmente per massima precisione.
+    # Early-exit appena troviamo un match.
+    scale = 300 / 72
+    mat = fitz.Matrix(scale, scale)
+    
+    for category, keywords, rois in compiled_rules:
+        for roi_rect in rois:
+            try:
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=roi_rect)
+                if pix.width == 0 or pix.height == 0:
+                    continue
+                img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+                
+                text = ocr_engine.scan_image(img)
+                if any(kw in text for kw in keywords):
+                    return category
+            except Exception:
+                continue
+
+    # --- STADIO 3: ROBUST PATH (Solo se il Medium Path fallisce) ---
+    # Tentativo con trasformazioni (rotazioni, contrasto, binarizzazione) per-ROI.
+    for category, keywords, rois in compiled_rules:
+        for roi_rect in rois:
+            try:
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=roi_rect)
+                if pix.width == 0 or pix.height == 0:
+                    continue
+                img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+                
+                found, keyword = ocr_engine.robust_scan(img, keywords)
+                if found:
+                    return category
+            except Exception:
+                continue
+
+    return "sconosciuto"
+
 
 class AnalysisService:
     """Gestisce la logica di scansione intelligente delle pagine con supporto al parallelismo."""
@@ -23,8 +106,8 @@ class AnalysisService:
 
     def analyze_pdf(self, pdf_path: str, progress_callback: Optional[Callable] = None, cancel_check: Optional[Callable[[], bool]] = None) -> Dict[str, List[int]]:
         """
-        Scansiona tutte le pagine in parallelo e restituisce i gruppi di pagine per categoria.
-        Ottimizzato per massimizzare la velocità senza perdere precisione.
+        Scansiona tutte le pagine e restituisce i gruppi di pagine per categoria.
+        Usa ThreadPoolExecutor (pytesseract rilascia il GIL durante le chiamate subprocess).
         """
         page_groups: Dict[str, List[int]] = {}
         
@@ -37,33 +120,34 @@ class AnalysisService:
         results: List[Tuple[int, str]] = []
         start_t_analysis = time.time()
 
-        # Determina il numero di worker ottimale (Capped a 3 per evitare di bloccare il PC)
-        # Tesseract è già molto pesante di suo, troppi thread saturano IO e CPU.
-        max_workers = 3
-        workers = min(max_workers, max(1, (os.cpu_count() or 4) // 2))
+        # Workers: cap a 4 (Tesseract è CPU-intensive, ma rilascia il GIL via subprocess)
+        max_workers = min(os.cpu_count() or 4, 4)
+        workers = min(max_workers, max(1, total_pages))
         
         if workers <= 1 or total_pages <= 1:
-            # Percorso sequenziale per test e sistemi piccoli
-            for page_num in range(total_pages):
-                if cancel_check and cancel_check():
-                    raise InterruptedError("Analisi interrotta")
-                
-                start_page_t = time.time()
-                results.append(self._analyze_page_task(pdf_path, page_num))
-                
-                if progress_callback:
-                    elapsed = time.time() - start_t_analysis
-                    avg_time = elapsed / (page_num + 1)
-                    eta = avg_time * (total_pages - (page_num + 1))
+            # Percorso sequenziale per test e sistemi piccoli — riusa lo stesso doc handle
+            with fitz.open(pdf_path) as doc:
+                for page_num in range(total_pages):
+                    if cancel_check and cancel_check():
+                        raise InterruptedError("Analisi interrotta")
                     
-                    progress_callback({
-                        "type": "page_progress", "current": page_num + 1,
-                        "total": total_pages, "phase": "analysis",
-                        "phase_pct": ((page_num + 1) / total_pages) * 100,
-                        "eta_seconds": eta
-                    })
+                    page = doc.load_page(page_num)
+                    category = _analyze_single_page_standalone(page, self.rules, self.ocr_engine)
+                    results.append((page_num, category))
+                    
+                    if progress_callback:
+                        elapsed = time.time() - start_t_analysis
+                        avg_time = elapsed / (page_num + 1)
+                        eta = avg_time * (total_pages - (page_num + 1))
+                        
+                        progress_callback({
+                            "type": "page_progress", "current": page_num + 1,
+                            "total": total_pages, "phase": "analysis",
+                            "phase_pct": ((page_num + 1) / total_pages) * 100,
+                            "eta_seconds": eta
+                        })
         else:
-            # Percorso parallelo per massime prestazioni
+            # Percorso parallelo — ogni thread apre il proprio handle del PDF (thread-safety)
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_page = {
                     executor.submit(self._analyze_page_task, pdf_path, p): p 
@@ -102,82 +186,11 @@ class AnalysisService:
         Task atomico per l'analisi di una singola pagina in un thread separato.
         Apre un handle locale al PDF per garantire la thread-safety.
         """
-        # Ogni thread deve aprire il proprio handle del documento per sicurezza
         with fitz.open(pdf_path) as doc:
             page = doc.load_page(page_num)
-            category = self._analyze_single_page(page)
+            category = _analyze_single_page_standalone(page, self.rules, self.ocr_engine)
             return page_num, category
 
     def _analyze_single_page(self, page: fitz.Page) -> str:
-        """
-        Analizza una singola pagina con strategia ottimizzata a tre stadi:
-        1. Fast Path (Testo Nativo): istantaneo.
-        2. Medium Path (OCR Pagina Intera): una sola chiamata Tesseract.
-        3. Robust Path (OCR Trasformato): solo se necessario.
-        """
-        try:
-            pw = float(page.rect.width)
-            ph = float(page.rect.height)
-        except (AttributeError, TypeError, ValueError):
-            pw, ph = 10000.0, 10000.0
-
-        # --- STADIO 1: FAST PATH (Testo Nativo) ---
-        for rule in self.rules:
-            keywords = [k.lower() for k in rule.get("keywords", [])]
-            category = str(rule.get("category_name", "sconosciuto"))
-            
-            for roi in rule.get("rois", []):
-                if len(roi) != 4: continue
-                roi_rect = fitz.Rect(roi)
-                if roi_rect.x1 > pw or roi_rect.y1 > ph: continue
-
-                try:
-                    native_text = page.get_text("text", clip=roi_rect).lower()
-                    if any(kw in native_text for kw in keywords):
-                        return category
-                except Exception: continue
-
-        # --- STADIO 2: OCR OTTIMIZZATO (Single Pass) ---
-        # Invece di fare N chiamate OCR per N regole, facciamo una sola chiamata sull'area delle ROI.
-        all_rois = []
-        for rule in self.rules:
-            for roi in rule.get("rois", []):
-                if len(roi) == 4:
-                    all_rois.append(fitz.Rect(roi))
-        
-        if not all_rois:
-            return "sconosciuto"
-
-        # Bounding box di tutte le ROI
-        clip_rect = all_rois[0]
-        for r in all_rois[1:]:
-            clip_rect |= r
-            
-        try:
-            scale = 300 / 72
-            mat = fitz.Matrix(scale, scale)
-            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=clip_rect)
-            img_combined = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-            
-            # Scansione singola (Standard 0 gradi)
-            full_text = self.ocr_engine.scan_image(img_combined)
-            
-            # Controllo incrociato rapido su tutte le regole
-            for rule in self.rules:
-                keywords = [k.lower() for k in rule.get("keywords", [])]
-                if any(kw in full_text for kw in keywords):
-                    return str(rule.get("category_name", "sconosciuto"))
-                    
-            # --- STADIO 3: ROBUST PATH (Solo se il Medium Path fallisce) ---
-            # Se la scansione standard non ha trovato nulla, proviamo le trasformazioni pesanti (rotazioni, contrasto)
-            # ma lo facciamo sempre sull'area combinata per minimizzare le chiamate Tesseract.
-            found, keyword = self.ocr_engine.robust_scan(img_combined, [k for r in self.rules for k in r.get("keywords", [])])
-            if found:
-                # Identifica a quale regola appartiene la keyword trovata
-                for rule in self.rules:
-                    if keyword in [k.lower() for k in rule.get("keywords", [])]:
-                        return str(rule.get("category_name", "sconosciuto"))
-        except Exception:
-            pass
-
-        return "sconosciuto"
+        """Wrapper per compatibilità — delega alla funzione standalone."""
+        return _analyze_single_page_standalone(page, self.rules, self.ocr_engine)
