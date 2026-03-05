@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -30,12 +29,11 @@ from PySide6.QtWidgets import (
 from core.roi_controller import ROIController
 from gui.dialogs.roi_selector_dialog import RoiSelectorDialog
 from gui.theme import COLORS, FONTS
+from gui.ui_factory import AnimatedButton
 from gui.widgets.pdf_graphics_view import ROIGraphicsView
 from gui.widgets.roi_renderer import ROIRenderer
 
 SIGNAL_FILE = ".update_signal"
-
-# ROIGraphicsView estratto in src.gui.widgets.pdf_graphics_view
 
 
 class ROIDrawingApp(QMainWindow):
@@ -54,8 +52,8 @@ class ROIDrawingApp(QMainWindow):
 
         # Widget UI
         self.nav_widget: QWidget
-        self.prev_page_button: QPushButton
-        self.next_page_button: QPushButton
+        self.prev_page_button: AnimatedButton
+        self.next_page_button: AnimatedButton
         self.page_label: QLabel
         self.zoom_label: QLabel
         self.delete_mode_btn: QCheckBox
@@ -94,7 +92,7 @@ class ROIDrawingApp(QMainWindow):
         toolbar_layout.setSpacing(8)
 
         # Apri PDF
-        btn_open = QPushButton("Apri PDF di Esempio")
+        btn_open = AnimatedButton("Apri PDF di Esempio", is_primary=True)
         btn_open.setFont(FONTS["body"])
         btn_open.clicked.connect(self.open_pdf)
         toolbar_layout.addWidget(btn_open)
@@ -106,7 +104,7 @@ class ROIDrawingApp(QMainWindow):
         nav_layout = QHBoxLayout(self.nav_widget)
         nav_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.prev_page_button = QPushButton("<< Pagina Precedente")
+        self.prev_page_button = AnimatedButton("<< Pagina Precedente")
         self.prev_page_button.setFont(QFont("Segoe UI", 10))
         self.prev_page_button.clicked.connect(self.prev_page)
         nav_layout.addWidget(self.prev_page_button)
@@ -117,7 +115,7 @@ class ROIDrawingApp(QMainWindow):
         self.page_label.setMinimumWidth(180)
         nav_layout.addWidget(self.page_label)
 
-        self.next_page_button = QPushButton("Pagina Successiva >>")
+        self.next_page_button = AnimatedButton("Pagina Successiva >>")
         self.next_page_button.setFont(QFont("Segoe UI", 10))
         self.next_page_button.clicked.connect(self.next_page)
         nav_layout.addWidget(self.next_page_button)
@@ -132,7 +130,7 @@ class ROIDrawingApp(QMainWindow):
         zoom_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         toolbar_layout.addWidget(zoom_label)
 
-        btn_zoom_out = QPushButton("-")
+        btn_zoom_out = AnimatedButton("-")
         btn_zoom_out.setFixedWidth(35)
         btn_zoom_out.clicked.connect(self.zoom_out)
         toolbar_layout.addWidget(btn_zoom_out)
@@ -142,12 +140,12 @@ class ROIDrawingApp(QMainWindow):
         self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         toolbar_layout.addWidget(self.zoom_label)
 
-        btn_zoom_in = QPushButton("+")
+        btn_zoom_in = AnimatedButton("+")
         btn_zoom_in.setFixedWidth(35)
         btn_zoom_in.clicked.connect(self.zoom_in)
         toolbar_layout.addWidget(btn_zoom_in)
 
-        btn_zoom_reset = QPushButton("Reset")
+        btn_zoom_reset = AnimatedButton("Reset")
         btn_zoom_reset.clicked.connect(self.zoom_reset)
         toolbar_layout.addWidget(btn_zoom_reset)
 
@@ -205,7 +203,7 @@ class ROIDrawingApp(QMainWindow):
         sidebar_layout.addWidget(self.rules_listbox)
         self._update_rules_list()
 
-        btn_refresh = QPushButton("Aggiorna Lista")
+        btn_refresh = AnimatedButton("Aggiorna Lista")
         btn_refresh.setFont(QFont("Segoe UI", 10))
         btn_refresh.clicked.connect(self._update_rules_list)
         sidebar_layout.addWidget(btn_refresh)

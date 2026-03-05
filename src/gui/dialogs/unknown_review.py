@@ -32,6 +32,7 @@ except ImportError:
     import fitz
 
 from gui.theme import COLORS, FONTS
+from gui.ui_factory import AnimatedButton
 from gui.widgets.preview_view import PreviewGraphicsView
 from shared.constants import SESSION_FILE
 
@@ -102,15 +103,14 @@ class UnknownFilesReviewDialog(QDialog):
 
         action_group = QGroupBox(" Azione ")
         action_layout = QVBoxLayout(action_group)
-        btn_rename = QPushButton("RINOMINA (Estrai Pagine)")
+        btn_rename = AnimatedButton("RINOMINA (Estrai Pagine)", is_primary=True)
         btn_rename.setFont(FONTS["body_bold"])
-        btn_rename.setStyleSheet(f"background-color: {COLORS['accent']}; color: white; font-weight: bold;")
         btn_rename.clicked.connect(self.extract_and_rename)
         action_layout.addWidget(btn_rename)
         action_layout.addWidget(QLabel("Crea un nuovo file con le pagine selezionate."))
         left_layout.addWidget(action_group)
 
-        self.btn_skip = QPushButton("Salta File >>")
+        self.btn_skip = AnimatedButton("Salta File >>")
         self.btn_skip.clicked.connect(self.skip_task)
         left_layout.addWidget(self.btn_skip)
 

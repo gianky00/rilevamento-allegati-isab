@@ -13,11 +13,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
 )
 
 from core.rule_service import RuleService
+from gui.ui_factory import AnimatedButton
 
 
 class RuleEditorDialog(QDialog):
@@ -67,7 +67,7 @@ class RuleEditorDialog(QDialog):
         self.color_swatch.setFixedSize(60, 25)
         grid.addWidget(self.color_swatch, 4, 1)
 
-        btn_color = QPushButton("Scegli")
+        btn_color = AnimatedButton("Scegli")
         btn_color.clicked.connect(self._choose_color)
         grid.addWidget(btn_color, 4, 2)
 
@@ -80,9 +80,9 @@ class RuleEditorDialog(QDialog):
 
         # Buttons
         btn_layout = QHBoxLayout()
-        btn_save = QPushButton("Salva")
+        btn_save = AnimatedButton("Salva", is_primary=True)
         btn_save.clicked.connect(self._on_save)
-        btn_cancel = QPushButton("Annulla")
+        btn_cancel = AnimatedButton("Annulla")
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_save)
         btn_layout.addWidget(btn_cancel)

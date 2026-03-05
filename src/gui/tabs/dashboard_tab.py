@@ -19,8 +19,9 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme import COLORS, FONTS
-from gui.ui_factory import UIFactory
+from gui.ui_factory import UIFactory, AnimatedButton
 from gui.widgets.drop_frame import DropFrame
+from gui.animations import UIAnimations
 
 
 class DashboardTab(QWidget):
@@ -107,24 +108,21 @@ class DashboardTab(QWidget):
         act_layout.setSpacing(8)
 
         # Pulsante Avvia (Primario)
-        self.main_app.dashboard_start_btn = QPushButton("AVVIA ANALISI")
+        self.main_app.dashboard_start_btn = AnimatedButton("AVVIA ANALISI", is_primary=True)
         self.main_app.dashboard_start_btn.setFont(FONTS["body_bold"])
-        self.main_app.dashboard_start_btn.setStyleSheet(
-            f"background-color: {COLORS['accent']}; color: white; padding: 5px 15px;",
-        )
         self.main_app.dashboard_start_btn.clicked.connect(self.main_app._quick_select_pdf)
         act_layout.addWidget(self.main_app.dashboard_start_btn)
 
         # Altri comandi
-        btn_rules = QPushButton("REGOLE")
+        btn_rules = AnimatedButton("REGOLE")
         btn_rules.clicked.connect(lambda: self.main_app.notebook.setCurrentWidget(self.main_app.config_tab))
         act_layout.addWidget(btn_rules)
 
-        btn_roi = QPushButton("UTILITY ROI")
+        btn_roi = AnimatedButton("UTILITY ROI")
         btn_roi.clicked.connect(self.main_app._launch_roi_utility)
         act_layout.addWidget(btn_roi)
 
-        self.main_app.restore_btn = QPushButton("RECUPERA SESSIONE")
+        self.main_app.restore_btn = AnimatedButton("RECUPERA SESSIONE")
         self.main_app.restore_btn.setEnabled(False)
         self.main_app.restore_btn.clicked.connect(self.main_app._restore_session)
         act_layout.addWidget(self.main_app.restore_btn)
@@ -154,11 +152,12 @@ class DashboardTab(QWidget):
         layout.addLayout(quick_row)
 
         # 4. Sezione Elaborazione (Compattata)
-        proc_group = QGroupBox(" ELABORAZIONE IN CORSO ")
-        proc_group.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}",
+        self.main_app.proc_group = QGroupBox(" ELABORAZIONE IN CORSO ")
+        self.main_app.proc_group.setStyleSheet(
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}"
         )
-        playout = QVBoxLayout(proc_group)
+        self.main_app.proc_group.setVisible(False) # Inizialmente nascosto
+        playout = QVBoxLayout(self.main_app.proc_group)
         playout.setContentsMargins(12, 8, 12, 8)
         playout.setSpacing(4)
 
@@ -193,7 +192,7 @@ class DashboardTab(QWidget):
         prog_row.addWidget(self.main_app.stop_btn)
         playout.addLayout(prog_row)
 
-        layout.addWidget(proc_group)
+        layout.addWidget(self.main_app.proc_group)
 
         # 5. Terminale / Log Unificato
         log_group = QGroupBox(" TERMINALE ATTIVITÀ ")
@@ -212,6 +211,7 @@ class DashboardTab(QWidget):
         self.main_app.recent_log = self.main_app.log_area
 
         layout.addWidget(log_group, 1)
+        UIAnimations.fade_in(log_group, 800)
 
         # Aggiungiamo un DropFrame invisibile che copre tutto il layout per facilitare il drag&drop
         self.main_app.drop_frame = DropFrame(self.main_app._on_drop)

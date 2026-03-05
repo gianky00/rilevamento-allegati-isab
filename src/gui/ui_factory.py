@@ -3,13 +3,61 @@ Fabbrica per i componenti dell'interfaccia utente (SRP).
 Riduce il boilerplate in MainApp gestendo la creazione di layout complessi.
 """
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Property
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QPushButton
 
 from core.path_manager import get_asset_path
 from gui.theme import COLORS, FONTS
+from gui.animations import UIAnimations
+
+
+class AnimatedButton(QPushButton):
+    """Pulsante con animazioni fluide per hover e pressione."""
+
+    def __init__(self, text: str, parent=None, is_primary=False):
+        super().__init__(text, parent)
+        self.is_primary = is_primary
+        self._bg_color = QColor(COLORS["accent"] if is_primary else COLORS["bg_secondary"])
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_style()
+
+    def _update_style(self):
+        color = self._bg_color.name()
+        text_color = "white" if self.is_primary else COLORS["text_primary"]
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: {text_color};
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+            }}
+        """)
+
+    def enterEvent(self, event):
+        self.animate_color(COLORS["accent_hover"] if self.is_primary else COLORS["bg_tertiary"])
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.animate_color(COLORS["accent"] if self.is_primary else COLORS["bg_secondary"])
+        super().leaveEvent(event)
+
+    def animate_color(self, target_color_hex):
+        self._anim = QPropertyAnimation(self, b"backgroundColor")
+        self._anim.setDuration(200)
+        self._anim.setEndValue(QColor(target_color_hex))
+        self._anim.start()
+
+    def get_bg_color(self):
+        return self._bg_color
+
+    def set_bg_color(self, color):
+        self._bg_color = color
+        self._update_style()
+
+    backgroundColor = Property(QColor, get_bg_color, set_bg_color)
 
 
 class UIFactory:
@@ -53,11 +101,12 @@ class UIFactory:
         layout.addWidget(t_label)
         layout.addWidget(v_label)
 
+        UIAnimations.fade_in(card, 500)
         return card, v_label
 
     @staticmethod
     def create_combined_stat_card(title: str) -> tuple[QFrame, QLabel, QLabel, QLabel, QLabel]:
-        """Crea una scheda statistica raggruppata con font uniforme."""
+        """Crea una scheda statistica che raggruppa Doc e Pagine fianco a fianco per massima compattezza."""
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -126,11 +175,12 @@ class UIFactory:
         content.addLayout(col_pag)
 
         layout.addLayout(content)
+        UIAnimations.fade_in(card, 600)
         return card, ds, dt, ps, pt
 
     @staticmethod
     def create_license_card(title: str) -> tuple[QFrame, QLabel, QGridLayout]:
-        """Crea una scheda licenza con font uniforme."""
+        """Crea una scheda dedicata alla licenza con layout a due colonne."""
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -161,11 +211,12 @@ class UIFactory:
         grid.setContentsMargins(0, 2, 0, 0)
         layout.addLayout(grid)
 
+        UIAnimations.fade_in(card, 700)
         return card, status_label, grid
 
     @staticmethod
     def create_license_field(label: str, icon: str) -> tuple[QFrame, QLabel]:
-        """Crea un campo informativo con font uniforme."""
+        """Crea un campo informativo per il pannello licenza."""
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -200,7 +251,7 @@ class UIFactory:
 
     @staticmethod
     def create_compact_info_row(label: str, icon_file: str) -> tuple[QFrame, QLabel]:
-        """Crea una riga informativa con font uniforme."""
+        """Crea una riga informativa compatta con icona SVG."""
         row = QFrame()
         row.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border: none; border-radius: 4px; padding: 0px;")
         layout = QHBoxLayout(row)

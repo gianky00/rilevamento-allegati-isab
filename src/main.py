@@ -46,6 +46,7 @@ try:
 
     # Core Managers (SRP)
     from core.tesseract_manager import TesseractManager
+    from gui.animations import UIAnimations
     from gui.dialogs.rule_editor import RuleEditorDialog
     from gui.dialogs.unknown_review import UnknownFilesReviewDialog
     from gui.tabs.config_tab import ConfigTab
@@ -138,6 +139,7 @@ class MainApp(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
 
         self.notebook = QTabWidget()
+        self.notebook.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.notebook)
 
         # —————— Tab Initialization ——————
@@ -159,6 +161,9 @@ class MainApp(QMainWindow):
         self._display_license_info()
         self._populate_rules_tree()
         self.update_last_access()
+
+        # Fade-in finestra principale
+        UIAnimations.fade_in(self, duration=600)
 
         # Timers (Solo quelli UI-only)
         self._update_timer = QTimer(self)
@@ -185,6 +190,20 @@ class MainApp(QMainWindow):
             if p.exists():
                 QTimer.singleShot(500, lambda: self._handle_cli_start(str(p)))
         logger.info("MainApp inizializzata con successo")
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Esegue l'animazione di transizione quando l'utente cambia tab."""
+        if not hasattr(self, "_prev_tab_index"):
+            self._prev_tab_index = 0
+            
+        new_widget = self.notebook.widget(index)
+        old_widget = self.notebook.widget(self._prev_tab_index)
+        
+        if new_widget and old_widget and index != self._prev_tab_index:
+            direction = "right" if index > self._prev_tab_index else "left"
+            UIAnimations.slide_fade_transition(old_widget, new_widget, direction)
+            
+        self._prev_tab_index = index
 
     def _connect_controller_signals(self) -> None:
         """Collega i segnali del controller agli slot della UI."""
@@ -219,8 +238,12 @@ class MainApp(QMainWindow):
             self.rules_count_label.setText(str(len(rs.get_rules())))
 
     def _on_processing_state_changed(self, is_processing: bool) -> None:
-        """Aggiorna lo stato interno di elaborazione e la visibilità dei controlli."""
+        """Aggiorna lo stato interno di elaborazione e la visibilità dei controlli con animazione."""
         self._is_processing = is_processing
+
+        # Gestione visibilità con animazione
+        if hasattr(self, "proc_group"):
+            UIAnimations.animate_visibility(self.proc_group, is_processing)
 
         # Gestione visibilità/abilitazione bottoni
         if hasattr(self, "stop_btn"):

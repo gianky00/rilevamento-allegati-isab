@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QTextEdit,
     QTreeWidget,
     QVBoxLayout,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme import COLORS
+from gui.ui_factory import AnimatedButton
 
 
 class ConfigTab(QWidget):
@@ -46,11 +46,11 @@ class ConfigTab(QWidget):
         self.main_app.tesseract_path_entry.textChanged.connect(self.main_app._on_tesseract_path_change)
         tess_layout.addWidget(self.main_app.tesseract_path_entry, 1)
 
-        btn_browse = QPushButton("Sfoglia")
+        btn_browse = AnimatedButton("Sfoglia")
         btn_browse.clicked.connect(self.main_app._browse_tesseract)
         tess_layout.addWidget(btn_browse)
 
-        btn_detect = QPushButton("Auto-Rileva")
+        btn_detect = AnimatedButton("Auto-Rileva", is_primary=True)
         btn_detect.clicked.connect(self.main_app._auto_detect_tesseract)
         tess_layout.addWidget(btn_detect)
         layout.addWidget(tess_group)
@@ -88,15 +88,15 @@ class ConfigTab(QWidget):
 
         # Buttons
         btns = QVBoxLayout()
-        btn_add = QPushButton("Aggiungi")
+        btn_add = AnimatedButton("Aggiungi")
         btn_add.clicked.connect(self.main_app._add_rule)
         btns.addWidget(btn_add)
 
-        btn_mod = QPushButton("Modifica")
+        btn_mod = AnimatedButton("Modifica")
         btn_mod.clicked.connect(self.main_app._modify_rule)
         btns.addWidget(btn_mod)
 
-        btn_rem = QPushButton("Rimuovi")
+        btn_rem = AnimatedButton("Rimuovi")
         btn_rem.clicked.connect(self.main_app._remove_rule)
         btns.addWidget(btn_rem)
 
@@ -104,7 +104,7 @@ class ConfigTab(QWidget):
         sep.setFrameShape(QFrame.Shape.HLine)
         btns.addWidget(sep)
 
-        btn_roi = QPushButton("Utility ROI")
+        btn_roi = AnimatedButton("Utility ROI")
         btn_roi.clicked.connect(self.main_app._launch_roi_utility)
         btns.addWidget(btn_roi)
 

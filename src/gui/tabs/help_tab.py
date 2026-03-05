@@ -6,9 +6,10 @@ import os
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QSplitter, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QListWidget, QSplitter, QTextEdit, QVBoxLayout, QWidget
 
 from gui.theme import COLORS, FONTS
+from gui.ui_factory import AnimatedButton
 from shared.constants import APP_DATA_DIR
 
 
@@ -30,7 +31,7 @@ class HelpTab(QWidget):
         header = QHBoxLayout()
         header.addStretch()
 
-        btn_open = QPushButton("APRI CARTELLA DATI")
+        btn_open = AnimatedButton("APRI CARTELLA DATI")
         btn_open.clicked.connect(lambda: os.startfile(APP_DATA_DIR))
         header.addWidget(btn_open)
         layout.addLayout(header)
