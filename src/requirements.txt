@@ -10,3 +10,4 @@ pytest
 pytest-cov
 requests
 packaging
+PySide6
