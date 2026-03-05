@@ -225,7 +225,7 @@ class ROIDrawingApp(QMainWindow):
         help_label = QLabel(
             "[AIUTO] Disegna un rettangolo sul PDF per definire una nuova ROI | "
             "Frecce <- -> per navigare | Ctrl+Rotella per zoom | "
-            "Attiva 'Cancellazione' per rimuovere ROI esistenti"
+            "Attiva 'Cancellazione' per rimuovere ROI esistenti",
         )
         help_label.setFont(QFont("Segoe UI", 9))
         help_label.setStyleSheet(f"color: {COLORS['text_muted']};")
@@ -446,13 +446,6 @@ class ROIDrawingApp(QMainWindow):
 
 def run_utility() -> None:
     """Entry point programmatico per l'utility."""
-    print("+====================================================================+")
-    print("|            INTELLEO - UTILITY GESTIONE ROI                         |")
-    print("+====================================================================+")
-    print("|  Usa questa utility per definire le aree di ricerca OCR.           |")
-    print("|  Le modifiche verranno sincronizzate con l'app principale.         |")
-    print("+====================================================================+")
-    print()
 
     app = QApplication(sys.argv)
     window = ROIDrawingApp()

@@ -52,7 +52,7 @@ class RoiManager:
                     return True
             return False
         except Exception as e:
-            logger.error(f"Errore rimozione ROI: {e}")
+            logger.exception(f"Errore rimozione ROI: {e}")
             return False
 
     def get_rules(self) -> list[dict[str, Any]]:

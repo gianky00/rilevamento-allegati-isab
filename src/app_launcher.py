@@ -4,9 +4,9 @@ Gestisce l'inizializzazione del sistema, la licenza e il lancio della GUI o dell
 """
 
 import logging
-import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Gestione crash precoci prima dell'inizializzazione del logger
 try:
@@ -18,7 +18,7 @@ try:
     import license_validator
     import version
 except Exception as e:
-    with open("crash_startup.txt", "w") as f:
+    with Path("crash_startup.txt").open("w") as f:
         f.write(f"CRITICAL ERROR DURING EARLY IMPORT: {e}\n")
         import traceback
 
@@ -67,17 +67,18 @@ def run_app() -> None:
         sys.exit(1)
 
     # Pulizia signal file
-    if os.path.exists(SIGNAL_FILE):
-        os.remove(SIGNAL_FILE)
+    signal_path = Path(SIGNAL_FILE)
+    if signal_path.exists():
+        signal_path.unlink()
 
     # Gestione CLI arguments
     cli_path = None
     if len(sys.argv) > 1:
-        potential_path = sys.argv[1]
-        if os.path.exists(potential_path) and (
-            os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf")
+        potential_path = Path(sys.argv[1])
+        if potential_path.exists() and (
+            potential_path.is_dir() or potential_path.name.lower().endswith(".pdf")
         ):
-            cli_path = potential_path
+            cli_path = str(potential_path)
             logger.info(f"Avvio con file: {potential_path}")
 
     window = MainApp(auto_file_path=cli_path)

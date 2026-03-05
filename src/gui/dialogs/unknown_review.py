@@ -5,7 +5,8 @@ Dialog per la revisione manuale dei file sconosciuti (Splitter).
 
 import json
 import logging
-import os
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt
@@ -29,8 +30,6 @@ try:
     import pymupdf as fitz
 except ImportError:
     import fitz
-
-import contextlib
 
 from gui.theme import COLORS, FONTS
 from gui.widgets.preview_view import PreviewGraphicsView
@@ -56,12 +55,12 @@ class UnknownFilesReviewDialog(QDialog):
             self.windowFlags()
             | Qt.WindowType.Window
             | Qt.WindowType.WindowMaximizeButtonHint
-            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMinimizeButtonHint,
         )
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
 
         # Posticipa la massimizzazione al caricamento completato
-        import PySide6.QtCore as QtCore
+        from PySide6 import QtCore
 
         QtCore.QTimer.singleShot(0, self.showMaximized)
         self.review_tasks = review_tasks
@@ -125,16 +124,16 @@ class UnknownFilesReviewDialog(QDialog):
         """Carica il documento PDF corrispondente all'indice della lista dei task."""
         # Rilascia sempre il documento precedente prima di caricare il nuovo o chiudere
         if self.current_doc:
-            import contextlib
-            with contextlib.suppress(Exception):
+            with suppress(Exception):
                 self.current_doc.close()
             self.current_doc = None
 
         if index >= len(self.review_tasks):
             QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
-            if os.path.exists(SESSION_FILE):
-                with contextlib.suppress(Exception):
-                    os.remove(SESSION_FILE)
+            session_path = Path(SESSION_FILE)
+            if session_path.exists():
+                with suppress(Exception):
+                    session_path.unlink()
             if self.on_finish:
                 self.on_finish()
             self.accept()
@@ -148,7 +147,7 @@ class UnknownFilesReviewDialog(QDialog):
             self.current_doc = fitz.open(self.current_doc_path)
             self.available_pages = list(range(self.current_doc.page_count))
             self.lbl_file_info.setText(
-                f"File {index + 1}/{len(self.review_tasks)}\n{os.path.basename(self.current_doc_path)}"
+                f"File {index + 1}/{len(self.review_tasks)}\n{Path(self.current_doc_path).name}",
             )
             self._refresh_pages_list()
             if self.available_pages:
@@ -184,7 +183,7 @@ class UnknownFilesReviewDialog(QDialog):
             qimage = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
             self.preview.show_pixmap(QPixmap.fromImage(qimage))
         except Exception as e:
-            logger.error(f"Render error: {e}")
+            logger.exception(f"Render error: {e}")
 
     def extract_and_rename(self) -> None:
         """Estrae le pagine selezionate in un nuovo file PDF rinominato dall'utente."""
@@ -240,15 +239,15 @@ class UnknownFilesReviewDialog(QDialog):
         if not self.current_doc_path:
             return
 
-        dir_path = os.path.dirname(self.current_doc_path)
-        output_path = os.path.join(dir_path, new_filename)
+        src_path = Path(self.current_doc_path)
+        output_path = src_path.parent / new_filename
 
-        if os.path.exists(output_path):
+        if output_path.exists():
             reply = QMessageBox.question(self, "Sovrascrivi", "File esistente. Sovrascrivere?")
             if reply != QMessageBox.StandardButton.Yes:
                 return
             try:
-                os.remove(output_path)
+                output_path.unlink()
             except Exception as e:
                 QMessageBox.critical(self, "Errore", f"Impossibile sovrascrivere:\n{e}")
                 return
@@ -257,7 +256,7 @@ class UnknownFilesReviewDialog(QDialog):
             new_doc = fitz.open()
             for idx in selected_real_indices:
                 new_doc.insert_pdf(self.current_doc, from_page=idx, to_page=idx)
-            new_doc.save(output_path)
+            new_doc.save(str(output_path))
             new_doc.close()
             self.available_pages = [p for p in self.available_pages if p not in selected_real_indices]
             self._refresh_pages_list()
@@ -272,27 +271,27 @@ class UnknownFilesReviewDialog(QDialog):
     def finish_task(self) -> None:
         """Pulisce il file corrente e carica il prossimo task."""
         if self.current_doc:
-            with contextlib.suppress(Exception):
+            with suppress(Exception):
                 self.current_doc.close()
             self.current_doc = None
         try:
-            if self.current_doc_path and os.path.exists(self.current_doc_path):
-                os.remove(self.current_doc_path)
+            if self.current_doc_path:
+                doc_path = Path(self.current_doc_path)
+                if doc_path.exists():
+                    doc_path.unlink()
         except Exception as e:
-            logger.error(f"Impossibile cancellare file temp {self.current_doc_path}: {e}")
+            logger.exception(f"Impossibile cancellare file temp {self.current_doc_path}: {e}")
 
         if 0 <= self.task_index < len(self.review_tasks):
             del self.review_tasks[self.task_index]
+            session_path = Path(SESSION_FILE)
             if self.review_tasks:
-                try:
-                    with open(SESSION_FILE, "w") as f:
+                with suppress(Exception):
+                    with session_path.open("w", encoding="utf-8") as f:
                         json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
-                except Exception:
-                    pass
-            else:
-                if os.path.exists(SESSION_FILE):
-                    with contextlib.suppress(Exception):
-                        os.remove(SESSION_FILE)
+            elif session_path.exists():
+                with suppress(Exception):
+                    session_path.unlink()
             self.load_task(self.task_index)
         else:
             self.load_task(0)
@@ -304,20 +303,19 @@ class UnknownFilesReviewDialog(QDialog):
     def closeEvent(self, event: Any) -> None:
         """Gestisce il salvataggio della sessione alla chiusura del dialog."""
         if self.current_doc:
-            with contextlib.suppress(Exception):
+            with suppress(Exception):
                 self.current_doc.close()
             self.current_doc = None
         if self.review_tasks:
             try:
-                os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
-                with open(SESSION_FILE, "w") as f:
+                session_path = Path(SESSION_FILE)
+                session_path.parent.mkdir(parents=True, exist_ok=True)
+                with session_path.open("w", encoding="utf-8") as f:
                     json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
                 logger.info(f"Sessione salvata: {len(self.review_tasks)} task rimasti.")
             except Exception as e:
-                logger.error(f"Errore salvataggio sessione: {e}")
+                logger.exception(f"Errore salvataggio sessione: {e}")
         if self.on_close_callback:
-            try:
+            with suppress(Exception):
                 self.on_close_callback()
-            except Exception as e:
-                logger.error(f"Error in on_close_callback: {e}")
         super().closeEvent(event)

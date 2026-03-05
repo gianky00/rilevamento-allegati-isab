@@ -56,8 +56,7 @@ class TestSessionManagement(unittest.TestCase):
             mock_question.assert_called_once()
             mock_restore_local.assert_not_called()
 
-    @patch("main.os.remove")
-    def test_clear_session_deletes_file(self, mock_remove):
+    def test_clear_session_deletes_file(self):
         """Testa che _clear_session chiami il controller."""
         app = self._get_mock_app()
         app._clear_session()

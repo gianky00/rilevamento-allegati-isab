@@ -1,7 +1,8 @@
 import datetime
 import subprocess
 import unittest
-from unittest.mock import MagicMock, mock_open, patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import license_validator
 
@@ -10,23 +11,25 @@ class TestLicenseValidator(unittest.TestCase):
     @patch("license_validator.get_hardware_id")
     def test_verify_license_invalid_key(self, mock_get_hw_id):
         mock_get_hw_id.return_value = "TEST-HW-ID"
-        with patch("os.path.exists", side_effect=lambda x: False):
+        with patch("pathlib.Path.exists", return_value=False):
             is_valid, msg = license_validator.verify_license()
             self.assertFalse(is_valid)
             self.assertIn("Cartella 'Licenza' mancante", msg)
 
     @patch("license_validator.get_hardware_id")
     def test_verify_license_missing_files(self, mock_get_hw_id):
-        def exists_side_effect(path):
-            return "licenza" in path.lower() and not path.endswith(".dat") and not path.endswith(".json")
+        mock_get_hw_id.return_value = "ACE4_2E00_951D_4DDA"
+        def exists_side_effect(self):
+            # Simula che la cartella esiste ma i file no
+            return "Licenza" in str(self) and not str(self).endswith(".dat") and not str(self).endswith(".json")
 
-        with patch("os.path.exists", side_effect=exists_side_effect):
+        with patch("pathlib.Path.exists", side_effect=exists_side_effect, autospec=True):
             is_valid, msg = license_validator.verify_license()
             self.assertFalse(is_valid)
             self.assertIn("File di licenza mancanti o danneggiati", msg)
 
     def test_get_license_info_no_file(self):
-        with patch("builtins.open", side_effect=FileNotFoundError), patch("os.path.exists", return_value=False):
+        with patch("pathlib.Path.exists", return_value=False):
             info = license_validator.get_license_info()
             self.assertIsNone(info)
 
@@ -86,12 +89,8 @@ class TestLicenseValidator(unittest.TestCase):
 
     @patch("license_validator._get_license_paths")
     @patch("license_validator._calculate_sha256")
-    @patch("os.path.exists", return_value=True)
-    @patch(
-        "builtins.open",
-        new_callable=mock_open,
-        read_data='{"config.dat": "valid_hash", "pyarmor.rkey": "valid_key_hash"}',
-    )
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("pathlib.Path.open")
     @patch("license_validator.get_license_info")
     @patch("license_validator.get_hardware_id", return_value="HWID")
     def test_verify_license_success(self, mock_hw, mock_info, mock_open, mock_exists, mock_sha, mock_paths):
@@ -107,6 +106,13 @@ class TestLicenseValidator(unittest.TestCase):
             "Scadenza Licenza": (datetime.date.today() + datetime.timedelta(days=1)).strftime("%d/%m/%Y"),
             "Cliente": "TestUser",
         }
+        
+        # Mock open for manifest
+        mock_f = MagicMock()
+        mock_f.__enter__.return_value = mock_f
+        mock_f.read.return_value = '{"config.dat": "valid_hash", "pyarmor.rkey": "valid_key_hash"}'
+        mock_open.return_value = mock_f
+        
         is_valid, msg = license_validator.verify_license()
         self.assertTrue(is_valid)
         self.assertIn("Licenza valida per: TestUser", msg)

@@ -100,7 +100,7 @@ class DashboardTab(QWidget):
         actions_group = QGroupBox(" AZIONI ")
         actions_group.setFixedWidth(500) # Ridotto da 620 a 500
         actions_group.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; margin-top: 0px; }}"
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; margin-top: 0px; }}",
         )
         act_layout = QHBoxLayout(actions_group)
         act_layout.setContentsMargins(12, 10, 12, 10)
@@ -110,7 +110,7 @@ class DashboardTab(QWidget):
         self.main_app.dashboard_start_btn = QPushButton("AVVIA ANALISI")
         self.main_app.dashboard_start_btn.setFont(FONTS["body_bold"])
         self.main_app.dashboard_start_btn.setStyleSheet(
-            f"background-color: {COLORS['accent']}; color: white; padding: 5px 15px;"
+            f"background-color: {COLORS['accent']}; color: white; padding: 5px 15px;",
         )
         self.main_app.dashboard_start_btn.clicked.connect(self.main_app._quick_select_pdf)
         act_layout.addWidget(self.main_app.dashboard_start_btn)
@@ -128,26 +128,26 @@ class DashboardTab(QWidget):
         self.main_app.restore_btn.setEnabled(False)
         self.main_app.restore_btn.clicked.connect(self.main_app._restore_session)
         act_layout.addWidget(self.main_app.restore_btn)
-        
+
         quick_row.addWidget(actions_group)
 
         # --- GRUPPO CONFIGURAZIONE (Larghezza Fissa) ---
         config_group = QGroupBox(" CONFIGURAZIONE ")
         config_group.setFixedWidth(200) # Dimensione fissa e compatta
         config_group.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; margin-top: 0px; }}"
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; margin-top: 0px; }}",
         )
         conf_layout = QHBoxLayout(config_group)
         conf_layout.setContentsMargins(12, 10, 12, 10)
         conf_layout.setSpacing(8)
-        
+
         conf_layout.addWidget(QLabel("ODC:"))
         self.main_app.odc_entry = QLineEdit("5400")
         self.main_app.odc_entry.setFixedWidth(120)
         self.main_app.odc_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.main_app.odc_entry.setFont(FONTS["body_bold"])
         conf_layout.addWidget(self.main_app.odc_entry)
-        
+
         quick_row.addWidget(config_group)
         quick_row.addStretch(1) # Spaziatore a destra per centrare il blocco azioni+config
 
@@ -156,7 +156,7 @@ class DashboardTab(QWidget):
         # 4. Sezione Elaborazione (Compattata)
         proc_group = QGroupBox(" ELABORAZIONE IN CORSO ")
         proc_group.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}"
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}",
         )
         playout = QVBoxLayout(proc_group)
         playout.setContentsMargins(12, 8, 12, 8)
@@ -198,7 +198,7 @@ class DashboardTab(QWidget):
         # 5. Terminale / Log Unificato
         log_group = QGroupBox(" TERMINALE ATTIVITÀ ")
         log_group.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}"
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}",
         )
         log_layout = QVBoxLayout(log_group)
         log_layout.setContentsMargins(10, 8, 10, 8)

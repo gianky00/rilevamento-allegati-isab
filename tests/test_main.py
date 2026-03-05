@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,8 +20,8 @@ def mock_dependencies():
         patch("core.app_controller.config_manager.save_config"),
         patch("core.app_controller.app_updater"),
         patch("core.app_controller.SessionManager.has_session", return_value=False),
-        patch("main.notification_manager.NotificationManager"),
-        patch("os.path.exists", return_value=False),
+        patch("core.notification_manager.NotificationManager"),
+        patch("pathlib.Path.exists", return_value=False),
     ]
     for p in patchers:
         p.start()
@@ -83,17 +84,21 @@ def test_add_log_message_progress(main_app):
 
 def test_on_drop_single_file(main_app):
     with patch.object(main_app, "_start_processing") as mock_start:
-        with patch("core.file_service.os.path.exists", return_value=True):
-            with patch("core.file_service.os.path.isfile", return_value=True):
+        with patch("core.file_service.Path.exists", return_value=True):
+            with patch("core.file_service.Path.is_file", return_value=True):
                 main_app._on_drop(["path/to/file.pdf"])
                 assert len(main_app.controller.pdf_files) == 1
                 mock_start.assert_called_once()
 
 
 def test_check_for_updates_signal(main_app):
-    with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove, patch.object(main_app.controller, 'load_settings') as mock_load:
+    # Usiamo Path.exists e Path.unlink nel controller
+    with patch("core.app_controller.Path.exists", return_value=True), \
+         patch("core.app_controller.Path.unlink") as mock_unlink, \
+         patch.object(main_app.controller, 'load_settings') as mock_load:
+         
          main_app._check_for_updates()
-         mock_remove.assert_called_with(main.SIGNAL_FILE)
+         mock_unlink.assert_called_once()
          mock_load.assert_called_once()
 
 

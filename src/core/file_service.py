@@ -2,7 +2,7 @@
 Servizio per la scansione e validazione dei file nel filesystem (SRP).
 """
 
-import os
+from pathlib import Path
 
 
 class FileService:
@@ -13,24 +13,30 @@ class FileService:
         """Trova ricorsivamente tutti i file PDF in un percorso (file o cartella)."""
         found_pdfs: list[str] = []
 
-        if not path or not os.path.exists(path):
+        if not path:
+            return found_pdfs
+            
+        p = Path(path)
+        if not p.exists():
             return found_pdfs
 
-        if os.path.isfile(path):
-            if path.lower().endswith(".pdf"):
-                found_pdfs.append(os.path.abspath(path))
-        elif os.path.isdir(path):
-            for root, _, files in os.walk(path):
+        if p.is_file():
+            if p.suffix.lower() == ".pdf":
+                found_pdfs.append(str(p.resolve()))
+        elif p.is_dir():
+            # Utilizziamo rglob per una ricerca ricorsiva più pulita con pathlib
+            for pdf_file in p.rglob("*.pdf"):
                 # Esclude cartelle di sistema o di archiviazione per evitare loop infiniti
-                if "ORIGINALI" in root:
+                if "ORIGINALI" in pdf_file.parts:
                     continue
-                for name in files:
-                    if name.lower().endswith(".pdf"):
-                        found_pdfs.append(os.path.abspath(os.path.join(root, name)))
+                found_pdfs.append(str(pdf_file.resolve()))
 
         return found_pdfs
 
     @staticmethod
     def is_pdf(filepath: str) -> bool:
         """Verifica se un file è un PDF valido per estensione."""
-        return bool(filepath and os.path.isfile(filepath) and filepath.lower().endswith(".pdf"))
+        if not filepath:
+            return False
+        p = Path(filepath)
+        return p.is_file() and p.suffix.lower() == ".pdf"

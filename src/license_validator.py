@@ -5,12 +5,13 @@ Gestisce la validazione della licenza software.
 
 import hashlib
 import json
-import os
 import platform
 import subprocess
 import sys
 import uuid
+from contextlib import suppress
 from datetime import date
+from pathlib import Path
 
 from cryptography.fernet import Fernet
 
@@ -21,7 +22,7 @@ LICENSE_SECRET_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
 def _calculate_sha256(filepath):
     """Calcola l'hash SHA256 di un file."""
     sha256_hash = hashlib.sha256()
-    with open(filepath, "rb") as f:
+    with Path(filepath).open("rb") as f:
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
@@ -43,17 +44,15 @@ def get_hardware_id():
 
     if system == "Windows":
         # 1. Try WMIC (Legacy)
-        try:
+        with suppress(Exception):
             cmd = "wmic diskdrive get serialnumber"
             output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
             parts = output.strip().split("\n")
             if len(parts) > 1:
                 return parts[1].strip()
-        except Exception:
-            pass
 
         # 2. Try PowerShell (Disk Serial)
-        try:
+        with suppress(Exception):
             cmd = [
                 "powershell",
                 "-NoProfile",
@@ -67,11 +66,9 @@ def get_hardware_id():
 
             if output:
                 return output.splitlines()[0].strip()
-        except Exception:
-            pass
 
         # 3. Try PowerShell (System UUID)
-        try:
+        with suppress(Exception):
             cmd = [
                 "powershell",
                 "-NoProfile",
@@ -85,52 +82,47 @@ def get_hardware_id():
 
             if output:
                 return output
-        except Exception:
-            pass
 
     elif system == "Linux":
         # Try lsblk
-        try:
+        with suppress(Exception):
             cmd = "lsblk --nodeps -o name,serial | grep -v 'NAME' | head -n 1 | awk '{print $2}'"
             output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
 
             if output:
                 return output
-        except Exception:
-            pass
 
         # Fallback to machine-id
-        if os.path.exists("/etc/machine-id"):
-            try:
-                with open("/etc/machine-id") as f:
-                    return f.read().strip()
-            except Exception:
-                pass
+        mid_path = Path("/etc/machine-id")
+        if mid_path.exists():
+            with suppress(Exception):
+                return mid_path.read_text(encoding="utf-8").strip()
 
     # Fallback universale: UUID basato su MAC address
-    try:
+    with suppress(Exception):
         return str(uuid.getnode())
-    except Exception:
-        return "ERROR_GETTING_ID"
+        
+    return "ERROR_GETTING_ID"
 
 
 def _get_license_paths():
     """Restituisce i percorsi dei file di licenza."""
     # Use APPDATA for license storage to ensure write permissions
     if sys.platform == "win32":
+        import os
         appdata = os.environ.get("APPDATA")
         if not appdata:
-            appdata = os.path.expanduser("~")
-        license_dir = os.path.join(appdata, "Intelleo PDF Splitter", "Licenza")
+            appdata = str(Path.home())
+        license_dir = Path(appdata) / "Intelleo PDF Splitter" / "Licenza"
     else:
         # Linux/Mac fallback
-        license_dir = os.path.join(os.path.expanduser("~"), ".intelleo-pdf-splitter", "licenza")
+        license_dir = Path.home() / ".intelleo-pdf-splitter" / "licenza"
 
     return {
-        "dir": license_dir,
-        "config": os.path.join(license_dir, "config.dat"),
-        "rkey": os.path.join(license_dir, "pyarmor.rkey"),
-        "manifest": os.path.join(license_dir, "manifest.json"),
+        "dir": str(license_dir),
+        "config": str(license_dir / "config.dat"),
+        "rkey": str(license_dir / "pyarmor.rkey"),
+        "manifest": str(license_dir / "manifest.json"),
     }
 
 
@@ -142,14 +134,13 @@ def get_license_info():
         dict: Dati della licenza o None in caso di errore
     """
     paths = _get_license_paths()
-    config_path = paths["config"]
+    config_path = Path(paths["config"])
 
-    if not os.path.exists(config_path):
+    if not config_path.exists():
         return None
 
     try:
-        with open(config_path, "rb") as f:
-            encrypted_data = f.read()
+        encrypted_data = config_path.read_bytes()
 
         cipher = Fernet(LICENSE_SECRET_KEY)
         decrypted_data = cipher.decrypt(encrypted_data)
@@ -175,16 +166,16 @@ def verify_license():
     paths = _get_license_paths()
 
     # Controllo cartella
-    if not os.path.exists(paths["dir"]):
+    if not Path(paths["dir"]).exists():
         return False, "Cartella 'Licenza' mancante"
 
     # Controllo file
-    if not os.path.exists(paths["config"]) or not os.path.exists(paths["manifest"]):
+    if not Path(paths["config"]).exists() or not Path(paths["manifest"]).exists():
         return False, "File di licenza mancanti o danneggiati"
 
     # 1. Verifica integrità tramite manifest
     try:
-        with open(paths["manifest"]) as f:
+        with Path(paths["manifest"]).open(encoding="utf-8") as f:
             manifest = json.load(f)
 
         # Verifica hash config.dat
@@ -192,7 +183,8 @@ def verify_license():
             return False, "Integrità licenza compromessa (config.dat)"
 
         # Verifica hash pyarmor.rkey se presente
-        if "pyarmor.rkey" in manifest and os.path.exists(paths["rkey"]) and _calculate_sha256(paths["rkey"]) != manifest.get("pyarmor.rkey"):
+        rkey_path = Path(paths["rkey"])
+        if "pyarmor.rkey" in manifest and rkey_path.exists() and _calculate_sha256(str(rkey_path)) != manifest.get("pyarmor.rkey"):
             return False, "Integrità licenza compromessa (pyarmor.rkey)"
 
     except Exception as e:

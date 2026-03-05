@@ -2,10 +2,11 @@
 Gestisce il workflow di elaborazione threadata, invocando il processore PDF (SRP).
 """
 
-import os
 import threading
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 from queue import Queue
 from typing import Any
 
@@ -54,18 +55,18 @@ class PdfProcessingWorker:
         unknown_files: list[dict[str, Any]] = []
         total_files = len(self.pdf_files)
 
-        for i, pdf_path in enumerate(self.pdf_files):
+        for i, pdf_path_str in enumerate(self.pdf_files):
             if self._is_cancelled:
                 self.log_queue.put(("Operazione annullata dall'utente", "WARNING"))
                 break
 
             def progress_callback(
-                message: str, level: str = "INFO", current_idx: int = i, total: int = total_files
+                message: str, level: str = "INFO", current_idx: int = i, total: int = total_files,
             ) -> None:
                 """Gestisce i messaggi di log standard durante l'elaborazione."""
                 self.log_queue.put((message, level))
                 if "Elaborazione pagina" in message:
-                    try:
+                    with suppress(Exception):
                         parts = message.split()
                         for p in parts:
                             if "/" in p:
@@ -79,14 +80,12 @@ class PdfProcessingWorker:
                                         "value": combined,
                                         "text": f"File {current_idx + 1}/{total} - Pagina {current_page}/{total_p}",
                                         "eta_seconds": None,
-                                    }
+                                    },
                                 )
                                 break
-                    except Exception:
-                        pass
 
             def advanced_progress_callback(
-                data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files
+                data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files,
             ) -> None:
                 """Gestisce messaggi di progresso strutturati (percentuali, ETA) per aggiornare la barra di progresso."""
                 if isinstance(data, dict) and data.get("type") == "page_progress":
@@ -98,7 +97,7 @@ class PdfProcessingWorker:
 
                     # Log granulare per feedback immediato (sostituisce riga per evitare spam)
                     self.log_queue.put(
-                        {"text": f"  > Pagina {current_page}/{total_p}", "level": "PROGRESS", "replace_last": True}
+                        {"text": f"  > Pagina {current_page}/{total_p}", "level": "PROGRESS", "replace_last": True},
                     )
 
                     file_internal_progress = phase_pct if phase_pct > 0 else (current_page / total_p) * 100
@@ -108,29 +107,28 @@ class PdfProcessingWorker:
                     status_text += " - Salvataggio..." if phase == "saving" else f" - Analisi {current_page}/{total_p}"
 
                     self.log_queue.put(
-                        {"action": "update_progress", "value": combined, "text": status_text, "eta_seconds": eta}
+                        {"action": "update_progress", "value": combined, "text": status_text, "eta_seconds": eta},
                     )
                 elif isinstance(data, dict):
                     self.log_queue.put(data)
                 else:
                     progress_callback(str(data), level)
 
-            self.log_queue.put((f"=== FILE {i + 1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
+            pdf_path = Path(pdf_path_str)
+            self.log_queue.put((f"=== FILE {i + 1}/{total_files}: {pdf_path.name} ===", "HEADER"))
             success, message, generated, moved = pdf_processor.process_pdf(
-                pdf_path, self.odc, self.config, advanced_progress_callback, self.is_cancelled
+                str(pdf_path), self.odc, self.config, advanced_progress_callback, self.is_cancelled,
             )
 
             if not success:
                 self.log_queue.put((f"Errore: {message}", "ERROR"))
             else:
                 self.files_processed_count += 1
-                try:
+                with suppress(Exception):
                     import pymupdf as fitz
 
-                    with fitz.open(pdf_path) as d:
+                    with fitz.open(str(pdf_path)) as d:
                         self.pages_processed_count += d.page_count
-                except Exception:
-                    pass
                 self.log_queue.put(("File completato con successo", "SUCCESS"))
                 if any(f["category"] == "sconosciuto" for f in generated):
                     unknown_paths = [f["path"] for f in generated if f["category"] == "sconosciuto"]

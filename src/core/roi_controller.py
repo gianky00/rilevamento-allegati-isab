@@ -4,7 +4,7 @@ Gestisce la logica di navigazione PDF, zoom e coordinamento RoiManager/PdfManage
 """
 
 import logging
-import os
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, Signal
@@ -55,7 +55,7 @@ class ROIController(QObject):
                 self.current_page_index = 0
                 self.zoom_level = 1.0
                 self.render_current_page()
-                self.status_message.emit(f"PDF caricato: {os.path.basename(filepath)}", "SUCCESS")
+                self.status_message.emit(f"PDF caricato: {Path(filepath).name}", "SUCCESS")
             else:
                 self.status_message.emit("Il PDF non contiene pagine", "WARNING")
         else:
@@ -124,12 +124,11 @@ class ROIController(QObject):
         """Salva fisicamente e crea il segnale per l'app principale."""
         try:
             self.roi_manager.save_config()
-            with open(SIGNAL_FILE, "w") as f:
-                f.write("update")
+            Path(SIGNAL_FILE).write_text("update", encoding="utf-8")
             self.rules_updated.emit()
             self.render_current_page()
         except Exception as e:
-            logger.error(f"Errore salvataggio ROI: {e}")
+            logger.exception(f"Errore salvataggio ROI: {e}")
             self.status_message.emit(f"Errore salvataggio: {e}", "ERROR")
 
     def get_rules(self) -> list[dict[str, Any]]:

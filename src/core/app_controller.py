@@ -4,9 +4,10 @@ Gestisce l'elaborazione, le licenze, le sessioni e lo stato applicativo.
 """
 
 import logging
-import os
 import queue
+from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -65,14 +66,14 @@ class AppController(QObject):
             # session_status_changed NON deve essere emesso qui per evitare dialog blocchi durante init
             self.emit_stats()
         except Exception as e:
-            logger.error(f"Errore caricamento settings: {e}")
+            logger.exception(f"Errore caricamento settings: {e}")
 
     def save_settings(self) -> None:
         """Salva le impostazioni correnti."""
         try:
             config_manager.save_config(self.config)
         except Exception as e:
-            logger.error(f"Errore salvataggio settings: {e}")
+            logger.exception(f"Errore salvataggio settings: {e}")
 
     def check_license(self) -> None:
         """Esegue la validazione della licenza e notifica i risultati."""
@@ -91,7 +92,7 @@ class AppController(QObject):
             }
             self.license_status_updated.emit(info)
         except Exception as e:
-            logger.error(f"Errore check licenza: {e}")
+            logger.exception(f"Errore check licenza: {e}")
             self.license_status_updated.emit({"is_valid": False, "error": str(e)})
 
     def set_pdf_files(self, paths: list[str]) -> None:
@@ -105,7 +106,7 @@ class AppController(QObject):
             msg = (
                 f"{len(self.pdf_files)} file selezionati"
                 if len(self.pdf_files) > 1
-                else os.path.basename(self.pdf_files[0])
+                else Path(self.pdf_files[0]).name
             )
             self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO", False)
         else:
@@ -146,7 +147,7 @@ class AppController(QObject):
             self._log_timer.start(100)
 
         self._current_worker = PdfProcessingWorker(
-            self.log_queue, list(self.pdf_files), odc, self.config, on_worker_complete
+            self.log_queue, self.pdf_files.copy(), odc, self.config, on_worker_complete,
         )
         self._current_worker.start()
         return True
@@ -182,7 +183,7 @@ class AppController(QObject):
                     action = item.get("action")
                     if action == "update_progress":
                         self.progress_updated.emit(
-                            float(item.get("value", 0)), str(item.get("text", "")), item.get("eta_seconds")
+                            float(item.get("value", 0)), str(item.get("text", "")), item.get("eta_seconds"),
                         )
                     elif item.get("level") == "PROGRESS" and item.get("replace_last"):
                         self.log_received.emit(item.get("text", ""), "PROGRESS", True)
@@ -208,13 +209,12 @@ class AppController(QObject):
 
     def check_roi_signal(self) -> bool:
         """Verifica se l'utility ROI ha segnalato aggiornamenti."""
-        if os.path.exists(SIGNAL_FILE):
-            try:
-                os.remove(SIGNAL_FILE)
+        signal_path = Path(SIGNAL_FILE)
+        if signal_path.exists():
+            with suppress(OSError):
+                signal_path.unlink()
                 self.load_settings()
                 return True
-            except OSError:
-                pass
         return False
 
     def check_updates(self, silent: bool = True) -> None:
@@ -233,4 +233,4 @@ class AppController(QObject):
             self.config["last_access"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             config_manager.save_config(self.config)
         except Exception as e:
-            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
+            logger.exception(f"Impossibile aggiornare l'ultimo accesso: {e}")

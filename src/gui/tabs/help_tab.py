@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QPushButton, QSplitter, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QSplitter, QTextEdit, QVBoxLayout, QWidget
 
 from gui.theme import COLORS, FONTS
 from shared.constants import APP_DATA_DIR
@@ -37,10 +37,10 @@ class HelpTab(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {COLORS['border']}; }}")
-        
+
         self.help_topics_list = QListWidget()
         self.help_topics_list.setStyleSheet(f"QListWidget {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 10px; }}")
-        
+
         self.help_detail_text = QTextEdit()
         self.help_detail_text.setReadOnly(True)
         self.help_detail_text.setFont(FONTS["body"])

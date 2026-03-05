@@ -101,7 +101,7 @@ class ROIGraphicsView(QGraphicsView):
         if self._panning:
             self._panning = False
             self.setCursor(
-                QCursor(Qt.CursorShape.CrossCursor if not self.app.delete_mode else Qt.CursorShape.ForbiddenCursor)
+                QCursor(Qt.CursorShape.CrossCursor if not self.app.delete_mode else Qt.CursorShape.ForbiddenCursor),
             )
             event.accept()
             return
@@ -121,7 +121,7 @@ class ROIGraphicsView(QGraphicsView):
             y0 = min(self._start_point.y(), end_point.y())
             x1 = max(self._start_point.x(), end_point.x())
             y1 = max(self._start_point.y(), end_point.y())
-            roi_pdf_coords = [int(c * factor) for c in [x0, y0, x1, y1]]
+            roi_pdf_coords = [int(c * factor) for c in (x0, y0, x1, y1)]
 
             self.app.prompt_and_save_roi(roi_pdf_coords)
 

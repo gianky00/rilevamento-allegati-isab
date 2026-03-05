@@ -11,7 +11,9 @@ import logging
 import os
 import sys
 import traceback
+from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 
 # Costante per il nome dell'applicazione
 APP_NAME = "Intelleo PDF Splitter"
@@ -24,18 +26,16 @@ _immediate_log_file = None
 
 def _safe_print(message):
     """Print sicuro che non fallisce se stdout non è disponibile."""
-    import contextlib
-    with contextlib.suppress(Exception):
+    with suppress(Exception):
         if sys.stdout is not None:
-            print(message, flush=True)
+            pass
 
 
 def _write_immediate(message):
     """Scrive immediatamente su file senza buffering."""
     global _immediate_log_file
     if _immediate_log_file:
-        import contextlib
-        with contextlib.suppress(Exception):
+        with suppress(Exception):
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             _immediate_log_file.write(f"{timestamp} | {message}\n")
             _immediate_log_file.flush()
@@ -48,22 +48,22 @@ def get_log_directory():
         # Windows: %APPDATA%\Intelleo PDF Splitter\Log
         appdata = os.environ.get("APPDATA")
         if not appdata:
-            appdata = os.path.expanduser("~")
-        log_dir = os.path.join(appdata, APP_NAME, "Log")
+            appdata = str(Path.home())
+        log_dir = Path(appdata) / APP_NAME / "Log"
     else:
         # Linux/Mac: ~/.intelleo-pdf-splitter/log
-        log_dir = os.path.join(os.path.expanduser("~"), ".intelleo-pdf-splitter", "log")
+        log_dir = Path.home() / ".intelleo-pdf-splitter" / "log"
 
-    return log_dir
+    return str(log_dir)
 
 
 def get_app_directory():
     """Ottiene la directory dell'applicazione."""
     if getattr(sys, "frozen", False):
         # Eseguibile compilato (Nuitka/PyInstaller)
-        return os.path.dirname(sys.executable)
+        return str(Path(sys.executable).parent)
     # Script Python
-    return os.path.dirname(os.path.abspath(__file__))
+    return str(Path(__file__).resolve().parent)
 
 
 def setup_logging():
@@ -83,18 +83,18 @@ def setup_logging():
     log_filename = f"Log_{datetime.now().strftime('%d_%m_%Y')}.log"
 
     # Lista di directory da provare in ordine
-    dirs_to_try = [log_dir, app_dir, os.path.expanduser("~"), os.getcwd()]
+    dirs_to_try = [Path(log_dir), Path(app_dir), Path.home(), Path.cwd()]
 
     actual_log_path = None
 
     # Prova a creare il file di log in una delle directory
     for try_dir in dirs_to_try:
         try:
-            os.makedirs(try_dir, exist_ok=True)
-            test_path = os.path.join(try_dir, log_filename)
+            try_dir.mkdir(parents=True, exist_ok=True)
+            test_path = try_dir / log_filename
             # Prova ad aprire il file per verificare i permessi
-            _immediate_log_file = open(test_path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
-            actual_log_path = test_path
+            _immediate_log_file = test_path.open("a", encoding="utf-8", buffering=1)
+            actual_log_path = str(test_path)
             _write_immediate(f"LOG FILE INIZIALIZZATO: {test_path}")
             _write_immediate(f"Frozen: {getattr(sys, 'frozen', False)}")
             _write_immediate(f"Executable: {sys.executable}")
@@ -104,15 +104,14 @@ def setup_logging():
 
     if actual_log_path is None:
         # Fallback estremo: scrivi nella temp
-        try:
+        with suppress(Exception):
             import tempfile
 
-            temp_dir = tempfile.gettempdir()
-            actual_log_path = os.path.join(temp_dir, log_filename)
-            _immediate_log_file = open(actual_log_path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
+            temp_dir = Path(tempfile.gettempdir())
+            test_path = temp_dir / log_filename
+            _immediate_log_file = test_path.open("a", encoding="utf-8", buffering=1)
+            actual_log_path = str(test_path)
             _write_immediate(f"LOG FILE (FALLBACK TEMP): {actual_log_path}")
-        except Exception:
-            pass
 
     _log_path = actual_log_path
 
@@ -126,7 +125,7 @@ def setup_logging():
 
     # Formatter comune
     file_formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # File handler usando lo stesso path già aperto
@@ -149,15 +148,13 @@ def setup_logging():
         actual_log_path = None
 
     # Console handler - solo se stdout e' disponibile
-    try:
+    with suppress(Exception):
         if sys.stdout is not None and hasattr(sys.stdout, "write"):
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setLevel(logging.INFO)
             console_formatter = logging.Formatter("[%(levelname)s] %(message)s")
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
-    except Exception:
-        pass
 
     return actual_log_path
 
@@ -181,19 +178,19 @@ def setup_exception_handler():
         logger.critical("Eccezione non gestita!", exc_info=(exc_type, exc_value, exc_traceback))
 
         # Scrivi anche su file dedicato per crash
-        crash_dirs = [get_log_directory(), get_app_directory(), os.path.expanduser("~")]
+        crash_dirs = [Path(get_log_directory()), Path(get_app_directory()), Path.home()]
         for crash_dir in crash_dirs:
             try:
-                os.makedirs(crash_dir, exist_ok=True)
-                crash_file = os.path.join(crash_dir, f"Crash_{datetime.now().strftime('%d_%m_%Y_%H%M%S')}.log")
-                with open(crash_file, "w", encoding="utf-8") as f:
+                crash_dir.mkdir(parents=True, exist_ok=True)
+                crash_file = crash_dir / f"Crash_{datetime.now().strftime('%d_%m_%Y_%H%M%S')}.log"
+                with crash_file.open("w", encoding="utf-8") as f:
                     f.write(f"CRASH REPORT - {APP_NAME}\n")
                     f.write(f"{'=' * 60}\n")
                     f.write(f"Data/Ora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
                     f.write(f"Python: {sys.version}\n")
                     f.write(f"Frozen: {getattr(sys, 'frozen', False)}\n")
                     f.write(f"Executable: {sys.executable}\n")
-                    f.write(f"Working Dir: {os.getcwd()}\n")
+                    f.write(f"Working Dir: {Path.cwd()}\n")
                     f.write(f"{'=' * 60}\n\n")
                     f.write("TRACEBACK:\n")
                     traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
@@ -215,7 +212,7 @@ def log_startup_info():
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
     logger.info(f"Executable: {sys.executable}")
-    logger.info(f"Working Directory: {os.getcwd()}")
+    logger.info(f"Working Directory: {Path.cwd()}")
     logger.info(f"App Directory: {get_app_directory()}")
     logger.info(f"Log Directory: {get_log_directory()}")
 
@@ -264,20 +261,16 @@ def shutdown_logging():
     # 1. Chiudi e rimuovi gli handler del logging standard
     logger = logging.getLogger()
     for handler in logger.handlers[:]:
-        try:
+        with suppress(Exception):
             handler.close()
             logger.removeHandler(handler)
-        except Exception:
-            pass
 
     # 2. Chiudi il file di log immediato
     if _immediate_log_file:
-        try:
+        with suppress(Exception):
             _immediate_log_file.flush()
             os.fsync(_immediate_log_file.fileno())
             _immediate_log_file.close()
-        except Exception:
-            pass
         _immediate_log_file = None
 
     # 3. Reset variabili globali
@@ -293,4 +286,3 @@ if __name__ == "__main__":
     logger.debug("Messaggio di debug")
     logger.warning("Messaggio di warning")
     logger.error("Messaggio di errore")
-    print(f"\nLog scritto in: {log_path}")

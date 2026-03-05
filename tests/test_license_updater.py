@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, mock_open, patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import license_updater
 
@@ -10,13 +11,11 @@ class TestLicenseUpdater(unittest.TestCase):
         # Setup mocks for commonly used functions
         self.mock_hw_id = patch("license_validator.get_hardware_id", return_value="TEST_HWID").start()
         self.mock_get_dir = patch("license_updater.get_license_dir", return_value="/mock/Licenza").start()
-        self.mock_exists = patch("os.path.exists").start()
-        self.mock_makedirs = patch("os.makedirs").start()
-        self.mock_remove = patch("os.remove").start()
-        # Mock open
-        self.mock_file = mock_open()
-        self.patcher_open = patch("builtins.open", self.mock_file)
-        self.patcher_open.start()
+        self.mock_exists = patch("pathlib.Path.exists").start()
+        self.mock_mkdir = patch("pathlib.Path.mkdir").start()
+        self.mock_unlink = patch("pathlib.Path.unlink").start()
+        self.mock_read_bytes = patch("pathlib.Path.read_bytes").start()
+        self.mock_write_bytes = patch("pathlib.Path.write_bytes").start()
 
     def tearDown(self):
         patch.stopall()
@@ -36,9 +35,7 @@ class TestLicenseUpdater(unittest.TestCase):
         license_updater.run_update()
 
         # Check files written (3 files)
-        # Note: 'open' is also called inside update_grace_timestamp if not mocked,
-        # but here update_grace_timestamp is mocked.
-        self.assertEqual(self.mock_file.call_count, 3)
+        self.assertEqual(self.mock_write_bytes.call_count, 3)
         mock_update_grace.assert_called_once()
 
     @patch("requests.get")
@@ -61,7 +58,7 @@ class TestLicenseUpdater(unittest.TestCase):
         license_updater.run_update()
 
         # Check NO files written
-        self.assertEqual(self.mock_file.call_count, 0)
+        self.assertEqual(self.mock_write_bytes.call_count, 0)
         # Grace timestamp should still be updated (we are online)
         mock_update_grace.assert_called_once()
 
@@ -92,10 +89,10 @@ class TestLicenseUpdater(unittest.TestCase):
         encrypted = cipher.encrypt(valid_time.encode())
 
         self.mock_exists.return_value = True
-        m = mock_open(read_data=encrypted)
-        with patch("builtins.open", m):
-            result = license_updater.check_grace_period()
-            self.assertTrue(result)
+        self.mock_read_bytes.return_value = encrypted
+        
+        result = license_updater.check_grace_period()
+        self.assertTrue(result)
 
     def test_check_grace_period_expired(self):
         """Test grace period expired (>3 days)."""
@@ -108,11 +105,11 @@ class TestLicenseUpdater(unittest.TestCase):
         encrypted = cipher.encrypt(expired_time.encode())
 
         self.mock_exists.return_value = True
-        m = mock_open(read_data=encrypted)
-        with patch("builtins.open", m):
-            with self.assertRaises(Exception) as cm:
-                license_updater.check_grace_period()
-            self.assertIn("SCADUTO", str(cm.exception))
+        self.mock_read_bytes.return_value = encrypted
+        
+        with self.assertRaises(Exception) as cm:
+            license_updater.check_grace_period()
+        self.assertIn("SCADUTO", str(cm.exception))
 
 
 if __name__ == "__main__":

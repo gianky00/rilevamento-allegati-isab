@@ -35,7 +35,7 @@ class PdfSplitter:
                     "current": len(pdf_doc),
                     "total": len(pdf_doc),
                     "eta_seconds": 0,
-                }
+                },
             )
 
         # Pre-calcola suffix map per evitare lookup ripetuti

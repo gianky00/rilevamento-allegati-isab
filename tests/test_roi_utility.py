@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -57,9 +58,9 @@ def test_prev_next_page(roi_app):
 
 
 def test_save_and_refresh(roi_app):
-    with patch("builtins.open", new_callable=MagicMock) as mock_open:
+    with patch("core.roi_controller.Path.write_text") as mock_write:
         roi_app.save_and_refresh()
         from core.roi_manager import config_manager
 
         config_manager.save_config.assert_called()
-        mock_open.assert_called_with(roi_utility.SIGNAL_FILE, "w")
+        mock_write.assert_called_with("update", encoding="utf-8")

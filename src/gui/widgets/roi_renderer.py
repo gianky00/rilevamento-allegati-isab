@@ -21,7 +21,7 @@ class ROIRenderer:
         self.scale_factor = (150 * zoom_level) / 72
 
     def draw_roi(
-        self, rule_index: int, roi_index: int, category_name: str, color_hex: str, roi_coords: list[int]
+        self, rule_index: int, roi_index: int, category_name: str, color_hex: str, roi_coords: list[int],
     ) -> list[Any]:
         """Disegna una singola ROI e la sua etichetta. Restituisce gli item creati."""
         if len(roi_coords) != 4:

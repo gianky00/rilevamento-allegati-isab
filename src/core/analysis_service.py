@@ -5,6 +5,7 @@ Ottimizzato con ThreadPoolExecutor, pre-compilazione regole, OCR per-ROI con ear
 """
 
 import concurrent.futures
+import operator
 import os
 import time
 from collections.abc import Callable
@@ -69,7 +70,7 @@ def _analyze_single_page_standalone(
         for roi_rect in rois:
             try:
                 pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=roi_rect)
-                if pix.width == 0 or pix.height == 0:
+                if 0 in (pix.width, pix.height):
                     continue
                 img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
 
@@ -85,7 +86,7 @@ def _analyze_single_page_standalone(
         for roi_rect in rois:
             try:
                 pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, clip=roi_rect)
-                if pix.width == 0 or pix.height == 0:
+                if 0 in (pix.width, pix.height):
                     continue
                 img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
 
@@ -109,7 +110,7 @@ class AnalysisService:
         self._page_cache: dict[int, Image.Image] = {}
 
     def analyze_pdf(
-        self, pdf_path: str, progress_callback: Callable | None = None, cancel_check: Callable[[], bool] | None = None
+        self, pdf_path: str, progress_callback: Callable | None = None, cancel_check: Callable[[], bool] | None = None,
     ) -> dict[str, list[int]]:
         """
         Scansiona tutte le pagine e restituisce i gruppi di pagine per categoria.
@@ -135,7 +136,8 @@ class AnalysisService:
             with fitz.open(pdf_path) as doc:
                 for page_num in range(total_pages):
                     if cancel_check and cancel_check():
-                        raise InterruptedError("Analisi interrotta")
+                        msg = "Analisi interrotta"
+                        raise InterruptedError(msg)
 
                     page = doc.load_page(page_num)
                     category = _analyze_single_page_standalone(page, self.rules, self.ocr_engine)
@@ -154,7 +156,7 @@ class AnalysisService:
                                 "phase": "analysis",
                                 "phase_pct": ((page_num + 1) / total_pages) * 100,
                                 "eta_seconds": eta,
-                            }
+                            },
                         )
         else:
             # Percorso parallelo — ogni thread apre il proprio handle del PDF (thread-safety)
@@ -163,7 +165,8 @@ class AnalysisService:
                 for future in concurrent.futures.as_completed(future_to_page):
                     if cancel_check and cancel_check():
                         executor.shutdown(wait=False, cancel_futures=True)
-                        raise InterruptedError("Analisi interrotta")
+                        msg = "Analisi interrotta"
+                        raise InterruptedError(msg)
                     try:
                         results.append(future.result())
                         if progress_callback:
@@ -180,13 +183,13 @@ class AnalysisService:
                                     "phase": "analysis",
                                     "phase_pct": (pages_processed / total_pages) * 100,
                                     "eta_seconds": eta,
-                                }
+                                },
                             )
                     except Exception:
                         results.append((future_to_page[future], "sconosciuto"))
 
         # Riordina i risultati e raggruppa
-        results.sort(key=lambda x: x[0])
+        results.sort(key=operator.itemgetter(0))
         for page_num, category in results:
             page_groups.setdefault(category, []).append(page_num)
 

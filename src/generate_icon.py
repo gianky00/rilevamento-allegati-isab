@@ -116,7 +116,6 @@ def create_modern_icon():
     # Save as ICO
     output_path = "resources/icon.ico"
     images[0].save(output_path, format="ICO", sizes=[(i.width, i.height) for i in images])
-    print(f"Icon generated at: {output_path}")
 
 
 if __name__ == "__main__":

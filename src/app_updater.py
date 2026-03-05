@@ -16,6 +16,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout
 
 import version
+import contextlib
 
 
 def check_for_updates(silent=True, on_confirm=None):
@@ -36,11 +37,10 @@ def check_for_updates(silent=True, on_confirm=None):
 
     if not url or "example.com" in url:
         if not silent:
-            print("[INFO] URL aggiornamenti non configurato")
+            pass
         return
 
     try:
-        print("[SISTEMA] Controllo aggiornamenti in corso...")
         response = requests.get(url, timeout=5)
 
         if response.status_code == 200:
@@ -70,37 +70,32 @@ def check_for_updates(silent=True, on_confirm=None):
 
                     if reply == QMessageBox.StandardButton.Yes:
                         if on_confirm:
-                            try:
+                            with contextlib.suppress(Exception):
                                 on_confirm()
-                                print("[AGGIORNAMENTO] Salvataggio automatico completato.")
-                            except Exception as e:
-                                print(f"[ERRORE] Callback salvataggio: {e}")
 
                         if download_url:
                             perform_auto_update(download_url)
                         else:
                             QMessageBox.information(None, "ℹ️ Info", "Visita il sito per scaricare l'aggiornamento.")
                 else:
-                    print("[SISTEMA] ✓ Applicazione aggiornata")
                     if not silent:
                         QMessageBox.information(
                             None,
                             "✅ Aggiornamento",
                             f"L'applicazione è già aggiornata.\nVersione: {version.__version__}",
                         )
-        else:
-            if not silent:
-                print(f"[AVVISO] Errore controllo aggiornamenti: HTTP {response.status_code}")
+        elif not silent:
+            pass
 
     except requests.Timeout:
         if not silent:
-            print("[AVVISO] Timeout controllo aggiornamenti")
+            pass
     except requests.RequestException as e:
         if not silent:
-            print(f"[AVVISO] Errore connessione: {e}")
+            pass
     except Exception as e:
         if not silent:
-            print(f"[ERRORE] Controllo aggiornamenti: {e}")
+            pass
 
 
 def perform_auto_update(download_url):

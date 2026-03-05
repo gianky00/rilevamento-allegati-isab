@@ -3,7 +3,7 @@ Intelleo PDF Splitter — DropFrame
 Frame che accetta il drag & drop nativo Qt di file PDF.
 """
 
-import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
@@ -53,15 +53,16 @@ class DropFrame(QFrame):
         self._set_default_style()
         files = []
         for url in event.mimeData().urls():
-            path = url.toLocalFile()
-            if os.path.exists(path):
-                if os.path.isdir(path):
-                    for root_dir, _, fnames in os.walk(path):
-                        for name in fnames:
-                            if name.lower().endswith(".pdf"):
-                                files.append(os.path.join(root_dir, name))
-                elif path.lower().endswith(".pdf"):
-                    files.append(path)
+            path_str = url.toLocalFile()
+            if not path_str:
+                continue
+            path = Path(path_str)
+            if path.exists():
+                if path.is_dir():
+                    for pdf_file in path.rglob("*.pdf"):
+                        files.append(str(pdf_file.resolve()))
+                elif path.suffix.lower() == ".pdf":
+                    files.append(str(path.resolve()))
         if files:
             self.on_drop_callback(files)
         event.acceptProposedAction()

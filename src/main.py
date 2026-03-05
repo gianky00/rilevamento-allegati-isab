@@ -4,6 +4,8 @@ Gestisce l'interfaccia grafica e coordina l'interazione tra utente e controller.
 """
 
 import logging
+from contextlib import suppress
+from pathlib import Path
 
 logger = logging.getLogger("MAIN")
 
@@ -30,7 +32,6 @@ try:
     )
 
     logger.info("Importazione moduli applicazione...")
-    import os
     import queue
     import sys
 
@@ -126,7 +127,7 @@ class MainApp(QMainWindow):
 
             self.notifier = notification_manager.NotificationManager(self)
         except Exception as e:
-            logger.error(f"Errore inizializzazione notifiche: {e}")
+            logger.exception(f"Errore inizializzazione notifiche: {e}")
 
         self._connect_controller_signals()
 
@@ -179,8 +180,10 @@ class MainApp(QMainWindow):
         QTimer.singleShot(500, self.controller.check_for_restore)
         QTimer.singleShot(3000, lambda: self.controller.check_updates(silent=True))
 
-        if auto_file_path and os.path.exists(auto_file_path):
-            QTimer.singleShot(500, lambda: self._handle_cli_start(auto_file_path))
+        if auto_file_path:
+            p = Path(auto_file_path)
+            if p.exists():
+                QTimer.singleShot(500, lambda: self._handle_cli_start(str(p)))
         logger.info("MainApp inizializzata con successo")
 
     def _connect_controller_signals(self) -> None:
@@ -268,13 +271,12 @@ class MainApp(QMainWindow):
             # Smoothing asimmetrico: molto lento a salire, reattivo a scendere
             if self._remaining_eta <= 0 or self._current_progress <= 1.0:
                 self._remaining_eta = new_eta
+            elif new_eta > self._remaining_eta:
+                # Sale molto lentamente (pesa solo il 5% il nuovo valore)
+                self._remaining_eta = (0.05 * new_eta) + (0.95 * self._remaining_eta)
             else:
-                if new_eta > self._remaining_eta:
-                    # Sale molto lentamente (pesa solo il 5% il nuovo valore)
-                    self._remaining_eta = (0.05 * new_eta) + (0.95 * self._remaining_eta)
-                else:
-                    # Scende normalmente (pesa il 20%)
-                    self._remaining_eta = (0.2 * new_eta) + (0.80 * self._remaining_eta)
+                # Scende normalmente (pesa il 20%)
+                self._remaining_eta = (0.2 * new_eta) + (0.80 * self._remaining_eta)
 
             self._refresh_eta_label()
 
@@ -291,14 +293,13 @@ class MainApp(QMainWindow):
 
     def setup_icon(self) -> None:
         """Configura l'icona della finestra."""
-        try:
-            icon_path = os.path.join(os.path.dirname(__file__), "resources", "icon.ico")
+        with suppress(Exception):
+            import os
+            icon_path = Path(__file__).resolve().parent / "resources" / "icon.ico"
             if hasattr(sys, "_MEIPASS"):
-                icon_path = os.path.join(sys._MEIPASS, "resources", "icon.ico")
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
-        except Exception as e:
-            logger.warning(f"Impossibile caricare icona: {e}")
+                icon_path = Path(sys._MEIPASS) / "resources" / "icon.ico"
+            if icon_path.exists():
+                self.setWindowIcon(QIcon(str(icon_path)))
 
     # ======== DASHBOARD ========
     def _update_clock(self) -> None:
@@ -321,9 +322,9 @@ class MainApp(QMainWindow):
         msg_box.button(QMessageBox.StandardButton.Yes).setText("File PDF")
         msg_box.button(QMessageBox.StandardButton.No).setText("Intera Cartella")
         msg_box.button(QMessageBox.StandardButton.Cancel).setText("Annulla")
-        
+
         reply = msg_box.exec()
-        
+
         if reply == QMessageBox.StandardButton.Yes:
             self._select_pdf()
         elif reply == QMessageBox.StandardButton.No:
@@ -336,7 +337,7 @@ class MainApp(QMainWindow):
         if count == 0:
             self.pdf_path_label.setText("Nessun file selezionato")
         elif count == 1:
-            self.pdf_path_label.setText(os.path.basename(self.controller.pdf_files[0]))
+            self.pdf_path_label.setText(Path(self.controller.pdf_files[0]).name)
         else:
             self.pdf_path_label.setText(f"{count} file selezionati")
 
@@ -559,12 +560,10 @@ class MainApp(QMainWindow):
 
             # Contrasto testo
             h = color.lstrip("#")
-            try:
+            with suppress(Exception):
                 rgb = tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
                 brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
                 item.setForeground(0, QBrush(QColor("black" if brightness > 128 else "white")))
-            except Exception:
-                pass
             self.rules_tree.addTopLevelItem(item)
 
     def _update_rule_details_panel(self) -> None:
@@ -670,5 +669,5 @@ class MainApp(QMainWindow):
                 self._roi_window.activateWindow()
                 self._add_log_message("Utility ROI già attiva, portata in primo piano", "INFO")
         except Exception as e:
-            logger.error(f"Errore durante l'avvio dell'utility ROI: {e}")
+            logger.exception(f"Errore durante l'avvio dell'utility ROI: {e}")
             QMessageBox.critical(self, "Errore", f"Impossibile avviare l'utility ROI:\n{e}")

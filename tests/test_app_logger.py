@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 # Import del modulo da testare
@@ -40,7 +41,7 @@ class TestAppLogger(unittest.TestCase):
 
     def test_get_log_directory_linux(self):
         """Test che get_log_directory restituisce il percorso corretto su Linux."""
-        with patch("sys.platform", "linux"), patch("os.path.expanduser", return_value="/home/testuser"):
+        with patch("sys.platform", "linux"), patch("pathlib.Path.home", return_value=Path("/home/testuser")):
             log_dir = app_logger.get_log_directory()
             self.assertIn(".intelleo-pdf-splitter", log_dir)
 
@@ -50,13 +51,15 @@ class TestAppLogger(unittest.TestCase):
         if hasattr(sys, "frozen"):
             delattr(sys, "frozen")
         app_dir = app_logger.get_app_directory()
-        self.assertTrue(os.path.isabs(app_dir))
+        self.assertTrue(Path(app_dir).is_absolute())
 
     def test_get_app_directory_frozen(self):
         """Test get_app_directory quando e' frozen."""
-        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", "/path/to/app.exe"):
+        fake_path = str(Path("/path/to/app.exe"))
+        expected_dir = str(Path("/path/to"))
+        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", fake_path):
             app_dir = app_logger.get_app_directory()
-            self.assertEqual(app_dir, "/path/to")
+            self.assertEqual(app_dir, expected_dir)
 
     def test_setup_logging_creates_file(self):
         """Test che setup_logging crea un file di log."""
@@ -67,7 +70,7 @@ class TestAppLogger(unittest.TestCase):
             with patch.object(app_logger, "get_log_directory", return_value=tmpdir):
                 log_path = app_logger.setup_logging()
                 self.assertIsNotNone(log_path)
-                self.assertTrue(os.path.exists(log_path))
+                self.assertTrue(Path(log_path).exists())
         finally:
             app_logger.shutdown_logging()
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -78,7 +81,7 @@ class TestAppLogger(unittest.TestCase):
         try:
             with patch.object(app_logger, "get_log_directory", return_value=tmpdir):
                 log_path = app_logger.setup_logging()
-                filename = os.path.basename(log_path)
+                filename = Path(log_path).name
                 self.assertTrue(filename.startswith("Log_"), f"Filename should start with 'Log_', got: {filename}")
                 self.assertTrue(filename.endswith(".log"), f"Filename should end with '.log', got: {filename}")
                 # Verifica formato DD_MM_YYYY
@@ -138,7 +141,7 @@ class TestAppLogger(unittest.TestCase):
                         handler.flush()
 
                 # Verifica che il messaggio sia nel file
-                with open(log_path, encoding="utf-8") as f:
+                with Path(log_path).open(encoding="utf-8") as f:
                     content = f.read()
                     self.assertIn(test_message, content)
         finally:
@@ -156,7 +159,7 @@ class TestAppLogger(unittest.TestCase):
                 app_logger._write_immediate(test_message)
 
                 # Verifica che il messaggio sia nel file
-                with open(log_path, encoding="utf-8") as f:
+                with Path(log_path).open(encoding="utf-8") as f:
                     content = f.read()
                     self.assertIn(test_message, content)
         finally:

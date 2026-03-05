@@ -3,8 +3,9 @@ Intelleo PDF Splitter - Notification Manager (PySide6)
 Gestisce le notifiche toast a comparsa.
 """
 
-import os
 import time
+from contextlib import suppress
+from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QCursor, QFont
@@ -98,9 +99,9 @@ class NotificationManager:
 
     def _on_controller_log(self, message: str, level: str, replace_last: bool = False) -> None:
         """Riceve log dal controller e mostra notifiche per eventi critici."""
-        if level in ["SUCCESS", "ERROR"]:
+        if level in ("SUCCESS", "ERROR"):
             # Filtra solo i messaggi più importanti per i toast
-            important_keywords = ["File completato", "ELABORAZIONE COMPLETATA", "Errore", "sincronizzata", "aggiornata"]
+            important_keywords = ("File completato", "ELABORAZIONE COMPLETATA", "Errore", "sincronizzata", "aggiornata")
             if any(kw in message for kw in important_keywords):
                 self.notify(level, message, level)
 
@@ -187,19 +188,16 @@ class NotificationManager:
 
     def _on_toast_closed(self, toast):
         """Callback quando un toast viene chiuso."""
-        self.notifications = [n for n in self.notifications if n["window"] is not toast]
+        self.notifications = [n for n in self.notifications if n["window"] is toast]
 
     def _fade_in(self, window, alpha=0):
         """Mantenuto per compatibilità, ma il fade è gestito da QPropertyAnimation."""
 
     def _close_toast(self, window):
         """Chiude un toast se ancora visibile."""
-        try:
+        with suppress(RuntimeError):
             if window and window.isVisible():
                 window.close_toast()
-        except RuntimeError:
-            # Widget già distrutto
-            pass
 
     def _update_bell(self):
         """Aggiorna il contatore sulla campanella."""
@@ -212,9 +210,9 @@ class NotificationManager:
             # Crea nuovo SVG
             color = "#DC3545" if self.unread_count > 0 else "#6C757D"
 
-            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            path = os.path.join(base_path, "assets", "bell.svg")
-            self.bell_svg = QSvgWidget(path)
+            base_path = Path(__file__).resolve().parents[2]
+            path = base_path / "assets" / "bell.svg"
+            self.bell_svg = QSvgWidget(str(path))
             self.bell_svg.setFixedSize(20, 20)
             self.bell_container_layout.insertWidget(0, self.bell_svg)
 

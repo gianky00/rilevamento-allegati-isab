@@ -4,7 +4,8 @@ Gestione della sessione utente per ripristino interrotto (SRP).
 
 import json
 import logging
-import os
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from shared.constants import SESSION_FILE
@@ -18,24 +19,24 @@ class SessionManager:
     @staticmethod
     def has_session() -> bool:
         """Verifica se esiste una sessione precedentemente interrotta."""
-        return os.path.exists(SESSION_FILE)
+        return Path(SESSION_FILE).exists()
 
     @staticmethod
     def clear_session() -> None:
         """Rimuove il file di sessione."""
-        if os.path.exists(SESSION_FILE):
-            try:
-                os.remove(SESSION_FILE)
-            except OSError as e:
-                logger.error(f"Errore rimozione session file: {e}")
+        session_path = Path(SESSION_FILE)
+        if session_path.exists():
+            with suppress(OSError):
+                session_path.unlink()
 
     @staticmethod
     def load_session() -> tuple[list[dict[str, Any]], str]:
         """Carica i task salvati dal file di sessione."""
-        if not os.path.exists(SESSION_FILE):
+        session_path = Path(SESSION_FILE)
+        if not session_path.exists():
             return [], "Unknown"
         try:
-            with open(SESSION_FILE, encoding="utf-8") as f:
+            with session_path.open(encoding="utf-8") as f:
                 data = json.load(f)
 
             if data:
@@ -49,5 +50,5 @@ class SessionManager:
                 return tasks, odc
             return [], "Unknown"
         except Exception as e:
-            logger.error(f"Errore ripristino sessione: {e}")
+            logger.exception(f"Errore ripristino sessione: {e}")
             raise

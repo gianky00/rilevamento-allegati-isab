@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS
 
 
 class ConfigTab(QWidget):
