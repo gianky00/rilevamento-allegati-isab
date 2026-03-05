@@ -7,6 +7,7 @@ import json
 import logging
 import os
 
+from typing import Any, Dict, List, Optional
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -40,7 +41,7 @@ logger = logging.getLogger("MAIN")
 class UnknownFilesReviewDialog(QDialog):
     """Dialog per la revisione manuale (Splitter) dei file sconosciuti."""
 
-    def __init__(self, parent, review_tasks, on_finish=None, odc=None, on_close_callback=None):
+    def __init__(self, parent: Any, review_tasks: List[Dict[str, Any]], on_finish: Optional[Any] = None, odc: Optional[str] = None, on_close_callback: Optional[Any] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
         self.showMaximized()
@@ -49,15 +50,15 @@ class UnknownFilesReviewDialog(QDialog):
         self.odc = odc
         self.on_close_callback = on_close_callback
         self.task_index = 0
-        self.current_doc = None
-        self.current_doc_path = None
-        self.available_pages = []
+        self.current_doc: Optional[Any] = None
+        self.current_doc_path: Optional[str] = None
+        self.available_pages: List[int] = []
         self.preview_page_index = 0
 
         self._create_widgets()
         self.load_task(0)
 
-    def _create_widgets(self):
+    def _create_widgets(self) -> None:
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
@@ -100,7 +101,7 @@ class UnknownFilesReviewDialog(QDialog):
         self.preview = PreviewGraphicsView()
         layout.addWidget(self.preview, 1)
 
-    def load_task(self, index):
+    def load_task(self, index: int) -> None:
         if index >= len(self.review_tasks):
             QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
             if os.path.exists(SESSION_FILE):
@@ -134,12 +135,12 @@ class UnknownFilesReviewDialog(QDialog):
             QMessageBox.critical(self, "Errore", f"Impossibile aprire il file: {e}")
             self.skip_task()
 
-    def _refresh_pages_list(self):
+    def _refresh_pages_list(self) -> None:
         self.pages_listbox.clear()
         for real_idx in self.available_pages:
             self.pages_listbox.addItem(f"Pagina {real_idx + 1}")
 
-    def _on_page_select(self):
+    def _on_page_select(self) -> None:
         items = self.pages_listbox.selectedItems()
         if not items:
             return
@@ -148,7 +149,7 @@ class UnknownFilesReviewDialog(QDialog):
             self.preview_page_index = self.available_pages[last_row]
             self._render_preview()
 
-    def _render_preview(self):
+    def _render_preview(self) -> None:
         if not self.current_doc:
             return
         try:
@@ -159,7 +160,7 @@ class UnknownFilesReviewDialog(QDialog):
         except Exception as e:
             logger.error(f"Render error: {e}")
 
-    def extract_and_rename(self):
+    def extract_and_rename(self) -> None:
         selected = self.pages_listbox.selectedItems()
         if not selected:
             QMessageBox.warning(self, "Attenzione", "Seleziona almeno una pagina.")
@@ -184,7 +185,7 @@ class UnknownFilesReviewDialog(QDialog):
 
         result = {}
 
-        def on_ok():
+        def on_ok() -> None:
             result["odc"] = odc_entry.text().strip()
             result["suffix"] = suffix_entry.text().strip()
             if not result["odc"] or not result["suffix"]:
@@ -236,7 +237,8 @@ class UnknownFilesReviewDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Errore", f"Errore salvataggio:\n{e}")
 
-    def finish_task(self):
+    def finish_task(self) -> None:
+        """Pulisce il file corrente e carica il prossimo task."""
         if self.current_doc:
             with contextlib.suppress(Exception):
                 self.current_doc.close()
@@ -263,10 +265,12 @@ class UnknownFilesReviewDialog(QDialog):
         else:
             self.load_task(0)
 
-    def skip_task(self):
+    def skip_task(self) -> None:
+        """Salta il file corrente senza elaborarlo."""
         self.load_task(self.task_index + 1)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: Any) -> None:
+        """Gestisce il salvataggio della sessione alla chiusura del dialog."""
         if self.current_doc:
             with contextlib.suppress(Exception):
                 self.current_doc.close()

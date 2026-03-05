@@ -1,15 +1,4 @@
-"""
-Intelleo PDF Splitter - Applicazione principale (PySide6)
-Gestisce la divisione di file PDF basata su regole OCR.
-"""
-
-# CRITICO: Inizializzare il logging PRIMA di tutto il resto
-import app_logger
-
-LOG_PATH = app_logger.initialize()
-
 import logging
-
 logger = logging.getLogger("MAIN")
 
 # Ora importa il resto
@@ -54,24 +43,34 @@ try:
     import config_manager
     import license_updater
     import license_validator
-    import pdf_processor
+    from core import pdf_processor
     import version
 
     logger.info("Importazione PyMuPDF...")
     import json
     from datetime import datetime
+    from typing import Any, Dict, List, Optional
 
-    import notification_manager
+    from core import notification_manager
     from gui.dialogs.unknown_review import UnknownFilesReviewDialog
-
+    from gui.dialogs.rule_editor import RuleEditorDialog
+    from gui.tabs.dashboard_tab import DashboardTab
+    from gui.tabs.processing_tab import ProcessingTab
+    from gui.tabs.config_tab import ConfigTab
+    from gui.tabs.help_tab import HelpTab
+    
     # Moduli estratti
     from gui.theme import COLORS, FONTS, GLOBAL_QSS
     from gui.widgets.drop_frame import DropFrame
+    from gui.ui_factory import UIFactory
     from shared.constants import APP_DATA_DIR, SESSION_FILE, SIGNAL_FILE
     
     # Core Managers (SRP)
     from core.session_manager import SessionManager
     from core.processing_worker import PdfProcessingWorker
+    from core.rule_service import RuleService
+    from core.tesseract_manager import TesseractManager
+    from core.app_controller import AppController
 
     logger.info("Tutti i moduli importati con successo")
 except Exception as e:
@@ -79,28 +78,60 @@ except Exception as e:
 
 
 class MainApp(QMainWindow):
-    def __init__(self, auto_file_path=None):
+    def __init__(self, auto_file_path: Optional[str] = None) -> None:
         super().__init__()
         logger.info("Inizializzazione MainApp...")
         self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
         self.setStyleSheet(GLOBAL_QSS)
         self.setup_icon()
 
-        self.config, self.pdf_files, self.log_queue = {}, [], queue.Queue()
-        self.processing_start_time, self.files_processed_count, self.pages_processed_count = None, 0, 0
-        self._target_progress = 0
-        self._current_progress = 0
-        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        self._spinner_idx = 0
-        self._is_processing = False
-        self._pending_completion_data = None
+        self.config: Dict[str, Any] = {}
+        self.pdf_files: List[str] = []
+        self.log_queue: queue.Queue = queue.Queue()
+        self.processing_start_time: Optional[datetime] = None
+        self.files_processed_count: int = 0
+        self.pages_processed_count: int = 0
+        self._target_progress: float = 0.0
+        self._current_progress: float = 0.0
+        self._spinner_frames: List[str] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx: int = 0
+        self._is_processing: bool = False
+        self._pending_completion_data: Optional[Dict[str, Any]] = None
 
-        # Notifiche
+        # Widget UI (Inizializzati dalle Tab)
+        self.dashboard: Any = None
+        self.processing: Any = None
+        self.config_panel: Any = None
+        self.help_panel: Any = None
+        self.license_status_label: QLabel
+        self.license_fields: Dict[str, QLabel] = {}
+        self.files_count_label: QLabel
+        self.pages_count_label: QLabel
+        self.rules_count_label: QLabel
+        self.recent_log: QTextEdit
+        self.log_area: QTextEdit
+        self.odc_entry: QLineEdit
+        self.pdf_path_label: QLabel
+        self.progress_label: QLabel
+        self.eta_label: QLabel
+        self.progress_bar: QProgressBar
+        self.spinner_label: QLabel
+        self.rules_tree: QTreeWidget
+        self.keywords_text: QTextEdit
+        self.roi_details_label: QLabel
+        self.tesseract_path_entry: QLineEdit
+        self.restore_btn: QPushButton
+
+        # Controller e Notifiche
+        self.controller = AppController()
+        self.notifier: Optional[Any] = None
         try:
+            from core import notification_manager
             self.notifier = notification_manager.NotificationManager(self)
         except Exception as e:
-            self.notifier = None
             logger.error(f"Errore inizializzazione notifiche: {e}")
+
+        self._connect_controller_signals()
 
         logger.info("Configurazione UI...")
         central = QWidget()
@@ -110,31 +141,30 @@ class MainApp(QMainWindow):
 
         self.notebook = QTabWidget()
         main_layout.addWidget(self.notebook)
-
+        
         self.dashboard_tab = QWidget()
         self.processing_tab = QWidget()
         self.config_tab = QWidget()
         self.help_tab = QWidget()
-        self.notebook.addTab(self.dashboard_tab, " Dashboard ")
-        self.notebook.addTab(self.processing_tab, " Elaborazione ")
-        self.notebook.addTab(self.config_tab, " Configurazione ")
-        self.notebook.addTab(self.help_tab, " Guida ")
-
-        self._setup_dashboard_tab()
-        self._setup_processing_tab()
-        self._setup_config_tab()
-        self._setup_help_tab()
-
-        logger.info("Avvio logica applicazione...")
-        self.update_last_access()
+        
+        # —————— Tab Initialization ——————
+        self.dashboard = DashboardTab(self.dashboard_tab, self)
+        self.processing = ProcessingTab(self.processing_tab, self)
+        self.config_panel = ConfigTab(self.config_tab, self)
+        self.help_panel = HelpTab(self.help_tab, self)
+        
+        self.notebook.addTab(self.dashboard_tab, "Dashboard")
+        self.notebook.addTab(self.processing_tab, "Elaborazione")
+        self.notebook.addTab(self.config_tab, "Configurazione")
+        self.notebook.addTab(self.help_tab, "Guida")
+        
+        # —————— Final Initialization ——————
         self.load_settings()
         self._display_license_info()
+        self._populate_rules_tree()
+        self.update_last_access()
 
-        # Timers
-        self._log_timer = QTimer(self)
-        self._log_timer.timeout.connect(self._process_log_queue)
-        self._log_timer.start(50)
-
+        # Timers (Solo quelli UI-only)
         self._update_timer = QTimer(self)
         self._update_timer.timeout.connect(self._check_for_updates)
         self._update_timer.start(150)
@@ -158,7 +188,55 @@ class MainApp(QMainWindow):
             QTimer.singleShot(500, lambda: self._handle_cli_start(auto_file_path))
         logger.info("MainApp inizializzata con successo")
 
-    def setup_icon(self):
+    def _connect_controller_signals(self) -> None:
+        """Collega i segnali del controller agli slot della UI."""
+        self.controller.log_received.connect(self._add_log_message)
+        self.controller.progress_updated.connect(self._on_progress_update)
+        self.controller.license_status_updated.connect(self._on_license_updated)
+        self.controller.processing_state_changed.connect(self._on_processing_state_changed)
+        self.controller.rules_updated.connect(self._on_rules_updated)
+        self.controller.session_status_changed.connect(self._update_restore_button_state)
+        self.controller.unknown_files_found.connect(self._show_unknown_dialog)
+
+    def _on_rules_updated(self) -> None:
+        rs = self.controller.rule_service
+        if not rs:
+            return
+        self._populate_rules_tree()
+        if hasattr(self, "rules_count_label"):
+            self.rules_count_label.setText(str(len(rs.get_rules())))
+
+    def _on_processing_state_changed(self, is_processing: bool) -> None:
+        self._is_processing = is_processing
+        # UI updates if needed
+        if not is_processing:
+            self._finalize_processing()
+
+    def _on_license_updated(self, info: Dict[str, Any]) -> None:
+        if info.get("is_valid"):
+            self.license_status_label.setText("✓ SISTEMA ATTIVO")
+            self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; border: none;")
+        else:
+            self.license_status_label.setText("⚠ NON LICENZIATO")
+            self.license_status_label.setStyleSheet(f"color: {COLORS['warning']}; border: none;")
+        
+        self.license_fields["cliente"].setText(info.get("cliente", "---"))
+        self.license_fields["scadenza"].setText(info.get("scadenza", "---"))
+        self.license_fields["hwid"].setText(info.get("hwid", "---"))
+        self.license_fields["last_access"].setText(info.get("last_access", "---"))
+
+    def _on_progress_update(self, value: float, text: str, eta_seconds: Optional[int]) -> None:
+        self._target_progress = value
+        self.progress_label.setText(text)
+        if eta_seconds is not None:
+             m, s = divmod(int(eta_seconds), 60)
+             self.eta_label.setText(f"Tempo stimato: {m}m {s}s" if m > 0 else f"Tempo stimato: {s}s")
+             self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
+        else:
+             self.eta_label.setText("")
+
+    def setup_icon(self) -> None:
+        """Configura l'icona della finestra."""
         try:
             icon_path = os.path.join(os.path.dirname(__file__), "resources", "icon.ico")
             if hasattr(sys, "_MEIPASS"):
@@ -169,347 +247,28 @@ class MainApp(QMainWindow):
             logger.warning(f"Impossibile caricare icona: {e}")
 
     # ======== DASHBOARD ========
-    def _setup_dashboard_tab(self):
-        layout = QVBoxLayout(self.dashboard_tab)
-        layout.setContentsMargins(25, 25, 25, 25)
-        layout.setSpacing(15)
+    def _update_clock(self) -> None:
+        """Aggiorna l'orologio della dashboard."""
+        if hasattr(self, "dashboard"):
+            self.dashboard.clock_label.setText(datetime.now().strftime("%d %b %Y | %H:%M:%S"))
 
-        # Header
-        header = QHBoxLayout()
-        h_label = QLabel("SISTEMA DI ELABORAZIONE INTELLIGENTE")
-        h_label.setFont(FONTS["heading"])
-        h_label.setStyleSheet(f"color: {COLORS['accent']};")
-        header.addWidget(h_label)
-        if self.notifier:
-            self.notifier.setup_bell_icon(header)
-        self.clock_label = QLabel("")
-        self.clock_label.setFont(FONTS["mono_bold"])
-        self.clock_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        header.addWidget(self.clock_label)
-        layout.addLayout(header)
-        self._update_clock()
-
-        # Stat cards
-        cards = QHBoxLayout()
-        self._create_stat_card(cards, "STATO LICENZA", "license_status", "Verificando...")
-        self._create_stat_card(cards, "DOC ANALIZZATI", "files_count", "0")
-        self._create_stat_card(cards, "PAGINE TOTALI", "pages_count", "0")
-        self._create_stat_card(cards, "REGOLE ATTIVE", "rules_count", "0")
-        layout.addLayout(cards)
-
-        # Middle: License + Actions
-        middle = QHBoxLayout()
-
-        # License panel
-        license_group = QGroupBox(" PARAMETRI DI AUTENTICAZIONE E SICUREZZA ")
-        lic_layout = QGridLayout(license_group)
-        self.license_fields = {}
-        fields = [
-            ("UTENTE REGISTRATO", "cliente", "👤"),
-            ("TERMINE VALIDITÀ", "scadenza", "📅"),
-            ("HARDWARE IDENTIFIER", "hwid", "🆔"),
-            ("ULTIMO ACCESSO RILEVATO", "last_access", "🕒"),
-        ]
-        for i, (label, key, icon) in enumerate(fields):
-            row, col = divmod(i, 2)
-            card = QFrame()
-            card.setStyleSheet(f"""QFrame {{ background-color: {COLORS["bg_secondary"]};
-                border: 1px solid {COLORS["border"]}; border-radius: 4px; padding: 12px; }}""")
-            clayout = QVBoxLayout(card)
-            top = QHBoxLayout()
-            icon_lbl = QLabel(icon)
-            icon_lbl.setFont(QFont("Segoe UI Emoji", 11))
-            top.addWidget(icon_lbl)
-            label_lbl = QLabel(label)
-            label_lbl.setFont(FONTS["small"])
-            label_lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
-            top.addWidget(label_lbl)
-            top.addStretch()
-            clayout.addLayout(top)
-            v_lab = QLabel("ATTESA DATI...")
-            v_lab.setFont(FONTS["mono_bold"])
-            v_lab.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
-            clayout.addWidget(v_lab)
-            self.license_fields[key] = v_lab
-            lic_layout.addWidget(card, row, col)
-        middle.addWidget(license_group, 3)
-
-        # Actions
-        actions_group = QGroupBox(" COMANDI RAPIDI ")
-        act_layout = QVBoxLayout(actions_group)
-        btn_new = QPushButton("NUOVA ANALISI")
-        btn_new.setFont(FONTS["body_bold"])
-        btn_new.setStyleSheet(f"background-color: {COLORS['accent']}; color: white;")
-        btn_new.clicked.connect(self._quick_select_pdf)
-        act_layout.addWidget(btn_new)
-        btn_rules = QPushButton("GESTISCI REGOLE")
-        btn_rules.clicked.connect(lambda: self.notebook.setCurrentWidget(self.config_tab))
-        act_layout.addWidget(btn_rules)
-        btn_roi = QPushButton("UTILITY ROI")
-        btn_roi.clicked.connect(self._launch_roi_utility)
-        act_layout.addWidget(btn_roi)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        act_layout.addWidget(sep)
-
-        self.restore_btn = QPushButton("RECUPERO SESSIONE")
-        self.restore_btn.setEnabled(False)
-        self.restore_btn.clicked.connect(self._restore_session)
-        act_layout.addWidget(self.restore_btn)
-        act_layout.addStretch()
-        middle.addWidget(actions_group, 1)
-        layout.addLayout(middle, 1)
-
-        # Activity log
-        log_group = QGroupBox(" TERMINALE ATTIVITÀ ")
-        log_layout = QVBoxLayout(log_group)
-        self.recent_log = QTextEdit()
-        self.recent_log.setReadOnly(True)
-        self.recent_log.setFixedHeight(120)
-        self.recent_log.setFont(FONTS["mono"])
-        log_layout.addWidget(self.recent_log)
-        layout.addWidget(log_group)
-
-    def _create_stat_card(self, parent_layout, title, var_name, initial_value):
-        card = QFrame()
-        card.setStyleSheet(f"""QFrame {{ background-color: {COLORS["bg_secondary"]};
-            border: 1px solid {COLORS["border"]}; border-radius: 4px; }}""")
-        clayout = QVBoxLayout(card)
-        clayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        t = QLabel(title)
-        t.setFont(FONTS["small"])
-        t.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
-        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        clayout.addWidget(t)
-        v = QLabel(initial_value)
-        v.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        v.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
-        v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        clayout.addWidget(v)
-        setattr(self, f"{var_name}_label", v)
-        parent_layout.addWidget(card)
-
-    def _update_clock(self):
-        self.clock_label.setText(datetime.now().strftime("%d %b %Y | %H:%M:%S"))
-
-    def _quick_select_pdf(self):
+    def _quick_select_pdf(self) -> None:
+        """Passa all'elaborazione e apre il selettore file."""
         self.notebook.setCurrentWidget(self.processing_tab)
         QTimer.singleShot(100, self._select_pdf)
 
-    # ======== PROCESSING TAB ========
-    def _setup_processing_tab(self):
-        layout = QVBoxLayout(self.processing_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
-
-        header = QHBoxLayout()
-        h_lbl = QLabel("Elaborazione PDF")
-        h_lbl.setFont(FONTS["heading"])
-        h_lbl.setStyleSheet(f"color: {COLORS['accent']};")
-        header.addWidget(h_lbl)
-        self.spinner_label = QLabel("")
-        self.spinner_label.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
-        self.spinner_label.setStyleSheet(f"color: {COLORS['accent']};")
-        header.addWidget(self.spinner_label)
-        header.addStretch()
-        layout.addLayout(header)
-
-        # Input
-        input_group = QGroupBox(" Input ")
-        ilayout = QVBoxLayout(input_group)
-        odc_row = QHBoxLayout()
-        odc_row.addWidget(QLabel("Codice ODC (default):"))
-        self.odc_entry = QLineEdit("5400")
-        self.odc_entry.setFixedWidth(200)
-        odc_row.addWidget(self.odc_entry)
-        odc_row.addStretch()
-        ilayout.addLayout(odc_row)
-
-        file_row = QHBoxLayout()
-        btn_pdf = QPushButton("Seleziona PDF...")
-        btn_pdf.clicked.connect(self._select_pdf)
-        file_row.addWidget(btn_pdf)
-        btn_folder = QPushButton("Seleziona Cartella...")
-        btn_folder.clicked.connect(self._select_folder)
-        file_row.addWidget(btn_folder)
-        self.pdf_path_label = QLabel("Nessun file selezionato")
-        self.pdf_path_label.setFont(FONTS["body"])
-        self.pdf_path_label.setStyleSheet(f"color: {COLORS['text_muted']};")
-        file_row.addWidget(self.pdf_path_label)
-        file_row.addStretch()
-        ilayout.addLayout(file_row)
-
-        self.drop_frame = DropFrame(self._on_drop)
-        ilayout.addWidget(self.drop_frame)
-        layout.addWidget(input_group)
-
-        # Progress
-        prog_group = QGroupBox(" Progresso ")
-        playout = QVBoxLayout(prog_group)
-        info_row = QHBoxLayout()
-        self.progress_label = QLabel("Pronto")
-        self.progress_label.setFont(FONTS["body_bold"])
-        self.progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        info_row.addWidget(self.progress_label)
-        self.eta_label = QLabel("--:--")
-        self.eta_label.setFont(FONTS["mono_bold"])
-        self.eta_label.setStyleSheet(f"color: {COLORS['text_muted']};")
-        info_row.addWidget(self.eta_label, 0, Qt.AlignmentFlag.AlignRight)
-        playout.addLayout(info_row)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximum(1000)  # Use 1000 for smooth animation
-        self.progress_bar.setValue(0)
-        playout.addWidget(self.progress_bar)
-        layout.addWidget(prog_group)
-
-        # Log
-        log_group = QGroupBox(" Log Elaborazione ")
-        llayout = QVBoxLayout(log_group)
-        self.log_area = QTextEdit()
-        self.log_area.setReadOnly(True)
-        self.log_area.setFont(FONTS["mono"])
-        llayout.addWidget(self.log_area)
-        layout.addWidget(log_group, 1)
-
-    # ======== CONFIG TAB ========
-    def _setup_config_tab(self):
-        layout = QVBoxLayout(self.config_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        h = QLabel("Configurazione")
-        h.setFont(FONTS["heading"])
-        h.setStyleSheet(f"color: {COLORS['accent']};")
-        layout.addWidget(h)
-
-        # Tesseract
-        tess_group = QGroupBox(" Tesseract OCR ")
-        tess_layout = QHBoxLayout(tess_group)
-        tess_layout.addWidget(QLabel("Percorso:"))
-        self.tesseract_path_entry = QLineEdit()
-        self.tesseract_path_entry.textChanged.connect(self._on_tesseract_path_change)
-        tess_layout.addWidget(self.tesseract_path_entry, 1)
-        btn_browse = QPushButton("Sfoglia")
-        btn_browse.clicked.connect(self._browse_tesseract)
-        tess_layout.addWidget(btn_browse)
-        btn_detect = QPushButton("Auto-Rileva")
-        btn_detect.clicked.connect(self._auto_detect_tesseract)
-        tess_layout.addWidget(btn_detect)
-        layout.addWidget(tess_group)
-
-        # Rules
-        rules_group = QGroupBox(" Regole di Classificazione ")
-        rlayout = QHBoxLayout(rules_group)
-
-        # Tree
-        self.rules_tree = QTreeWidget()
-        self.rules_tree.setHeaderLabels(["Colore", "Categoria", "Suffisso"])
-        self.rules_tree.setColumnWidth(0, 80)
-        self.rules_tree.setColumnWidth(1, 150)
-        self.rules_tree.setAlternatingRowColors(True)
-        self.rules_tree.itemSelectionChanged.connect(self._update_rule_details_panel)
-        rlayout.addWidget(self.rules_tree, 2)
-
-        # Details
-        det_widget = QWidget()
-        det_layout = QVBoxLayout(det_widget)
-        det_layout.addWidget(QLabel("Keywords:"))
-        self.keywords_text = QTextEdit()
-        self.keywords_text.setReadOnly(True)
-        self.keywords_text.setFixedHeight(100)
-        det_layout.addWidget(self.keywords_text)
-        det_layout.addWidget(QLabel("Aree ROI:"))
-        self.roi_details_label = QLabel("")
-        self.roi_details_label.setStyleSheet(f"color: {COLORS['text_muted']};")
-        det_layout.addWidget(self.roi_details_label)
-        det_layout.addStretch()
-        rlayout.addWidget(det_widget, 2)
-
-        # Buttons
-        btns = QVBoxLayout()
-        btn_add = QPushButton("Aggiungi")
-        btn_add.clicked.connect(self._add_rule)
-        btns.addWidget(btn_add)
-        btn_mod = QPushButton("Modifica")
-        btn_mod.clicked.connect(self._modify_rule)
-        btns.addWidget(btn_mod)
-        btn_rem = QPushButton("Rimuovi")
-        btn_rem.clicked.connect(self._remove_rule)
-        btns.addWidget(btn_rem)
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        btns.addWidget(sep)
-        btn_roi = QPushButton("Utility ROI")
-        btn_roi.clicked.connect(self._launch_roi_utility)
-        btns.addWidget(btn_roi)
-        btns.addStretch()
-        rlayout.addLayout(btns)
-        layout.addWidget(rules_group, 1)
-
-    # ======== HELP TAB ========
-    def _setup_help_tab(self):
-        layout = QVBoxLayout(self.help_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        header = QHBoxLayout()
-        h = QLabel("Guida all'Uso")
-        h.setFont(FONTS["heading"])
-        h.setStyleSheet(f"color: {COLORS['accent']};")
-        header.addWidget(h)
-        btn_open = QPushButton("Apri Cartella Dati")
-        btn_open.clicked.connect(lambda: os.startfile(APP_DATA_DIR))
-        header.addWidget(btn_open)
-        layout.addLayout(header)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.help_topics_list = QListWidget()
-        self.help_detail_text = QTextEdit()
-        self.help_detail_text.setReadOnly(True)
-        self.help_detail_text.setFont(FONTS["body"])
-        splitter.addWidget(self.help_topics_list)
-        splitter.addWidget(self.help_detail_text)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 3)
-        layout.addWidget(splitter, 1)
-
-        self.help_data = {
-            "🚀 Introduzione": "BENVENUTO IN INTELLEO PDF SPLITTER\n\nIntelleo è uno strumento professionale per l'automazione documentale.\nPermette di dividere massicci volumi di scansioni PDF in singoli documenti, classificandoli automaticamente.\n\n✨ FUNZIONALITÀ CHIAVE\n1. Smart Splitting: Riconoscimento intelligente delle pagine tramite parole chiave.\n2. Supporto ROI: Aree di interesse specifiche per aumentare la precisione.\n3. Analisi Ibrida: Combina estrazione testo nativa con OCR Tesseract.\n4. Revisione Manuale: Interfaccia dedicata per gestire i file non riconosciuti.",
-            "⚙️ Configurazione Iniziale": "PRIMA CONFIGURAZIONE\n\n1. Installazione Tesseract OCR\n   Tab 'Configurazione' -> Seleziona il percorso di tesseract.exe.\n   Usa 'Auto-Rileva' per trovarlo automaticamente.\n\n2. Creazione Regole\n   Tab 'Configurazione' -> 'Regole di Classificazione' -> 'Aggiungi'.\n   Imposta Nome Categoria e Parole Chiave.",
-            "🎯 Utility ROI": "UTILITY ROI (Region of Interest)\n\nSe la ricerca generica non basta, usa le ROI.\n\n1. Apri l'utility dal pulsante 'Utility ROI'.\n2. Carica un PDF di esempio.\n3. Disegna un rettangolo sull'area di interesse.\n4. Assegna la ROI alla categoria.",
-            "📂 Elaborazione": "ELABORAZIONE DOCUMENTI\n\n1. Vai alla scheda Elaborazione.\n2. Trascina i file PDF nell'area tratteggiata.\n3. Verifica il codice ODC.\n4. La barra di progresso mostrerà l'avanzamento.",
-            "📝 Revisione Manuale": "REVISIONE FILE SCONOSCIUTI\n\nSe pagine non corrispondono a nessuna regola:\n- Lista a Sinistra: Seleziona le pagine.\n- Anteprima a Destra: Controlla il contenuto.\n- RINOMINA: Crea il file PDF finale.\n- SALTA: Passa al prossimo gruppo.",
-        }
-        for topic in self.help_data:
-            self.help_topics_list.addItem(topic)
-        self.help_topics_list.currentItemChanged.connect(self._on_help_topic_select)
-        self.help_topics_list.setCurrentRow(0)
-
-    def _on_help_topic_select(self, current, previous=None):
-        if current:
-            self.help_detail_text.setPlainText(self.help_data.get(current.text(), ""))
+    # ======== COMMON UI HELPERS (STUBS) ========
+    def _on_help_topic_select(self, current: QListWidget, previous: Optional[QListWidget]=None) -> None:
+        """Stub mantenuto per compatibilità durante la transizione."""
+        pass
 
     # ======== BUSINESS LOGIC ========
-    def _display_license_info(self):
-        try:
-            payload = license_validator.get_license_info()
-            hw_id = license_validator.get_hardware_id()
-            config = config_manager.load_config()
-            last_access = config.get("last_access", "N/A")
-            if payload:
-                self.license_status_label.setText("✓ SISTEMA ATTIVO")
-                self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; border: none;")
-                self.license_fields["cliente"].setText(payload.get("Cliente", "N/A").upper())
-                self.license_fields["scadenza"].setText(payload.get("Scadenza Licenza", "N/A"))
-            else:
-                self.license_status_label.setText("⚠ NON LICENZIATO")
-                self.license_status_label.setStyleSheet(f"color: {COLORS['warning']}; border: none;")
-                self.license_fields["cliente"].setText("UTENTE NON REGISTRATO")
-                self.license_fields["scadenza"].setText("---")
-            self.license_fields["hwid"].setText(hw_id)
-            self.license_fields["last_access"].setText(last_access)
-        except Exception:
-            self.license_status_label.setText("✖ ERRORE CRITICO")
-            self.license_status_label.setStyleSheet(f"color: {COLORS['danger']}; border: none;")
+    def _display_license_info(self) -> None:
+        """Delega il controllo licenza al controller."""
+        self.controller.check_license()
 
-    def _add_log_message(self, message, level="INFO"):
+    def _add_log_message(self, message: str, level: str = "INFO") -> None:
+        """Aggiunge un messaggio al terminale e al log di elaborazione."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         color_map = {
             "ERROR": COLORS["danger"],
@@ -528,42 +287,16 @@ class MainApp(QMainWindow):
         if level in ["SUCCESS", "ERROR", "WARNING"]:
             self.recent_log.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
 
-    def _add_recent_log(self, message, level="INFO"):
-        pass  # Handled inline in _add_log_message
+    def _add_recent_log(self, message: str, level: str = "INFO") -> None:
+        """Metodo legacy rimosso (ora integrato in _add_log_message)."""
+        pass
 
-    def _process_log_queue(self):
-        try:
-            while True:
-                item = self.log_queue.get_nowait()
-                if isinstance(item, tuple):
-                    self._add_log_message(item[0], item[1])
-                elif isinstance(item, dict):
-                    action = item.get("action")
-                    if action == "show_unknown_dialog":
-                        self._pending_completion_data = item
-                    elif action == "update_progress":
-                        self._target_progress = item.get("value", 0)
-                        self.progress_label.setText(item.get("text", ""))
-                        eta_seconds = item.get("eta_seconds")
-                        if eta_seconds is not None:
-                            if eta_seconds > 60:
-                                m, s = divmod(int(eta_seconds), 60)
-                                eta_text = f"Tempo stimato: {m}m {s}s"
-                            else:
-                                eta_text = f"Tempo stimato: {int(eta_seconds)}s"
-                            self.eta_label.setText(eta_text)
-                            self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
-                        else:
-                            self.eta_label.setText("")
-                    elif action == "increment_pages":
-                        self.pages_processed_count += item.get("count", 1)
-                        self.pages_count_label.setText(str(self.pages_processed_count))
-                else:
-                    self._add_log_message(str(item))
-        except queue.Empty:
-            pass
+    def _process_log_queue(self) -> None:
+        """Metodo rimosso: log gestiti da AppController segnali."""
+        pass
 
-    def _smooth_progress_tick(self):
+    def _smooth_progress_tick(self) -> None:
+        """Aggiorna la barra di progresso con un'animazione fluida."""
         if abs(self._current_progress - self._target_progress) > 0.05:
             step = (self._target_progress - self._current_progress) * 0.2
             self._current_progress += step
@@ -574,36 +307,36 @@ class MainApp(QMainWindow):
             if self._current_progress >= 99.9 and self._pending_completion_data:
                 self._finalize_processing()
 
-    def _finalize_processing(self):
+    def _finalize_processing(self) -> None:
+        """Completa le operazioni post-elaborazione."""
         if not self._pending_completion_data:
             return
         data = self._pending_completion_data
         self._pending_completion_data = None
         if data.get("action") == "show_unknown_dialog" and data.get("files"):
             self._show_unknown_dialog(data["files"], data.get("odc", ""))
+        
         elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
         elapsed_str = str(elapsed).split(".")[0] if elapsed else "N/A"
         self._add_log_message("-" * 60, "INFO")
         self._add_log_message(f"ELABORAZIONE COMPLETATA IN {elapsed_str}", "HEADER")
         self._is_processing = False
 
-    def _spinner_tick(self):
+    def _spinner_tick(self) -> None:
+        """Aggiorna lo spinner di caricamento."""
         if self._is_processing:
             self._spinner_idx = (self._spinner_idx + 1) % len(self._spinner_frames)
             self.spinner_label.setText(self._spinner_frames[self._spinner_idx])
         else:
             self.spinner_label.setText("")
 
-    def _check_for_updates(self):
-        if os.path.exists(SIGNAL_FILE):
-            try:
-                os.remove(SIGNAL_FILE)
-                self.load_settings()
-                self._add_log_message("Configurazione aggiornata dall'utility ROI", "SUCCESS")
-            except OSError as e:
-                logger.error(f"Gestione signal file: {e}")
+    def _check_for_updates(self) -> None:
+        """Controlla segnali esterni tramite il controller."""
+        if self.controller.check_roi_signal():
+            self._add_log_message("Configurazione sincronizzata", "SUCCESS")
 
-    def update_last_access(self):
+    def update_last_access(self) -> None:
+        """Aggiorna il timestamp dell'ultimo accesso nel file di configurazione."""
         try:
             config = config_manager.load_config()
             config["last_access"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -611,7 +344,8 @@ class MainApp(QMainWindow):
         except Exception as e:
             logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
 
-    def _on_drop(self, files):
+    def _on_drop(self, files: List[str]) -> None:
+        """Gestisce il drag-and-drop di file sulla GUI."""
         if files:
             self.pdf_files = files
             if len(self.pdf_files) == 1:
@@ -621,8 +355,9 @@ class MainApp(QMainWindow):
             self.notebook.setCurrentWidget(self.processing_tab)
             self._start_processing()
 
-    def _handle_cli_start(self, path):
-        found_pdfs = []
+    def _handle_cli_start(self, path: str) -> None:
+        """Inizializza l'elaborazione se un file viene passato come argomento CLI."""
+        found_pdfs: List[str] = []
         if os.path.isfile(path) and path.lower().endswith(".pdf"):
             found_pdfs.append(path)
         elif os.path.isdir(path):
@@ -630,9 +365,11 @@ class MainApp(QMainWindow):
                 for name in files:
                     if name.lower().endswith(".pdf"):
                         found_pdfs.append(os.path.join(root_dir, name))
+        
         if not found_pdfs:
             QMessageBox.critical(self, "Errore", "Nessun file PDF trovato.")
             return
+            
         self.pdf_files = found_pdfs
         self.pdf_path_label.setText(f"{len(found_pdfs)} file trovati")
         odc, ok = QInputDialog.getText(self, "Input ODC", "Inserisci il codice ODC:")
@@ -641,7 +378,8 @@ class MainApp(QMainWindow):
             self.notebook.setCurrentWidget(self.processing_tab)
             self._start_processing()
 
-    def _select_pdf(self):
+    def _select_pdf(self) -> None:
+        """Apre il selettore di file PDF."""
         paths, _ = QFileDialog.getOpenFileNames(self, "Seleziona file PDF", "", "PDF Files (*.pdf)")
         if paths:
             self.pdf_files = list(paths)
@@ -652,7 +390,8 @@ class MainApp(QMainWindow):
             )
             self._start_processing()
 
-    def _select_folder(self):
+    def _select_folder(self) -> None:
+        """Apre il selettore di cartelle per trovare file PDF."""
         folder = QFileDialog.getExistingDirectory(self, "Seleziona Cartella")
         if not folder:
             return
@@ -665,10 +404,12 @@ class MainApp(QMainWindow):
         else:
             QMessageBox.information(self, "Info", "Nessun file PDF trovato.")
 
-    def _update_restore_button_state(self):
+    def _update_restore_button_state(self) -> None:
+        """Aggiorna lo stato del pulsante di ripristino sessione."""
         self.restore_btn.setEnabled(SessionManager.has_session())
 
-    def _check_for_restore(self):
+    def _check_for_restore(self) -> None:
+        """Verifica all'avvio se esiste una sessione da ripristinare."""
         self._update_restore_button_state()
         if SessionManager.has_session():
             reply = QMessageBox.question(
@@ -679,100 +420,74 @@ class MainApp(QMainWindow):
             if reply == QMessageBox.StandardButton.Yes:
                 self._restore_session()
 
-    def _clear_session(self):
-        SessionManager.clear_session()
-        self._update_restore_button_state()
+    def _clear_session(self) -> None:
+        """Delega cancellazione sessione."""
+        self.controller.clear_session()
 
-    def _restore_session(self):
-        try:
-            tasks, odc = SessionManager.load_session()
-            if tasks:
-                self._show_unknown_dialog(tasks, odc)
-            else:
-                self._clear_session()
-        except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Impossibile ripristinare la sessione:\n{e}")
-            self._clear_session()
+    def _restore_session(self) -> None:
+        """Ripristina sessione tramite controller."""
+        data = self.controller.restore_session()
+        if data:
+            self._show_unknown_dialog(data[0], data[1])
+        else:
+            self._add_log_message("Nessuna sessione da ripristinare", "WARNING")
 
-    def _start_processing(self):
-        odc_input = self.odc_entry.text().strip()
-        if not odc_input:
-            QMessageBox.critical(self, "Errore", "Inserire un codice ODC valido.")
+    def _start_processing(self) -> None:
+        """Avvia elaborazione tramite controller."""
+        odc = self.odc_entry.text().strip()
+        if not odc or not self.pdf_files:
+            QMessageBox.warning(self, "Errore", "Verificare ODC e file selezionati.")
             return
-        if not self.pdf_files:
-            QMessageBox.critical(self, "Errore", "Seleziona almeno un file PDF.")
-            return
-        self.log_area.clear()
-        self._target_progress = 0
-        self._current_progress = 0
-        self.progress_bar.setValue(0)
-        self.progress_label.setText("Avvio in corso...")
-        self.eta_label.setText("Calcolo stima...")
-        self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
-        self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
-        self._add_log_message("-" * 60, "INFO")
-        self.processing_start_time = datetime.now()
-        self._is_processing = True
-        
-        def on_worker_complete(processed_count, unknown_files):
-            def handler():
-                self.files_processed_count = processed_count
-                if unknown_files:
-                    self._show_unknown_dialog(unknown_files, self.odc_entry.text())
-                self.files_count_label.setText(str(self.files_processed_count))
-                self.odc_entry.setText("5400")
-                self._is_processing = False
-            QTimer.singleShot(0, handler)
             
-        worker = PdfProcessingWorker(
-            self.log_queue, 
-            list(self.pdf_files), 
-            self.odc_entry.text(), 
-            self.config,
-            on_worker_complete
-        )
-        worker.start()
+        self.log_area.clear()
+        self.processing_start_time = datetime.now()
+        self.controller.start_processing(self.pdf_files, odc)
 
-    def _show_unknown_dialog(self, files, odc):
+    def _show_unknown_dialog(self, files: List[Any], odc: str) -> None:
+        """Visualizza il dialog di revisione per i file non classificati."""
         if not files:
             return
 
-        def on_close():
+        def on_close() -> None:
             self._add_log_message("Revisione file sconosciuti completata", "SUCCESS")
             QTimer.singleShot(100, self._update_restore_button_state)
 
-        def on_dialog_closed():
+        def on_dialog_closed() -> None:
             QTimer.singleShot(100, self._update_restore_button_state)
 
         dlg = UnknownFilesReviewDialog(self, files, on_finish=on_close, odc=odc, on_close_callback=on_dialog_closed)
         dlg.exec()
 
-    def load_settings(self):
-        self.config = config_manager.load_config()
+    def load_settings(self) -> None:
+        """Delega caricamento al controller."""
+        self.controller.load_settings()
         if hasattr(self, "tesseract_path_entry"):
-            self.tesseract_path_entry.blockSignals(True)
-            self.tesseract_path_entry.setText(self.config.get("tesseract_path", ""))
-            self.tesseract_path_entry.blockSignals(False)
+            self.tesseract_path_entry.setText(self.controller.config.get("tesseract_path", ""))
         self._populate_rules_tree()
-        rules_count = len(self.config.get("classification_rules", []))
-        if hasattr(self, "rules_count_label"):
-            self.rules_count_label.setText(str(rules_count))
 
-    def _auto_save_settings(self):
-        try:
-            config_manager.save_config(self.config)
-        except Exception as e:
-            logger.error(f"Auto-Save: {e}")
+    def _auto_save_settings(self) -> None:
+        """Delega salvataggio al controller."""
+        self.controller.save_settings()
 
-    def _populate_rules_tree(self):
+    def _populate_rules_tree(self) -> None:
+        """Popola l'albero delle regole nella UI."""
+        rs = self.controller.rule_service
+        if not hasattr(self, "rules_tree") or not rs: 
+            return
         self.keywords_text.clear()
         self.roi_details_label.setText("")
         self.rules_tree.clear()
-        for rule in self.config.get("classification_rules", []):
-            color = rule.get("color", "#FFFFFF")
-            suffix = rule.get("filename_suffix", rule["category_name"])
-            item = QTreeWidgetItem([color, rule["category_name"], suffix])
+        
+        for rule in rs.get_rules():
+            # Assicura tipi corretti per la view
+            color = str(rule.get("color", "#FFFFFF"))
+            category = str(rule.get("category_name", "N/A"))
+            suffix = str(rule.get("filename_suffix", category))
+            
+            item = QTreeWidgetItem([color, category, suffix])
             item.setBackground(0, QBrush(QColor(color)))
+            
+            # Contrasto testo
             h = color.lstrip("#")
             try:
                 rgb = tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
@@ -782,152 +497,95 @@ class MainApp(QMainWindow):
                 pass
             self.rules_tree.addTopLevelItem(item)
 
-    def _update_rule_details_panel(self):
+    def _update_rule_details_panel(self) -> None:
+        """Aggiorna il pannello laterale con i dettagli della regola selezionata."""
+        if not self.controller.rule_service:
+            return
         items = self.rules_tree.selectedItems()
         if not items:
             self.keywords_text.clear()
             self.roi_details_label.setText("")
             return
+            
         category_name = items[0].text(1)
-        rule = next(
-            (r for r in self.config.get("classification_rules", []) if r["category_name"] == category_name), None
-        )
+        rule = self.controller.rule_service.get_rule_by_category(category_name)
+        
         if rule:
             self.keywords_text.setPlainText(", ".join(rule.get("keywords", [])))
             self.roi_details_label.setText(f"{len(rule.get('rois', []))} aree ROI definite")
 
-    def _on_tesseract_path_change(self):
-        self.config["tesseract_path"] = self.tesseract_path_entry.text()
+    def _on_tesseract_path_change(self) -> None:
+        """Salva il nuovo percorso Tesseract se valido."""
+        path = self.tesseract_path_entry.text()
+        self.controller.config["tesseract_path"] = path
         self._auto_save_settings()
+        
+        from core.tesseract_manager import TesseractManager
+        if path and not TesseractManager.is_valid(path):
+             self._add_log_message("Percorso Tesseract indicato potrebbe non essere valido", "WARNING")
 
-    def _browse_tesseract(self):
+    def _browse_tesseract(self) -> None:
+        """Apre il selettore file per l'eseguibile Tesseract."""
         path, _ = QFileDialog.getOpenFileName(self, "Seleziona Tesseract", "", "Executable (*.exe)")
         if path:
             self.tesseract_path_entry.setText(path)
 
-    def _auto_detect_tesseract(self):
-        search_paths = [
-            os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"), "Tesseract-OCR", "tesseract.exe"),
-            os.path.join(
-                os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"
-            ),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Tesseract-OCR", "tesseract.exe"),
-        ]
-        for p in search_paths:
-            if p and os.path.exists(p):
-                self.tesseract_path_entry.setText(p)
-                QMessageBox.information(self, "Trovato", f"Tesseract trovato:\n{p}")
-                return
-        QMessageBox.warning(self, "Non Trovato", "Tesseract non trovato automaticamente.\nIndicalo manualmente.")
+    def _auto_detect_tesseract(self) -> None:
+        """Utilizza TesseractManager per rilevare automaticamente l'eseguibile."""
+        path = TesseractManager.auto_detect()
+        if path:
+            self.tesseract_path_entry.setText(path)
+            QMessageBox.information(self, "Trovato", f"Tesseract trovato:\n{path}")
+        else:
+            QMessageBox.warning(self, "Non Trovato", "Tesseract non trovato automaticamente.\nIndicalo manualmente.")
 
-    def _add_rule(self):
+    def _add_rule(self) -> None:
+        """Apre l'editor per aggiungere una nuova regola."""
         self._show_rule_editor()
 
-    def _modify_rule(self):
+    def _modify_rule(self) -> None:
+        """Apre l'editor per modificare la regola selezionata."""
+        if not self.controller.rule_service:
+            return
         items = self.rules_tree.selectedItems()
         if not items:
             QMessageBox.warning(self, "Selezione", "Selezionare una regola da modificare.")
             return
-        rule = next((r for r in self.config["classification_rules"] if r["category_name"] == items[0].text(1)), None)
+            
+        category_name = items[0].text(1)
+        rule = self.controller.rule_service.get_rule_by_category(category_name)
         if rule:
             self._show_rule_editor(rule)
 
-    def _remove_rule(self):
+    def _remove_rule(self) -> None:
+        """Rimuove la regola selezionata."""
         items = self.rules_tree.selectedItems()
         if not items:
             QMessageBox.warning(self, "Selezione", "Selezionare una regola da rimuovere.")
             return
+            
         cat = items[0].text(1)
         reply = QMessageBox.question(self, "Conferma", f"Rimuovere la regola '{cat}'?")
-        if reply == QMessageBox.StandardButton.Yes:
-            self.config["classification_rules"] = [
-                r for r in self.config["classification_rules"] if r["category_name"] != cat
-            ]
+        
+        rs = self.controller.rule_service
+        if reply == QMessageBox.StandardButton.Yes and rs:
+            if rs.remove_rule(cat):
+                self._populate_rules_tree()
+                self._auto_save_settings()
+                self.rules_count_label.setText(str(len(rs.get_rules())))
+
+    def _show_rule_editor(self, rule: Optional[Dict[str, Any]] = None) -> None:
+        """Apre l'editor delle regole delegando al controller se disponibile."""
+        if not self.controller.rule_service:
+            return
+        dlg = RuleEditorDialog(self, self.controller.rule_service, rule)
+        if dlg.exec():
+            self.controller.rule_service.save()
             self._populate_rules_tree()
-            self._auto_save_settings()
-            self.rules_count_label.setText(str(len(self.config.get("classification_rules", []))))
+            self.rules_count_label.setText(str(len(self.controller.rule_service.get_rules())))
 
-    def _show_rule_editor(self, rule=None):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Modifica Regola" if rule else "Nuova Regola")
-        dialog.setFixedSize(500, 400)
-        dialog.setModal(True)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        grid = QGridLayout()
-        grid.addWidget(QLabel("Nome Categoria:"), 0, 0)
-        cat_entry = QLineEdit(rule["category_name"] if rule else "")
-        if rule:
-            cat_entry.setReadOnly(True)
-        grid.addWidget(cat_entry, 0, 1, 1, 2)
-
-        grid.addWidget(QLabel("Suffisso File:"), 1, 0)
-        suffix_entry = QLineEdit(rule.get("filename_suffix", "") if rule else "")
-        grid.addWidget(suffix_entry, 1, 1, 1, 2)
-
-        grid.addWidget(QLabel("Keywords:"), 2, 0)
-        kw_entry = QLineEdit(", ".join(rule.get("keywords", [])) if rule else "")
-        grid.addWidget(kw_entry, 2, 1, 1, 2)
-        grid.addWidget(QLabel("(separate da virgola)"), 3, 1)
-
-        grid.addWidget(QLabel("Colore:"), 4, 0)
-        chosen_color = [rule.get("color", "#0D6EFD") if rule else "#0D6EFD"]
-        color_swatch = QLabel("     ")
-        color_swatch.setStyleSheet(f"background-color: {chosen_color[0]}; border: 1px solid black;")
-        color_swatch.setFixedSize(60, 25)
-        grid.addWidget(color_swatch, 4, 1)
-
-        def choose_color():
-            c = QColorDialog.getColor(QColor(chosen_color[0]), dialog, "Scegli Colore")
-            if c.isValid():
-                chosen_color[0] = c.name()
-                color_swatch.setStyleSheet(f"background-color: {c.name()}; border: 1px solid black;")
-
-        btn_color = QPushButton("Scegli")
-        btn_color.clicked.connect(choose_color)
-        grid.addWidget(btn_color, 4, 2)
-
-        grid.addWidget(QLabel("Aree ROI:"), 5, 0)
-        roi_count = len(rule.get("rois", [])) if rule else 0
-        grid.addWidget(QLabel(f"{roi_count} aree definite"), 5, 1)
-        layout.addLayout(grid)
-
-        def on_save():
-            category = cat_entry.text().strip()
-            suffix = suffix_entry.text().strip() or category
-            keywords = [k.strip() for k in kw_entry.text().split(",") if k.strip()]
-            color = chosen_color[0]
-            if not category or not keywords:
-                QMessageBox.critical(dialog, "Errore", "Nome categoria e almeno una keyword sono obbligatori.")
-                return
-            new_data = {"category_name": category, "filename_suffix": suffix, "keywords": keywords, "color": color}
-            if rule:
-                new_data["rotate_roi"] = rule.get("rotate_roi", 0)
-                new_data["rois"] = rule.get("rois", [])
-                rule.update(new_data)
-            else:
-                if any(r["category_name"] == category for r in self.config.get("classification_rules", [])):
-                    QMessageBox.critical(dialog, "Errore", "Categoria già esistente.")
-                    return
-                new_data["rois"] = []
-                self.config.setdefault("classification_rules", []).append(new_data)
-            self._populate_rules_tree()
-            self._auto_save_settings()
-            self.rules_count_label.setText(str(len(self.config.get("classification_rules", []))))
-            dialog.accept()
-
-        btn_layout = QHBoxLayout()
-        btn_save = QPushButton("Salva")
-        btn_save.clicked.connect(on_save)
-        btn_cancel = QPushButton("Annulla")
-        btn_cancel.clicked.connect(dialog.reject)
-        btn_layout.addWidget(btn_save)
-        btn_layout.addWidget(btn_cancel)
-        layout.addLayout(btn_layout)
-        dialog.exec()
-
-    def _launch_roi_utility(self):
+    def _launch_roi_utility(self) -> None:
+        """Avvia l'utility esterna per la definizione delle ROI."""
         try:
             if getattr(sys, "frozen", False):
                 subprocess.Popen([sys.executable, "--utility"])
@@ -938,70 +596,3 @@ class MainApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Errore", f"Impossibile avviare l'utility ROI:\n{e}")
 
-
-# ============================================================================
-# MAIN ENTRY POINT
-# ============================================================================
-if __name__ == "__main__":
-    # Check for ROI Utility launch flag (used in frozen builds)
-    if "--utility" in sys.argv:
-        try:
-            import roi_utility
-
-            roi_utility.run_utility()
-        except Exception as e:
-            logger.critical(f"Failed to launch ROI utility: {e}", exc_info=True)
-        sys.exit(0)
-
-    logger.info("=" * 68)
-    logger.info("           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
-    logger.info("=" * 68)
-    logger.info(f"  Versione: {version.__version__}")
-    logger.info(f"  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    logger.info("=" * 68)
-
-    # License Update & Check
-    logger.info("Verifica licenza in corso...")
-    qt_app = QApplication(sys.argv)
-    qt_app.setStyleSheet(GLOBAL_QSS)
-
-    try:
-        license_updater.run_update()
-        logger.info("Aggiornamento licenza completato")
-    except Exception as e:
-        logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
-        QMessageBox.critical(None, "Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
-        sys.exit(1)
-
-    is_valid, msg = license_validator.verify_license()
-    if not is_valid:
-        logger.error(f"Licenza non valida: {msg}")
-        hw_id = license_validator.get_hardware_id()
-        err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
-        clipboard = qt_app.clipboard()
-        clipboard.setText(hw_id)
-        QMessageBox.critical(None, "Licenza Non Valida", err_msg)
-        sys.exit(1)
-
-    logger.info("Licenza valida")
-    logger.info("Inizializzazione interfaccia grafica...")
-
-    # Pulizia signal file
-    if os.path.exists(SIGNAL_FILE):
-        os.remove(SIGNAL_FILE)
-
-    # Check CLI args
-    cli_path = None
-    if len(sys.argv) > 1:
-        potential_path = sys.argv[1]
-        if os.path.exists(potential_path) and (os.path.isdir(potential_path) or potential_path.lower().endswith(".pdf")):
-            cli_path = potential_path
-            logger.info(f"Avvio con file: {potential_path}")
-
-    logger.info("Applicazione pronta")
-
-    window = MainApp(auto_file_path=cli_path)
-    window.showMaximized()
-
-    logger.info("Avvio event loop")
-    sys.exit(qt_app.exec())

@@ -14,6 +14,10 @@ import pytesseract
 from PIL import Image
 
 
+from core.ocr_engine import OcrEngine
+from core.classifier import DocumentClassifier
+
+
 def _log(progress_callback: Optional[Callable[..., None]], msg: str, level: str = "INFO") -> None:
     """Log interno con timestamp se è definito un callback."""
     if progress_callback:
@@ -25,143 +29,97 @@ def _log_separator(progress_callback: Optional[Callable[..., None]]) -> None:
     _log(progress_callback, "─" * 50, "INFO")
 
 
-def _get_binary(img: Image.Image) -> Image.Image:
-    """Restituisce la versione binarizzata di un'immagine per migliorare l'OCR."""
-    return img.point(lambda x: 0 if x < 128 else 255, "1")
+def _analyze_single_page(
+    page: fitz.Page,
+    rules: List[Dict[str, Any]],
+    classifier: DocumentClassifier,
+    ocr_engine: OcrEngine,
+    progress_callback: Optional[Callable[..., None]]
+) -> str:
+    """Analizza una singola pagina e restituisce la categoria individuata."""
+    page_rect = page.rect
+    
+    for rule in rules:
+        rois = rule.get("rois", [])
+        keywords = rule.get("keywords", [])
+        category_name = str(rule.get("category_name", "sconosciuto"))
 
+        for roi in rois:
+            if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
+                continue
 
-def _get_contrast(img: Image.Image) -> Image.Image:
-    """Tenta l'autocontrasto estremo sull'immagine in base ai toni in scala di grigi."""
-    try:
-        from PIL import ImageOps
-        return ImageOps.autocontrast(img)
-    except Exception:
-        return img
+            roi_rect = fitz.Rect(roi)
+            if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
+                continue
+
+            # 1. TENTATIVO MATCH VELOCE (Testo Nativo)
+            try:
+                native_text = page.get_text("text", clip=roi_rect)
+                if classifier.classify_text(native_text) == category_name:
+                    _log(progress_callback, f"   ⚡ Match veloce (Testo Nativo) per '{category_name}'", "INFO")
+                    return category_name
+            except Exception:
+                pass
+
+            # 2. TENTATIVO OCR ROBUSTO
+            try:
+                mat = fitz.Matrix(300 / 72, 300 / 72)
+                pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
+                if pix.width < 1 or pix.height < 1:
+                    continue
+                
+                base_img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+                found, _ = ocr_engine.robust_scan(base_img, keywords)
+                if found:
+                    return category_name
+            except Exception as e:
+                _log(progress_callback, f"⚠ Analisi OCR ROI '{category_name}': {e}", "WARNING")
+
+    return "sconosciuto"
 
 
 def _analyze_pages(
     pdf_doc: fitz.Document,
     rules: List[Dict[str, Any]],
-    progress_callback: Optional[Callable[..., None]]
+    progress_callback: Optional[Callable[..., None]],
+    ocr_engine: OcrEngine
 ) -> Dict[str, List[int]]:
-    """Esegue la scansione OCR su tutte le pagine ripartendole in categorie in base alle rules definite."""
+    """Esegue la scansione OCR su tutte le pagine ripartendole in categorie."""
     page_groups: Dict[str, List[int]] = {}
     total_pages = len(pdf_doc)
     avg_time_per_page = 0.0
     alpha = 0.3
+    
+    classifier = DocumentClassifier(rules)
 
     for i, page in enumerate(pdf_doc):
         page_start_time = time.time()
+        
+        # Calcolo progressi ed ETA
         eta_seconds: float = 0.0
         if i > 0 and avg_time_per_page > 0:
-            remaining_pages = total_pages - i
-            eta_seconds = remaining_pages * avg_time_per_page
-
-        current_pct = ((i + 1) / total_pages) * 90
+            eta_seconds = (total_pages - i) * avg_time_per_page
 
         if progress_callback:
-            progress_callback(
-                {
-                    "type": "page_progress",
-                    "current": i + 1,
-                    "total": total_pages,
-                    "eta_seconds": eta_seconds,
-                    "phase": "analysis",
-                    "phase_pct": current_pct,
-                }
-            )
+            progress_callback({
+                "type": "page_progress",
+                "current": i + 1,
+                "total": total_pages,
+                "eta_seconds": eta_seconds,
+                "phase": "analysis",
+                "phase_pct": ((i + 1) / total_pages) * 90,
+            })
 
-        page_category = "sconosciuto"
-        page_rect = page.rect
-        page_found = False
-
-        for rule in rules:
-            if page_found:
-                break
-            rois = rule.get("rois", [])
-            keywords = [k.lower() for k in rule.get("keywords", [])]
-            category_name = rule.get("category_name", "sconosciuto")
-
-            for roi in rois:
-                if page_found:
-                    break
-
-                if not all(isinstance(c, int) and c >= 0 for c in roi) or len(roi) != 4:
-                    continue
-
-                roi_rect = fitz.Rect(roi)
-                if roi_rect.x1 > page_rect.width or roi_rect.y1 > page_rect.height:
-                    continue
-
-                try:
-                    text_content = page.get_text("text", clip=roi_rect).lower()
-                    if any(keyword in text_content for keyword in keywords):
-                        _log(progress_callback, f"   ⚡ Match veloce (Testo Nativo) per '{category_name}'", "INFO")
-                        page_category = category_name
-                        page_found = True
-                        break
-                except Exception:
-                    pass
-
-                if page_found:
-                    break
-
-                try:
-                    mat = fitz.Matrix(300 / 72, 300 / 72)
-                    pix = page.get_pixmap(matrix=mat, clip=roi_rect, colorspace=fitz.csGRAY)
-                    if pix.width < 1 or pix.height < 1:
-                        continue
-                    base_img = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-                except Exception as e:
-                    _log(progress_callback, f"⚠ Rendering ROI '{category_name}': {e}", "WARNING")
-                    continue
-
-                steps: List[Dict[str, Any]] = [
-                    {"name": "Standard", "img": base_img, "angles": [0, -90]},
-                    {"name": "Binary", "img": _get_binary(base_img), "angles": [0, -90]},
-                    {"name": "DeepRotate", "img": _get_binary(base_img), "angles": [90, 180]},
-                    {"name": "Contrast", "img": _get_contrast(base_img), "angles": [0, -90]},
-                ]
-
-                roi_found = False
-                for step in steps:
-                    if roi_found:
-                        break
-                    current_img = step["img"]
-                    for angle in step["angles"]:
-                        if roi_found:
-                            break
-                        img_to_scan = current_img if angle == 0 else current_img.rotate(angle, expand=True)
-
-                        try:
-                            ocr_text = pytesseract.image_to_string(
-                                img_to_scan, lang="ita", config="--psm 6", timeout=15
-                            ).lower()
-
-                            if any(keyword in ocr_text for keyword in keywords):
-                                page_category = category_name
-                                roi_found = True
-                                page_found = True
-                                break
-                        except Exception:
-                            pass
-
-                if page_category == category_name:
-                    break
-
-            if page_category == category_name:
-                break
-
+        # Analisi effettiva della pagina
+        page_category: str = _analyze_single_page(page, rules, classifier, ocr_engine, progress_callback)
+        
         if page_category not in page_groups:
             page_groups[page_category] = []
         page_groups[page_category].append(i)
 
-        page_end_time = time.time()
-        this_page_time = page_end_time - page_start_time
-        if i == 0:
-            avg_time_per_page = this_page_time
-        else:
-            avg_time_per_page = (alpha * this_page_time) + ((1 - alpha) * avg_time_per_page)
+        # Aggiornamento medie temporali
+        this_page_time = time.time() - page_start_time
+        avg_time_per_page = this_page_time if i == 0 else (alpha * this_page_time) + ((1 - alpha) * avg_time_per_page)
 
     return page_groups
 
@@ -327,11 +285,11 @@ def process_pdf(
 
     try:
         tesseract_path = config.get("tesseract_path")
-        if tesseract_path and os.path.isfile(tesseract_path):
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
-            _log(progress_callback, "✓ Tesseract OCR configurato", "INFO")
-        else:
+        if not (tesseract_path and os.path.isfile(tesseract_path)):
             raise ValueError("Percorso Tesseract non configurato o non valido")
+
+        ocr_engine = OcrEngine(tesseract_path)
+        _log(progress_callback, "✓ Motore OCR inizializzato", "INFO")
 
         pdf_doc = fitz.open(pdf_path)
         total_pages = len(pdf_doc)
@@ -342,7 +300,7 @@ def process_pdf(
         rules = config.get("classification_rules", [])
         _log(progress_callback, f"   Regole di classificazione: {len(rules)}", "INFO")
 
-        page_groups = _analyze_pages(pdf_doc, rules, progress_callback)
+        page_groups = _analyze_pages(pdf_doc, rules, progress_callback, ocr_engine)
 
         _log_separator(progress_callback)
         _log(progress_callback, "📊 RISULTATO CLASSIFICAZIONE:", "INFO")

@@ -6,9 +6,11 @@ Gestisce la definizione delle aree ROI per l'OCR.
 import contextlib
 import math
 import os
+import sys
+from typing import Any, Dict, List, Optional
 
 import pymupdf as fitz
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QCursor, QFont, QImage, QKeySequence, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -17,6 +19,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFrame,
+    QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
@@ -32,7 +36,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import config_manager
+from gui.widgets.pdf_graphics_view import ROIGraphicsView
+from gui.dialogs.roi_selector_dialog import RoiSelectorDialog
+from core.roi_controller import ROIController
 
 SIGNAL_FILE = ".update_signal"
 
@@ -55,158 +61,43 @@ COLORS = {
 }
 
 
-class ROIGraphicsView(QGraphicsView):
-    """Vista grafica personalizzata con disegno ROI, zoom, e pan."""
-
-    def __init__(self, app, parent=None):
-        super().__init__(parent)
-        self.app = app
-        self.scene_ref = QGraphicsScene(self)
-        self.setScene(self.scene_ref)
-        self.setRenderHints(self.renderHints())
-        self.setBackgroundBrush(QBrush(QColor(COLORS["bg_tertiary"])))
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
-
-        # Stato disegno
-        self._start_point = None
-        self._current_rect = None
-        self._panning = False
-        self._pan_start = None
-
-    def wheelEvent(self, event):
-        """Zoom con rotella (Ctrl) o scroll verticale."""
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            if event.angleDelta().y() > 0:
-                self.app.zoom_in()
-            else:
-                self.app.zoom_out()
-            event.accept()
-        else:
-            super().wheelEvent(event)
-
-    def mousePressEvent(self, event):
-        """Gestisce click per disegno ROI, cancellazione, o pan."""
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Pan mode
-            self._panning = True
-            self._pan_start = event.position().toPoint()
-            self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
-            event.accept()
-            return
-
-        if event.button() == Qt.MouseButton.LeftButton:
-            scene_pos = self.mapToScene(event.position().toPoint())
-
-            if self.app.delete_mode:
-                self.app.handle_delete_click(scene_pos)
-            else:
-                # Inizio disegno ROI
-                self._start_point = scene_pos
-                if self._current_rect:
-                    self.scene_ref.removeItem(self._current_rect)
-                    self._current_rect = None
-
-                pen = QPen(QColor(COLORS["accent"]), 2, Qt.PenStyle.DashLine)
-                self._current_rect = self.scene_ref.addRect(QRectF(scene_pos, scene_pos), pen)
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """Gestisce trascinamento per disegno ROI o pan."""
-        if self._panning and self._pan_start:
-            delta = event.position().toPoint() - self._pan_start
-            self._pan_start = event.position().toPoint()
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
-            event.accept()
-            return
-
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            event.accept()
-            return
-
-        scene_pos = self.mapToScene(event.position().toPoint())
-
-        # Aggiorna coordinate nella status bar
-        if self.app.pdf_doc:
-            factor = 72 / (150 * self.app.zoom_level)
-            pdf_x = int(scene_pos.x() * factor)
-            pdf_y = int(scene_pos.y() * factor)
-            if not self.app.delete_mode:
-                self.app.status_bar.setText(f"[DISEGNO] Modalità attiva | Coordinate PDF: ({pdf_x}, {pdf_y})")
-
-        if not self.app.delete_mode and self._current_rect and self._start_point:
-            rect = QRectF(self._start_point, scene_pos).normalized()
-            self._current_rect.setRect(rect)
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        """Gestisce rilascio mouse per completare la ROI."""
-        if self._panning:
-            self._panning = False
-            self._pan_start = None
-            cursor = Qt.CursorShape.ForbiddenCursor if self.app.delete_mode else Qt.CursorShape.CrossCursor
-            self.setCursor(QCursor(cursor))
-            event.accept()
-            return
-
-        if not self.app.delete_mode and self._start_point:
-            end_point = self.mapToScene(event.position().toPoint())
-
-            dist = math.hypot(end_point.x() - self._start_point.x(), end_point.y() - self._start_point.y())
-            if dist < 10:
-                if self._current_rect:
-                    self.scene_ref.removeItem(self._current_rect)
-                    self._current_rect = None
-                self._start_point = None
-                return
-
-            # Converti coordinate
-            factor = 72 / (150 * self.app.zoom_level)
-            x0 = min(self._start_point.x(), end_point.x())
-            y0 = min(self._start_point.y(), end_point.y())
-            x1 = max(self._start_point.x(), end_point.x())
-            y1 = max(self._start_point.y(), end_point.y())
-            roi_pdf_coords = [int(c * factor) for c in [x0, y0, x1, y1]]
-
-            self.app.prompt_and_save_roi(roi_pdf_coords)
-
-            if self._current_rect:
-                self.scene_ref.removeItem(self._current_rect)
-                self._current_rect = None
-            self._start_point = None
-
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
+# ROIGraphicsView estratto in src.gui.widgets.pdf_graphics_view
 
 
 class ROIDrawingApp(QMainWindow):
     """Applicazione per la gestione delle aree ROI."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("🎯 Intelleo - Utility Gestione ROI")
         self.resize(1300, 900)
         self.setStyleSheet(f"QMainWindow {{ background-color: {COLORS['bg_primary']}; }}")
 
-        # Variabili di stato
-        self.pdf_doc = None
-        self._pixmap_item = None
-        self.current_page_index = 0
-        self.config = config_manager.load_config()
+        # Controller
+        self.controller = ROIController()
+        self._connect_signals()
+
+        # Widget UI
+        self.nav_widget: QWidget
+        self.prev_page_button: QPushButton
+        self.next_page_button: QPushButton
+        self.page_label: QLabel
+        self.zoom_label: QLabel
+        self.delete_mode_btn: QCheckBox
+        self.mode_indicator: QLabel
+        self.canvas: ROIGraphicsView
+        self.rules_listbox: QListWidget
+        self.status_bar: QLabel
+
+        # Variabili di stato UI
+        self._pixmap_item: Optional[QGraphicsPixmapItem] = None
         self.delete_mode = False
-        self.roi_item_map = {}
-        self.zoom_level = 1.0
+        self.roi_item_map: Dict[Any, Dict[str, int]] = {}
 
         self._setup_ui()
         self._setup_shortcuts()
 
-    def _setup_ui(self):
+    def _setup_ui(self) -> None:
         """Crea l'interfaccia utente."""
         central = QWidget()
         self.setCentralWidget(central)
@@ -363,7 +254,7 @@ class ROIDrawingApp(QMainWindow):
         help_label.setStyleSheet(f"color: {COLORS['text_muted']};")
         main_layout.addWidget(help_label)
 
-    def _add_separator(self, layout):
+    def _add_separator(self, layout: QHBoxLayout) -> None:
         """Aggiunge un separatore verticale al layout."""
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
@@ -371,25 +262,54 @@ class ROIDrawingApp(QMainWindow):
         sep.setFixedWidth(20)
         layout.addWidget(sep)
 
-    def _setup_shortcuts(self):
+    def _setup_shortcuts(self) -> None:
         """Configura scorciatoie tastiera."""
+        from PySide6.QtGui import QKeySequence, QShortcut
         QShortcut(QKeySequence(Qt.Key.Key_Left), self, self.prev_page)
         QShortcut(QKeySequence(Qt.Key.Key_Right), self, self.next_page)
         QShortcut(QKeySequence(Qt.Key.Key_Plus), self, self.zoom_in)
         QShortcut(QKeySequence(Qt.Key.Key_Minus), self, self.zoom_out)
         QShortcut(QKeySequence(Qt.Key.Key_0), self, self.zoom_reset)
 
-    def _update_rules_list(self):
-        """Aggiorna la lista delle regole nella sidebar."""
-        self.config = config_manager.load_config()
-        self.rules_listbox.clear()
+    def _connect_signals(self) -> None:
+        """Collega i segnali del controller della ROI alla UI."""
+        self.controller.page_rendered.connect(self._on_page_rendered)
+        self.controller.rules_updated.connect(self._update_rules_list)
+        self.controller.status_message.connect(self._on_status_message)
+        self.controller.zoom_changed.connect(self._on_zoom_changed)
 
-        for rule in self.config.get("classification_rules", []):
+    def _on_status_message(self, message: str, level: str) -> None:
+        self.status_bar.setText(f"[{level}] {message}")
+        if level == "ERROR":
+            QMessageBox.critical(self, "Errore", message)
+
+    def _on_zoom_changed(self, level: float) -> None:
+        self.zoom_label.setText(f"{int(level * 100)}%")
+
+    def _on_page_rendered(self, pixmap: QPixmap, current: int, total: int) -> None:
+        self.nav_widget.setVisible(True)
+        self.page_label.setText(f"Pagina {current + 1} / {total}")
+        self.prev_page_button.setEnabled(current > 0)
+        self.next_page_button.setEnabled(current < total - 1)
+        
+        # Aggiorna scena
+        scene = self.canvas.scene_ref
+        scene.clear()
+        self.roi_item_map.clear()
+        self._pixmap_item = scene.addPixmap(pixmap)
+        scene.setSceneRect(pixmap.rect())
+        
+        self.draw_existing_rois()
+
+    def _update_rules_list(self) -> None:
+        """Aggiorna la lista delle regole nella sidebar tramite controller."""
+        self.rules_listbox.clear()
+        for rule in self.controller.get_rules():
             name = rule.get("category_name", "N/A")
             roi_count = len(rule.get("rois", []))
             self.rules_listbox.addItem(f"  {name} ({roi_count} ROI)")
 
-    def toggle_delete_mode(self, checked):
+    def toggle_delete_mode(self, checked: bool) -> None:
         """Attiva/disattiva la modalità cancellazione."""
         self.delete_mode = checked
         if checked:
@@ -403,92 +323,36 @@ class ROIDrawingApp(QMainWindow):
             self.mode_indicator.setStyleSheet(f"color: {COLORS['success']};")
             self.status_bar.setText("[OK] Modalità Disegno: Trascina per creare una nuova ROI")
 
-    def zoom_in(self):
-        """Aumenta lo zoom."""
-        self.zoom_level = min(4.0, self.zoom_level * 1.2)
-        self.zoom_label.setText(f"{int(self.zoom_level * 100)}%")
-        if self.pdf_doc:
-            self.render_page(self.current_page_index)
+    def zoom_in(self) -> None:
+        self.controller.zoom_in()
 
-    def zoom_out(self):
-        """Diminuisce lo zoom."""
-        self.zoom_level = max(0.25, self.zoom_level / 1.2)
-        self.zoom_label.setText(f"{int(self.zoom_level * 100)}%")
-        if self.pdf_doc:
-            self.render_page(self.current_page_index)
+    def zoom_out(self) -> None:
+        self.controller.zoom_out()
 
-    def zoom_reset(self):
-        """Resetta lo zoom."""
-        self.zoom_level = 1.0
-        self.zoom_label.setText("100%")
-        if self.pdf_doc:
-            self.render_page(self.current_page_index)
+    def zoom_reset(self) -> None:
+        self.controller.zoom_reset()
 
-    def open_pdf(self):
-        """Apre un file PDF."""
+    def open_pdf(self) -> None:
+        """Delega apertura PDF al controller."""
         filepath, _ = QFileDialog.getOpenFileName(self, "Seleziona un PDF di esempio", "", "PDF Files (*.pdf)")
+        if filepath:
+            self.controller.open_pdf(filepath)
 
-        if not filepath:
-            return
+    def render_page(self, page_index: int) -> None:
+        """Invocato solo per rinfresco manuale (ora gestito dai segnali)."""
+        self.controller.render_current_page()
 
-        try:
-            self.pdf_doc = fitz.open(filepath)
-
-            if self.pdf_doc.page_count > 0:
-                self.current_page_index = 0
-                self.nav_widget.setVisible(True)
-                self.zoom_level = 1.0
-                self.zoom_label.setText("100%")
-                self.render_page(self.current_page_index)
-                self.status_bar.setText(
-                    f"[OK] PDF caricato: {os.path.basename(filepath)} ({self.pdf_doc.page_count} pagine)"
-                )
-            else:
-                QMessageBox.warning(self, "Attenzione", "Il PDF selezionato non contiene pagine.")
-        except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Impossibile aprire il PDF:\n{e}")
-
-    def render_page(self, page_index):
-        """Renderizza una pagina del PDF."""
-        if not self.pdf_doc or not (0 <= page_index < self.pdf_doc.page_count):
-            return
-
-        self.current_page_index = page_index
-        page = self.pdf_doc[page_index]
-
-        # Calcola DPI in base allo zoom
-        dpi = int(150 * self.zoom_level)
-        pix = page.get_pixmap(dpi=dpi)
-
-        # Converti PyMuPDF pixmap → QPixmap (senza passare da PIL/ImageTk)
-        qimage = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
-        qpixmap = QPixmap.fromImage(qimage)
-
-        # Aggiorna scena
+    def draw_existing_rois(self) -> None:
+        """Disegna le ROI esistenti recuperandole dal controller."""
         scene = self.canvas.scene_ref
-        scene.clear()
-        self.roi_item_map.clear()
-
-        self._pixmap_item = scene.addPixmap(qpixmap)
-        scene.setSceneRect(QRectF(0, 0, pix.width, pix.height))
-
-        self.draw_existing_rois()
-        self.update_nav_controls()
-
-    def draw_existing_rois(self):
-        """Disegna le ROI esistenti sulla scena."""
-        self.config = config_manager.load_config()
-        scene = self.canvas.scene_ref
-
         # Rimuovi solo le ROI, non il pixmap
-        for item_id in list(self.roi_item_map.keys()):
+        for item in list(self.roi_item_map.keys()):
             with contextlib.suppress(Exception):
-                scene.removeItem(item_id)
+                scene.removeItem(item)
         self.roi_item_map.clear()
 
-        factor = (150 * self.zoom_level) / 72
-
-        for rule_index, rule in enumerate(self.config.get("classification_rules", [])):
+        factor = (150 * self.controller.zoom_level) / 72
+        for rule_index, rule in enumerate(self.controller.get_rules()):
             category_name = rule.get("category_name", "N/A")
             color_hex = rule.get("color", "#FF0000")
             color = QColor(color_hex)
@@ -529,7 +393,7 @@ class ROIDrawingApp(QMainWindow):
                 self.roi_item_map[text_item] = roi_info
                 self.roi_item_map[text_bg] = roi_info
 
-    def handle_delete_click(self, scene_pos):
+    def handle_delete_click(self, scene_pos: QPointF) -> None:
         """Gestisce il click in modalità cancellazione."""
         scene = self.canvas.scene_ref
         items = scene.items(scene_pos)
@@ -543,11 +407,10 @@ class ROIDrawingApp(QMainWindow):
                 rule_index = roi_info["rule_index"]
                 roi_index = roi_info["roi_index"]
 
-                if rule_index < len(self.config["classification_rules"]) and roi_index < len(
-                    self.config["classification_rules"][rule_index].get("rois", [])
-                ):
-                    rule = self.config["classification_rules"][rule_index]
-                    category_name = rule.get("category_name", "N/A")
+                rules = self.controller.get_rules()
+                if 0 <= rule_index < len(rules):
+                    rule = rules[rule_index]
+                    category_name = str(rule.get("category_name", "N/A"))
 
                     reply = QMessageBox.question(
                         self,
@@ -557,120 +420,40 @@ class ROIDrawingApp(QMainWindow):
                     )
 
                     if reply == QMessageBox.StandardButton.Yes:
-                        del rule["rois"][roi_index]
-                        self.save_and_refresh()
-                        self.status_bar.setText(f"[OK] ROI eliminata da '{category_name}'")
+                        if self.controller.remove_roi(rule_index, roi_index):
+                            self.status_bar.setText(f"[OK] ROI eliminata da '{category_name}'")
                         return
 
-    def prompt_and_save_roi(self, roi_coords):
-        """Mostra il dialog per salvare la ROI."""
-        categories = [rule["category_name"] for rule in self.config.get("classification_rules", [])]
+    def prompt_and_save_roi(self, roi_coords: List[int]) -> None:
+        """Mostra il dialog per salvare la ROI utilizzando RoiSelectorDialog."""
+        categories = self.controller.get_categories()
 
         if not categories:
-            QMessageBox.warning(
-                self,
-                "Nessuna Categoria",
-                "Non ci sono categorie definite.\nCrea prima una categoria nell'applicazione principale.",
-            )
+            QMessageBox.warning(self, "Nessuna Categoria", "Non ci sono categorie definite.")
             return
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Salva Nuova ROI")
-        dialog.setFixedSize(550, 250)
-        dialog.setModal(True)
+        dlg = RoiSelectorDialog(self, categories, roi_coords, COLORS)
+        if dlg.exec():
+            selected = dlg.get_selected_category()
+            if self.controller.add_roi(selected, roi_coords):
+                self.status_bar.setText(f"[OK] ROI aggiunta a '{selected}'")
 
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
+    def save_and_refresh(self) -> None:
+        """Metodo obsoleto: gestito da ROIController.save_and_signal."""
+        self.controller.save_and_signal()
 
-        title = QLabel("Associa ROI alla categoria:")
-        title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+    def prev_page(self) -> None:
+        self.controller.prev_page()
 
-        category_combo = QComboBox()
-        category_combo.setFont(QFont("Segoe UI", 10))
-        category_combo.addItems(categories)
-        category_combo.setCurrentIndex(0)
-        layout.addWidget(category_combo)
+    def next_page(self) -> None:
+        self.controller.next_page()
 
-        # Info coordinate
-        coords_text = f"Coordinate: ({roi_coords[0]}, {roi_coords[1]}) -> ({roi_coords[2]}, {roi_coords[3]})"
-        coords_label = QLabel(coords_text)
-        coords_label.setFont(QFont("Segoe UI", 9))
-        coords_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        coords_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(coords_label)
-
-        # Pulsanti
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-
-        btn_save = QPushButton("Salva ROI")
-        btn_save.setFont(QFont("Segoe UI", 10))
-        btn_layout.addWidget(btn_save)
-
-        btn_cancel = QPushButton("Annulla")
-        btn_cancel.setFont(QFont("Segoe UI", 10))
-        btn_cancel.clicked.connect(dialog.reject)
-        btn_layout.addWidget(btn_cancel)
-
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
-
-        def save():
-            selected = category_combo.currentText()
-            if not selected:
-                return
-            for rule in self.config["classification_rules"]:
-                if rule["category_name"] == selected:
-                    rule.setdefault("rois", []).append(roi_coords)
-                    break
-            self.save_and_refresh()
-            self.status_bar.setText(f"[OK] ROI aggiunta a '{selected}'")
-            dialog.accept()
-
-        btn_save.clicked.connect(save)
-        dialog.exec()
-
-    def save_and_refresh(self):
-        """Salva la configurazione e aggiorna la vista."""
-        try:
-            config_manager.save_config(self.config)
-
-            # Crea il file segnale per l'app principale
-            with open(SIGNAL_FILE, "w") as f:
-                f.write("update")
-
-            self.render_page(self.current_page_index)
-            self._update_rules_list()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Impossibile salvare la configurazione:\n{e}")
-
-    def prev_page(self):
-        """Va alla pagina precedente."""
-        if self.current_page_index > 0:
-            self.render_page(self.current_page_index - 1)
-
-    def next_page(self):
-        """Va alla pagina successiva."""
-        if self.pdf_doc and self.current_page_index < self.pdf_doc.page_count - 1:
-            self.render_page(self.current_page_index + 1)
-
-    def update_nav_controls(self):
-        """Aggiorna i controlli di navigazione."""
-        if not self.pdf_doc:
-            return
-
-        total_pages = self.pdf_doc.page_count
-        self.page_label.setText(f"Pagina {self.current_page_index + 1} / {total_pages}")
-
-        self.prev_page_button.setEnabled(self.current_page_index > 0)
-        self.next_page_button.setEnabled(self.current_page_index < total_pages - 1)
+    def update_nav_controls(self) -> None:
+        """Vuoto: gestito da _on_page_rendered."""
+        pass
 
 
-def run_utility():
+def run_utility() -> None:
     """Entry point programmatico per l'utility."""
     print("+====================================================================+")
     print("|            INTELLEO - UTILITY GESTIONE ROI                         |")
@@ -680,16 +463,10 @@ def run_utility():
     print("+====================================================================+")
     print()
 
-    app = QApplication.instance()
-    standalone = app is None
-    if standalone:
-        app = QApplication([])
-
+    app = QApplication(sys.argv)
     window = ROIDrawingApp()
-    window.showMaximized()
-
-    if standalone:
-        app.exec()
+    window.show()
+    sys.exit(app.exec())
 
 
 # ============================================================================

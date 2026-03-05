@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-import pdf_processor
+from core import pdf_processor
 
 
 class TestPdfProcessor(unittest.TestCase):
@@ -18,8 +18,8 @@ class TestPdfProcessor(unittest.TestCase):
             ],
         }
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_match(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Mock PDF Document
@@ -79,8 +79,8 @@ class TestPdfProcessor(unittest.TestCase):
             saved_path = files[0]["path"]
             self.assertTrue(saved_path.endswith("5400123_inv.pdf"))
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_no_match(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Mock PDF Document
@@ -126,8 +126,8 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("Percorso Tesseract non configurato o non valido", msg)
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_roi_error_continue(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Test error inside ROI loop should continue to next ROI/Rule
@@ -159,8 +159,8 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertTrue(success, msg)
             self.assertEqual(files[0]["category"], "sconosciuto")
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_move_retry_logic(self, mock_isfile, mock_ocr, mock_fitz_open):
         mock_doc = MagicMock()
@@ -178,8 +178,8 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertEqual(mock_move.call_count, 3)
             self.assertEqual(mock_sleep.call_count, 2)
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_ocr_rotation_logic(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Setup: Page with one ROI
@@ -213,8 +213,8 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertIn("Invoice", files[0]["category"])
             self.assertEqual(mock_ocr.call_count, 2)
 
-    @patch("pdf_processor.fitz.open")
-    @patch("pdf_processor.pytesseract.image_to_string")
+    @patch("core.pdf_processor.fitz.open")
+    @patch("core.pdf_processor.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_invalid_roi_coords(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Config with invalid ROI

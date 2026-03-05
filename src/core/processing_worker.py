@@ -7,7 +7,7 @@ from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import pdf_processor
+from core import pdf_processor
 
 
 class PdfProcessingWorker:

@@ -58,7 +58,7 @@ echo  ======================================================================
 echo.
 
 :: Esecuzione Python e cattura codice di uscita
-"%VENV_DIR%\Scripts\python.exe" src/main.py %*
+"%VENV_DIR%\Scripts\python.exe" src/app_launcher.py %*
 set "EXIT_CODE=%errorlevel%"
 
 echo.
