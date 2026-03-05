@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pymupdf as fitz
-import pytesseract
 from PIL import Image
 
 

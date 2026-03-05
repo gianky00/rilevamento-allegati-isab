@@ -42,23 +42,7 @@ from core.roi_controller import ROIController
 
 SIGNAL_FILE = ".update_signal"
 
-# ============================================================================
-# COSTANTI STILE - TEMA CHIARO PROFESSIONALE
-# ============================================================================
-COLORS = {
-    "bg_primary": "#FFFFFF",
-    "bg_secondary": "#F8F9FA",
-    "bg_tertiary": "#E9ECEF",
-    "accent": "#0D6EFD",
-    "accent_hover": "#0B5ED7",
-    "success": "#198754",
-    "warning": "#FFC107",
-    "danger": "#DC3545",
-    "text_primary": "#212529",
-    "text_secondary": "#6C757D",
-    "text_muted": "#ADB5BD",
-    "border": "#DEE2E6",
-}
+from gui.theme import COLORS, FONTS
 
 
 # ROIGraphicsView estratto in src.gui.widgets.pdf_graphics_view
@@ -107,19 +91,19 @@ class ROIDrawingApp(QMainWindow):
 
         # --- Header ---
         header = QLabel("Utility Gestione ROI")
-        header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        header.setFont(FONTS["heading"])
         header.setStyleSheet(f"color: {COLORS['accent']};")
         main_layout.addWidget(header)
 
         # --- Toolbar ---
         toolbar_group = QGroupBox(" Strumenti ")
-        toolbar_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        toolbar_group.setFont(FONTS["subheading"])
         toolbar_layout = QHBoxLayout(toolbar_group)
         toolbar_layout.setSpacing(8)
 
         # Apri PDF
         btn_open = QPushButton("Apri PDF di Esempio")
-        btn_open.setFont(QFont("Segoe UI", 10))
+        btn_open.setFont(FONTS["body"])
         btn_open.clicked.connect(self.open_pdf)
         toolbar_layout.addWidget(btn_open)
 
@@ -136,7 +120,7 @@ class ROIDrawingApp(QMainWindow):
         nav_layout.addWidget(self.prev_page_button)
 
         self.page_label = QLabel("Nessun PDF caricato")
-        self.page_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.page_label.setFont(FONTS["body_bold"])
         self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.page_label.setMinimumWidth(180)
         nav_layout.addWidget(self.page_label)
@@ -198,7 +182,7 @@ class ROIDrawingApp(QMainWindow):
 
         # Canvas (QGraphicsView)
         canvas_group = QGroupBox(" Area di Lavoro ")
-        canvas_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        canvas_group.setFont(FONTS["subheading"])
         canvas_layout = QVBoxLayout(canvas_group)
         canvas_layout.setContentsMargins(10, 15, 10, 10)
 
@@ -208,12 +192,12 @@ class ROIDrawingApp(QMainWindow):
 
         # Sidebar
         sidebar_group = QGroupBox(" Regole Attive ")
-        sidebar_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        sidebar_group.setFont(FONTS["subheading"])
         sidebar_group.setFixedWidth(280)
         sidebar_layout = QVBoxLayout(sidebar_group)
 
         self.rules_listbox = QListWidget()
-        self.rules_listbox.setFont(QFont("Segoe UI", 10))
+        self.rules_listbox.setFont(FONTS["body"])
         self.rules_listbox.setStyleSheet(f"""
             QListWidget {{
                 background-color: {COLORS["bg_secondary"]};
