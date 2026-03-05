@@ -8,9 +8,10 @@ import contextlib
 import json
 import os
 import sys
+from typing import Any, Dict, Tuple
 
 
-def get_config_details():
+def get_config_details() -> Tuple[str, str]:
     """
     Determina la directory base e il percorso del file di configurazione.
 
@@ -57,7 +58,7 @@ def get_config_details():
 CONFIG_DIR, CONFIG_FILE = get_config_details()
 
 
-def load_config():
+def load_config() -> Dict[str, Any]:
     """
     Carica la configurazione. Cerca prima nel percorso predefinito (CONFIG_FILE),
     se non esiste o è corrotto prova a leggere quello locale (template).
@@ -66,7 +67,8 @@ def load_config():
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError) as e:
         print(f"[AVVISO] File di configurazione '{CONFIG_FILE}' corrotto o inaccessibile: {e}")
         try:
@@ -88,14 +90,15 @@ def load_config():
         local_config = os.path.join(app_dir, "config.json")
         if os.path.exists(local_config):
             with open(local_config, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
     except Exception as e:
         print(f"[ERRORE] Impossibile caricare configurazione locale: {e}")
 
     return {}
 
 
-def save_config(data):
+def save_config(data: Dict[str, Any]) -> None:
     """
     Salva la configurazione nel file config.json in modo atomico.
     """

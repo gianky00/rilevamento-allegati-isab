@@ -68,6 +68,10 @@ try:
     from gui.theme import COLORS, FONTS, GLOBAL_QSS
     from gui.widgets.drop_frame import DropFrame
     from shared.constants import APP_DATA_DIR, SESSION_FILE, SIGNAL_FILE
+    
+    # Core Managers (SRP)
+    from core.session_manager import SessionManager
+    from core.processing_worker import PdfProcessingWorker
 
     logger.info("Tutti i moduli importati con successo")
 except Exception as e:
@@ -662,11 +666,11 @@ class MainApp(QMainWindow):
             QMessageBox.information(self, "Info", "Nessun file PDF trovato.")
 
     def _update_restore_button_state(self):
-        self.restore_btn.setEnabled(os.path.exists(SESSION_FILE))
+        self.restore_btn.setEnabled(SessionManager.has_session())
 
     def _check_for_restore(self):
         self._update_restore_button_state()
-        if os.path.exists(SESSION_FILE):
+        if SessionManager.has_session():
             reply = QMessageBox.question(
                 self,
                 "Ripristino Sessione",
@@ -676,34 +680,17 @@ class MainApp(QMainWindow):
                 self._restore_session()
 
     def _clear_session(self):
-        if os.path.exists(SESSION_FILE):
-            try:
-                os.remove(SESSION_FILE)
-            except OSError as e:
-                logger.error(f"Errore rimozione session file: {e}")
+        SessionManager.clear_session()
         self._update_restore_button_state()
 
     def _restore_session(self):
-        if not os.path.exists(SESSION_FILE):
-            return
         try:
-            with open(SESSION_FILE) as f:
-                data = json.load(f)
-            if data:
-                tasks, odc = [], "Unknown"
-                if isinstance(data, list):
-                    tasks = data
-                elif isinstance(data, dict):
-                    tasks = data.get("tasks", [])
-                    odc = data.get("odc", "Unknown")
-                if tasks:
-                    self._show_unknown_dialog(tasks, odc)
-                else:
-                    self._clear_session()
+            tasks, odc = SessionManager.load_session()
+            if tasks:
+                self._show_unknown_dialog(tasks, odc)
             else:
                 self._clear_session()
         except Exception as e:
-            logger.error(f"Errore ripristino sessione: {e}")
             QMessageBox.critical(self, "Errore", f"Impossibile ripristinare la sessione:\n{e}")
             self._clear_session()
 
@@ -726,89 +713,25 @@ class MainApp(QMainWindow):
         self._add_log_message("-" * 60, "INFO")
         self.processing_start_time = datetime.now()
         self._is_processing = True
-        thread = threading.Thread(
-            target=self._processing_worker, args=(list(self.pdf_files), self.odc_entry.text(), self.config)
+        
+        def on_worker_complete(processed_count, unknown_files):
+            def handler():
+                self.files_processed_count = processed_count
+                if unknown_files:
+                    self._show_unknown_dialog(unknown_files, self.odc_entry.text())
+                self.files_count_label.setText(str(self.files_processed_count))
+                self.odc_entry.setText("5400")
+                self._is_processing = False
+            QTimer.singleShot(0, handler)
+            
+        worker = PdfProcessingWorker(
+            self.log_queue, 
+            list(self.pdf_files), 
+            self.odc_entry.text(), 
+            self.config,
+            on_worker_complete
         )
-        thread.daemon = True
-        thread.start()
-
-    def _processing_worker(self, pdf_files, odc, config):
-        try:
-            unknown_files = []
-            total_files = len(pdf_files)
-            for i, pdf_path in enumerate(pdf_files):
-
-                def progress_callback(message, level="INFO", i=i, total_files=total_files):
-                    self.log_queue.put((message, level))
-                    if "Elaborazione pagina" in message:
-                        try:
-                            parts = message.split()
-                            for p in parts:
-                                if "/" in p:
-                                    current, total = p.split("/")
-                                    page_progress = int(current) / int(total) * 100
-                                    file_progress = (i / total_files) * 100
-                                    combined = file_progress + (page_progress / total_files)
-                                    self.log_queue.put(
-                                        {
-                                            "action": "update_progress",
-                                            "value": combined,
-                                            "text": f"File {i + 1}/{total_files} - Pagina {current}/{total}",
-                                            "eta_seconds": None,
-                                        }
-                                    )
-                                    break
-                        except Exception:
-                            pass
-
-                def advanced_progress_callback(data, level="INFO", i=i, total_files=total_files):
-                    if isinstance(data, dict) and data.get("type") == "page_progress":
-                        current = data.get("current", 0)
-                        total = data.get("total", 1)
-                        eta = data.get("eta_seconds", 0)
-                        phase_pct = data.get("phase_pct", 0)
-                        phase = data.get("phase", "analysis")
-                        file_internal_progress = phase_pct if phase_pct > 0 else (current / total) * 100
-                        base_pct = (i / total_files) * 100
-                        combined = base_pct + (file_internal_progress * (1.0 / total_files))
-                        status_text = f"File {i + 1}/{total_files}"
-                        status_text += " - Salvataggio..." if phase == "saving" else f" - Analisi {current}/{total}"
-                        self.log_queue.put(
-                            {"action": "update_progress", "value": combined, "text": status_text, "eta_seconds": eta}
-                        )
-                    elif isinstance(data, dict):
-                        self.log_queue.put(data)
-                    else:
-                        progress_callback(str(data), level)
-
-                self.log_queue.put((f"=== FILE {i + 1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
-                success, message, generated, moved = pdf_processor.process_pdf(
-                    pdf_path, odc, config, advanced_progress_callback
-                )
-                if not success:
-                    self.log_queue.put((f"Errore: {message}", "ERROR"))
-                else:
-                    self.files_processed_count += 1
-                    self.log_queue.put(("File completato con successo", "SUCCESS"))
-                    if any(f["category"] == "sconosciuto" for f in generated):
-                        unknown_paths = [f["path"] for f in generated if f["category"] == "sconosciuto"]
-                        siblings = [f["path"] for f in generated if f["category"] != "sconosciuto"]
-                        for u_path in unknown_paths:
-                            unknown_files.append({"unknown_path": u_path, "source_path": moved, "siblings": siblings})
-
-            self.log_queue.put({"action": "update_progress", "value": 100, "text": "Completato!"})
-            elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
-            elapsed_str = str(elapsed).split(".")[0] if elapsed else "N/A"
-            self.log_queue.put(("-" * 60, "INFO"))
-            self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
-            self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
-            if unknown_files:
-                self.log_queue.put({"action": "show_unknown_dialog", "files": unknown_files, "odc": odc})
-            # Update UI from main thread
-            QTimer.singleShot(0, lambda: self.files_count_label.setText(str(self.files_processed_count)))
-            QTimer.singleShot(0, lambda: self.odc_entry.setText("5400"))
-        finally:
-            self._is_processing = False
+        worker.start()
 
     def _show_unknown_dialog(self, files, odc):
         if not files:
