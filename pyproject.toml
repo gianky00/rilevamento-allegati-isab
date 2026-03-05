@@ -1,0 +1,80 @@
+[project]
+name = "intelleo-pdf-splitter"
+version = "2.1.0"
+description = "Automazione documentale per divisione PDF con OCR"
+requires-python = ">=3.10"
+
+# ============================================================================
+# RUFF — Linter + Formatter (sostituisce flake8, isort, black, pyflakes)
+# ============================================================================
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie
+    "RET",  # flake8-return
+    "TCH",  # flake8-type-checking
+]
+ignore = [
+    "E501",     # line too long (gestito dal formatter)
+    "B008",     # function call in default argument (comune in Qt)
+    "RUF012",   # mutable class default (comune in Qt widget)
+    "SIM108",   # ternary operator (leggibilità)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gui", "core", "shared"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ============================================================================
+# MYPY — Type Checker
+# ============================================================================
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Graduale: non obbligare i type hint subito
+ignore_missing_imports = true  # pymupdf, pytesseract non hanno stubs
+
+[[tool.mypy.overrides]]
+module = ["pymupdf.*", "fitz.*", "pytesseract.*", "PySide6.*"]
+ignore_missing_imports = true
+
+# ============================================================================
+# PYTEST — Testing
+# ============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/generate_icon.py", "tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 50
+
+# ============================================================================
+# BANDIT — Security Scanner
+# ============================================================================
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]  # assert usato nei test
