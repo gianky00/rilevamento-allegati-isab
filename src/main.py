@@ -1,5 +1,5 @@
 """
-Intelleo PDF Splitter - Applicazione principale
+Intelleo PDF Splitter - Applicazione principale (PySide6)
 Gestisce la divisione di file PDF basata su regole OCR.
 """
 # CRITICO: Inizializzare il logging PRIMA di tutto il resto
@@ -11,11 +11,21 @@ logger = logging.getLogger('MAIN')
 
 # Ora importa il resto
 try:
-    logger.info("Importazione moduli tkinter...")
-    import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser, simpledialog
-    logger.info("Importazione tkinterdnd2...")
-    from tkinterdnd2 import DND_FILES, TkinterDnD
+    logger.info("Importazione moduli PySide6...")
+    from PySide6.QtWidgets import (
+        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+        QLabel, QPushButton, QFrame, QTabWidget, QLineEdit, QTextEdit,
+        QProgressBar, QTreeWidget, QTreeWidgetItem, QHeaderView,
+        QListWidget, QListWidgetItem, QSplitter, QGroupBox,
+        QFileDialog, QMessageBox, QDialog, QInputDialog, QColorDialog,
+        QGraphicsView, QGraphicsScene, QCheckBox, QComboBox,
+        QSizePolicy, QAbstractItemView
+    )
+    from PySide6.QtCore import Qt, QTimer, QUrl, QMimeData, QThread, Signal, QSize
+    from PySide6.QtGui import (
+        QFont, QColor, QIcon, QPixmap, QImage, QBrush, QPen,
+        QClipboard, QDragEnterEvent, QDropEvent, QCursor, QShortcut, QKeySequence
+    )
     logger.info("Importazione moduli applicazione...")
     import config_manager
     import pdf_processor
@@ -30,26 +40,21 @@ try:
     import version
     logger.info("Importazione PyMuPDF...")
     import pymupdf as fitz
-    logger.info("Importazione PIL...")
-    from PIL import Image, ImageTk
     import shutil
     from datetime import datetime
     import json
-    import notification_manager  # Import Notification Manager
+    import notification_manager
     logger.info("Tutti i moduli importati con successo")
 except Exception as e:
     logger.critical(f"Errore durante l'importazione dei moduli: {e}", exc_info=True)
-    # Non rilanciare l'eccezione, permette all'app di partire anche se un modulo opzionale manca
     pass
 
 # Segnale per comunicazione tra utility ROI e app principale
 SIGNAL_FILE = ".update_signal"
 
-
 # Costanti per la gestione della sessione
 APP_DATA_DIR = config_manager.CONFIG_DIR
 SESSION_FILE = os.path.join(APP_DATA_DIR, "session.json")
-
 
 # ============================================================================
 # COSTANTI STILE - TEMA CHIARO PROFESSIONALE (MODERN UI)
@@ -58,242 +63,307 @@ COLORS = {
     'bg_primary': '#FFFFFF',
     'bg_secondary': '#F8F9FA',
     'bg_tertiary': '#E9ECEF',
-    'accent': '#2563EB',      # Blue 600 - Più vibrante
-    'accent_hover': '#1D4ED8', # Blue 700
-    'success': '#10B981',     # Emerald 500 - Più moderno del verde standard
-    'warning': '#F59E0B',     # Amber 500
-    'danger': '#EF4444',      # Red 500
-    'text_primary': '#111827', # Gray 900
-    'text_secondary': '#4B5563', # Gray 600
-    'text_muted': '#9CA3AF',   # Gray 400
-    'border': '#E5E7EB',       # Gray 200
+    'accent': '#2563EB',
+    'accent_hover': '#1D4ED8',
+    'success': '#10B981',
+    'warning': '#F59E0B',
+    'danger': '#EF4444',
+    'text_primary': '#111827',
+    'text_secondary': '#4B5563',
+    'text_muted': '#9CA3AF',
+    'border': '#E5E7EB',
     'card_shadow': '#9CA3AF',
 }
 
 FONTS = {
-    'heading': ('Segoe UI', 16, 'bold'),
-    'subheading': ('Segoe UI', 12, 'bold'),
-    'body': ('Segoe UI', 10),
-    'body_bold': ('Segoe UI', 10, 'bold'),
-    'small': ('Segoe UI', 9),
-    'mono': ('Consolas', 10),
-    'mono_bold': ('Consolas', 10, 'bold'),
+    'heading': QFont('Segoe UI', 16, QFont.Weight.Bold),
+    'subheading': QFont('Segoe UI', 12, QFont.Weight.Bold),
+    'body': QFont('Segoe UI', 10),
+    'body_bold': QFont('Segoe UI', 10, QFont.Weight.Bold),
+    'small': QFont('Segoe UI', 9),
+    'mono': QFont('Consolas', 10),
+    'mono_bold': QFont('Consolas', 10, QFont.Weight.Bold),
 }
 
+# ============================================================================
+# GLOBAL STYLESHEET
+# ============================================================================
+GLOBAL_QSS = f"""
+QMainWindow, QDialog {{ background-color: {COLORS['bg_primary']}; }}
+QTabWidget::pane {{ background-color: {COLORS['bg_primary']}; border: none; }}
+QTabBar::tab {{
+    font: bold 10pt "Segoe UI"; padding: 10px 20px;
+    background-color: {COLORS['bg_secondary']}; color: {COLORS['text_primary']};
+    border: none; margin-right: 2px;
+}}
+QTabBar::tab:selected {{ background-color: {COLORS['accent']}; color: white; }}
+QPushButton {{
+    font: 10pt "Segoe UI"; padding: 8px 15px;
+    border: 1px solid {COLORS['border']}; border-radius: 4px;
+    background-color: {COLORS['bg_secondary']}; color: {COLORS['text_primary']};
+}}
+QPushButton:hover {{ background-color: {COLORS['accent']}; color: white; border-color: {COLORS['accent']}; }}
+QLineEdit, QComboBox {{
+    font: 10pt "Segoe UI"; padding: 8px;
+    border: 1px solid {COLORS['border']}; border-radius: 4px;
+    background-color: {COLORS['bg_primary']};
+}}
+QGroupBox {{
+    font: bold 11pt "Segoe UI"; border: 1px solid {COLORS['border']};
+    border-radius: 4px; margin-top: 10px; padding-top: 15px;
+}}
+QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 5px; }}
+QTreeWidget {{
+    font: 10pt "Segoe UI"; background-color: {COLORS['bg_primary']};
+    border: 1px solid {COLORS['border']}; alternate-background-color: {COLORS['bg_secondary']};
+}}
+QTreeWidget::item:selected {{ background-color: {COLORS['accent']}; color: white; }}
+QTreeWidget QHeaderView::section {{
+    font: bold 10pt "Segoe UI"; background-color: {COLORS['bg_secondary']};
+    border: 1px solid {COLORS['border']}; padding: 5px;
+}}
+QProgressBar {{
+    border: none; border-radius: 4px; text-align: center;
+    background-color: {COLORS['bg_tertiary']}; height: 18px;
+}}
+QProgressBar::chunk {{ background-color: {COLORS['success']}; border-radius: 4px; }}
+QListWidget {{
+    font: 10pt "Segoe UI"; background-color: {COLORS['bg_secondary']};
+    border: 1px solid {COLORS['border']}; border-radius: 4px;
+}}
+QListWidget::item:selected {{ background-color: {COLORS['accent']}; color: white; }}
+QTextEdit {{
+    font: 10pt "Consolas"; background-color: {COLORS['bg_secondary']};
+    color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']};
+    border-radius: 4px;
+}}
+"""
 
-class UnknownFilesReviewDialog(tk.Toplevel):
+
+class PreviewGraphicsView(QGraphicsView):
+    """Vista grafica per anteprima PDF nel dialog di revisione."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._scene = QGraphicsScene(self)
+        self.setScene(self._scene)
+        self.setBackgroundBrush(QBrush(QColor(COLORS['bg_tertiary'])))
+        self._zoom = 1.0
+        self._panning = False
+        self._pan_start = None
+
+    def wheelEvent(self, event):
+        self._zoom *= 1.1 if event.angleDelta().y() > 0 else 0.9
+        self.resetTransform()
+        self.scale(self._zoom, self._zoom)
+
+    def mousePressEvent(self, event):
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._panning = True
+            self._pan_start = event.position().toPoint()
+            self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._panning and self._pan_start:
+            delta = event.position().toPoint() - self._pan_start
+            self._pan_start = event.position().toPoint()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._panning:
+            self._panning = False
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+        else:
+            super().mouseReleaseEvent(event)
+
+    def show_pixmap(self, qpixmap):
+        self._scene.clear()
+        self._scene.addPixmap(qpixmap)
+        self._scene.setSceneRect(0, 0, qpixmap.width(), qpixmap.height())
+
+
+class UnknownFilesReviewDialog(QDialog):
     """Dialog per la revisione manuale (Splitter) dei file sconosciuti."""
-    
+
     def __init__(self, parent, review_tasks, on_finish=None, odc=None, on_close_callback=None):
         super().__init__(parent)
-        self.title("Revisione Manuale - Divisione Allegati")
-        self.state('zoomed')
-        self.configure(bg=COLORS['bg_primary'])
-
+        self.setWindowTitle("Revisione Manuale - Divisione Allegati")
+        self.showMaximized()
         self.review_tasks = review_tasks
         self.on_finish = on_finish
-        self.odc = odc  # Save ODC for session restore
-        self.on_close_callback = on_close_callback # Callback to notify MainApp on close
-        
+        self.odc = odc
+        self.on_close_callback = on_close_callback
         self.task_index = 0
         self.current_doc = None
         self.current_doc_path = None
-        self.available_pages = [] 
+        self.available_pages = []
         self.preview_page_index = 0
-        self.zoom_level = 1.0
-        self.image_ref = None
 
-        self._setup_styles()
         self._create_widgets()
-        
         self.load_task(0)
-        
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
-
-    def _setup_styles(self):
-        style = ttk.Style()
-        style.configure('Review.TFrame', background=COLORS['bg_primary'])
 
     def _create_widgets(self):
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
 
-        left_panel = ttk.Frame(self, padding=10, style='Review.TFrame')
-        left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-        left_panel.rowconfigure(1, weight=1)
+        # Left panel
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left.setFixedWidth(300)
 
-        self.lbl_file_info = ttk.Label(left_panel, text="Caricamento...", 
-                                      font=FONTS['subheading'], wraplength=250)
-        self.lbl_file_info.grid(row=0, column=0, sticky='w', pady=(0, 10))
+        self.lbl_file_info = QLabel("Caricamento...")
+        self.lbl_file_info.setFont(FONTS['subheading'])
+        self.lbl_file_info.setWordWrap(True)
+        left_layout.addWidget(self.lbl_file_info)
 
-        list_frame = ttk.Frame(left_panel)
-        list_frame.grid(row=1, column=0, sticky='nsew')
-        
-        ttk.Label(list_frame, text="Seleziona le pagine da unire:", 
-                 font=FONTS['body_bold']).pack(anchor='w')
-        
-        self.pages_listbox = tk.Listbox(list_frame, selectmode='extended', font=FONTS['body'],
-                                       activestyle='none', height=20, bg=COLORS['bg_secondary'],
-                                       selectbackground=COLORS['accent'], selectforeground='white')
-        self.pages_listbox.pack(side='left', fill='both', expand=True, pady=5)
-        
-        sb = ttk.Scrollbar(list_frame, orient='vertical', command=self.pages_listbox.yview)
-        sb.pack(side='right', fill='y', pady=5)
-        self.pages_listbox.config(yscrollcommand=sb.set)
-        
-        self.pages_listbox.bind('<<ListboxSelect>>', self._on_page_select)
+        QLabel("Seleziona le pagine da unire:", font=FONTS['body_bold']).setParent(left)
+        lbl_pages = QLabel("Seleziona le pagine da unire:")
+        lbl_pages.setFont(FONTS['body_bold'])
+        left_layout.addWidget(lbl_pages)
 
-        action_frame = ttk.LabelFrame(left_panel, text=" Azione ", padding=10)
-        action_frame.grid(row=2, column=0, sticky='ew', pady=10)
+        self.pages_listbox = QListWidget()
+        self.pages_listbox.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.pages_listbox.itemSelectionChanged.connect(self._on_page_select)
+        left_layout.addWidget(self.pages_listbox, 1)
 
-        ttk.Button(action_frame, text="RINOMINA (Estrai Pagine)", 
-                  command=self.extract_and_rename, style='Accent.TButton').pack(fill='x', pady=5)
-        
-        ttk.Label(action_frame, text="Crea un nuovo file con le pagine selezionate.", 
-                 font=FONTS['small'], foreground=COLORS['text_secondary']).pack()
+        action_group = QGroupBox(" Azione ")
+        action_layout = QVBoxLayout(action_group)
+        btn_rename = QPushButton("RINOMINA (Estrai Pagine)")
+        btn_rename.setFont(FONTS['body_bold'])
+        btn_rename.setStyleSheet(f"background-color: {COLORS['accent']}; color: white; font-weight: bold;")
+        btn_rename.clicked.connect(self.extract_and_rename)
+        action_layout.addWidget(btn_rename)
+        action_layout.addWidget(QLabel("Crea un nuovo file con le pagine selezionate."))
+        left_layout.addWidget(action_group)
 
-        nav_frame = ttk.Frame(left_panel)
-        nav_frame.grid(row=3, column=0, sticky='ew', pady=10)
-        
-        self.btn_skip = ttk.Button(nav_frame, text="Salta File >>", command=self.skip_task)
-        self.btn_skip.pack(fill='x')
+        self.btn_skip = QPushButton("Salta File >>")
+        self.btn_skip.clicked.connect(self.skip_task)
+        left_layout.addWidget(self.btn_skip)
 
-        right_panel = ttk.Frame(self, padding=10, style='Review.TFrame')
-        right_panel.grid(row=0, column=1, sticky='nsew')
-        right_panel.rowconfigure(0, weight=1)
-        right_panel.columnconfigure(0, weight=1)
+        layout.addWidget(left)
 
-        self.canvas = tk.Canvas(right_panel, bg=COLORS['bg_tertiary'],
-                               highlightthickness=1, highlightbackground=COLORS['border'])
-        self.canvas.grid(row=0, column=0, sticky='nsew')
-        
-        v_scroll = ttk.Scrollbar(right_panel, orient='vertical', command=self.canvas.yview)
-        v_scroll.grid(row=0, column=1, sticky='ns')
-        h_scroll = ttk.Scrollbar(right_panel, orient='horizontal', command=self.canvas.xview)
-        h_scroll.grid(row=1, column=0, sticky='ew')
-        self.canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
-
-        self.canvas.bind('<MouseWheel>', self.on_mouse_wheel)
-        self.canvas.bind("<Control-ButtonPress-1>", self.start_pan)
-        self.canvas.bind("<Control-B1-Motion>", self.pan)
+        # Right panel - Preview
+        self.preview = PreviewGraphicsView()
+        layout.addWidget(self.preview, 1)
 
     def load_task(self, index):
         if index >= len(self.review_tasks):
-            messagebox.showinfo("Completato", "Tutti i file sono stati revisionati con successo!")
-            # Pulizia sessione al termine
+            QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
             if os.path.exists(SESSION_FILE):
                 try: os.remove(SESSION_FILE)
                 except: pass
-            
             if self.on_finish:
                 self.on_finish()
-            self.destroy()
+            self.accept()
             return
 
         self.task_index = index
         self.task = self.review_tasks[index]
         self.current_doc_path = self.task['unknown_path']
-        
-        # Chiusura esplicita documento precedente
-        if self.current_doc: 
+
+        if self.current_doc:
             try: self.current_doc.close()
             except: pass
             self.current_doc = None
-        
+
         try:
             self.current_doc = fitz.open(self.current_doc_path)
             self.available_pages = list(range(self.current_doc.page_count))
-            self.lbl_file_info.config(text=f"File {index+1}/{len(self.review_tasks)}\n{os.path.basename(self.current_doc_path)}")
+            self.lbl_file_info.setText(f"File {index+1}/{len(self.review_tasks)}\n{os.path.basename(self.current_doc_path)}")
             self._refresh_pages_list()
             if self.available_pages:
-                self.pages_listbox.selection_set(0)
-                self._on_page_select(None)
+                self.pages_listbox.setCurrentRow(0)
+                self._on_page_select()
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile aprire il file: {e}")
+            QMessageBox.critical(self, "Errore", f"Impossibile aprire il file: {e}")
             self.skip_task()
 
     def _refresh_pages_list(self):
-        self.pages_listbox.delete(0, 'end')
+        self.pages_listbox.clear()
         for real_idx in self.available_pages:
-            self.pages_listbox.insert('end', f"Pagina {real_idx + 1}")
+            self.pages_listbox.addItem(f"Pagina {real_idx + 1}")
 
-    def _on_page_select(self, event):
-        selection = self.pages_listbox.curselection()
-        if not selection: return
-        list_idx = selection[-1]
-        if list_idx < len(self.available_pages):
-            self.preview_page_index = self.available_pages[list_idx]
+    def _on_page_select(self):
+        items = self.pages_listbox.selectedItems()
+        if not items: return
+        last_row = self.pages_listbox.row(items[-1])
+        if last_row < len(self.available_pages):
+            self.preview_page_index = self.available_pages[last_row]
             self._render_preview()
 
     def _render_preview(self):
         if not self.current_doc: return
         try:
             page = self.current_doc[self.preview_page_index]
-            mat = fitz.Matrix(self.zoom_level, self.zoom_level)
-            pix = page.get_pixmap(matrix=mat)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            self.image_ref = ImageTk.PhotoImage(img)
-            self.canvas.delete("all")
-            cw, ch = self.canvas.winfo_width(), self.canvas.winfo_height()
-            x, y = max(0, (cw - pix.width) // 2), max(0, (ch - pix.height) // 2)
-            self.canvas.create_image(x, y, anchor='nw', image=self.image_ref)
-            self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
+            pix = page.get_pixmap(dpi=150)
+            qimage = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
+            self.preview.show_pixmap(QPixmap.fromImage(qimage))
         except Exception as e:
-            print(f"Render error: {e}")
+            logger.error(f"Render error: {e}")
 
     def extract_and_rename(self):
-        selection = self.pages_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("Attenzione", "Seleziona almeno una pagina.", parent=self)
+        selected = self.pages_listbox.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Attenzione", "Seleziona almeno una pagina.")
             return
 
-        dialog = tk.Toplevel(self)
-        dialog.title("Definisci Nome File")
-        dialog.geometry("400x200")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg=COLORS['bg_primary'])
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Definisci Nome File")
+        dialog.setFixedSize(400, 200)
+        dialog.setModal(True)
+        dlayout = QVBoxLayout(dialog)
+        dlayout.setContentsMargins(20, 20, 20, 20)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Codice ODC:"), 0, 0)
+        odc_entry = QLineEdit()
+        odc_entry.setFocus()
+        grid.addWidget(odc_entry, 0, 1)
+        grid.addWidget(QLabel("Suffisso:"), 1, 0)
+        suffix_entry = QLineEdit()
+        grid.addWidget(suffix_entry, 1, 1)
+        dlayout.addLayout(grid)
+
         result = {}
-        main_frame = ttk.Frame(dialog, padding=20)
-        main_frame.pack(fill='both', expand=True)
-        main_frame.columnconfigure(1, weight=1)
-        ttk.Label(main_frame, text="Codice ODC:", font=FONTS['body_bold']).grid(row=0, column=0, sticky='w', pady=5)
-        odc_entry = ttk.Entry(main_frame, font=FONTS['body'])
-        odc_entry.grid(row=0, column=1, sticky='ew', pady=5)
-        odc_entry.focus_set()
-        ttk.Label(main_frame, text="Suffisso:", font=FONTS['body_bold']).grid(row=1, column=0, sticky='w', pady=5)
-        suffix_entry = ttk.Entry(main_frame, font=FONTS['body'])
-        suffix_entry.grid(row=1, column=1, sticky='ew', pady=5)
-
         def on_ok():
-            result['odc'] = odc_entry.get().strip()
-            result['suffix'] = suffix_entry.get().strip()
+            result['odc'] = odc_entry.text().strip()
+            result['suffix'] = suffix_entry.text().strip()
             if not result['odc'] or not result['suffix']:
-                messagebox.showwarning("Dati Mancanti", "Sia ODC che Suffisso sono obbligatori.", parent=dialog)
+                QMessageBox.warning(dialog, "Dati Mancanti", "Sia ODC che Suffisso sono obbligatori.")
                 return
-            dialog.destroy()
+            dialog.accept()
 
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=2, column=0, columnspan=2, pady=20)
-        ttk.Button(btn_frame, text="OK", command=on_ok).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="Annulla", command=dialog.destroy).pack(side='left', padx=10)
-        self.wait_window(dialog)
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("OK")
+        btn_ok.clicked.connect(on_ok)
+        btn_layout.addWidget(btn_ok)
+        btn_cancel = QPushButton("Annulla")
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_cancel)
+        dlayout.addLayout(btn_layout)
 
-        if not result.get('odc') or not result.get('suffix'): return
+        if dialog.exec() != QDialog.DialogCode.Accepted or not result.get('odc'):
+            return
 
-        selected_real_indices = [self.available_pages[i] for i in selection]
+        selected_indices = [self.pages_listbox.row(item) for item in selected]
+        selected_real_indices = [self.available_pages[i] for i in selected_indices]
         new_filename = f"{result['odc']}_{result['suffix']}.pdf"
         dir_path = os.path.dirname(self.current_doc_path)
         output_path = os.path.join(dir_path, new_filename)
 
-        if os.path.exists(output_path) and not messagebox.askyesno("Sovrascrivi", "File esistente. Sovrascrivere?", parent=self):
-            return
-        
-        try:
-            if os.path.exists(output_path): os.remove(output_path)
-        except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile sovrascrivere file esistente:\n{e}")
-            return
+        if os.path.exists(output_path):
+            reply = QMessageBox.question(self, "Sovrascrivi", "File esistente. Sovrascrivere?")
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                os.remove(output_path)
+            except Exception as e:
+                QMessageBox.critical(self, "Errore", f"Impossibile sovrascrivere:\n{e}")
+                return
 
         try:
             new_doc = fitz.open()
@@ -305,33 +375,28 @@ class UnknownFilesReviewDialog(tk.Toplevel):
             self._refresh_pages_list()
             if not self.available_pages:
                 self.finish_task()
-            else:
-                if self.pages_listbox.size() > 0:
-                    self.pages_listbox.selection_set(0)
-                    self._on_page_select(None)
+            elif self.pages_listbox.count() > 0:
+                self.pages_listbox.setCurrentRow(0)
+                self._on_page_select()
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore durante il salvataggio del file:\n{e}")
+            QMessageBox.critical(self, "Errore", f"Errore salvataggio:\n{e}")
 
     def finish_task(self):
-        # Chiusura documento prima di rimuovere il file
-        if self.current_doc: 
+        if self.current_doc:
             try: self.current_doc.close()
             except: pass
             self.current_doc = None
-            
         try:
             if os.path.exists(self.current_doc_path):
                 os.remove(self.current_doc_path)
         except Exception as e:
             logger.error(f"Impossibile cancellare file temp {self.current_doc_path}: {e}")
-        
+
         if 0 <= self.task_index < len(self.review_tasks):
             del self.review_tasks[self.task_index]
-            # Sincronizzazione persistente sessione
             if self.review_tasks:
                 try:
                     with open(SESSION_FILE, 'w') as f:
-                        # Save session with ODC
                         json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
                 except: pass
             else:
@@ -340,53 +405,87 @@ class UnknownFilesReviewDialog(tk.Toplevel):
                     except: pass
             self.load_task(self.task_index)
         else:
-            self.load_task(0) 
+            self.load_task(0)
 
     def skip_task(self):
         self.load_task(self.task_index + 1)
 
-    def on_mouse_wheel(self, event):
-        self.zoom_level *= 1.1 if event.delta > 0 else 0.9
-        self._render_preview()
-
-    def start_pan(self, event): self.canvas.scan_mark(event.x, event.y)
-    def pan(self, event): self.canvas.scan_dragto(event.x, event.y, gain=1)
-    
-    def on_close(self):
-        """Salva lo stato corrente prima della chiusura forzata."""
-        if self.current_doc: 
+    def closeEvent(self, event):
+        if self.current_doc:
             try: self.current_doc.close()
             except: pass
             self.current_doc = None
-            
         if self.review_tasks:
             try:
                 os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
                 with open(SESSION_FILE, 'w') as f:
-                    # Save session with ODC
                     json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
                 logger.info(f"Sessione salvata: {len(self.review_tasks)} task rimasti.")
             except Exception as e:
-                logger.error(f"Errore salvataggio sessione in chiusura: {e}")
-        
-        # Notify MainApp to update restore button
+                logger.error(f"Errore salvataggio sessione: {e}")
         if self.on_close_callback:
-            try:
-                self.on_close_callback()
-            except Exception as e:
-                logger.error(f"Error in on_close_callback: {e}")
-                
-        self.destroy()
+            try: self.on_close_callback()
+            except Exception as e: logger.error(f"Error in on_close_callback: {e}")
+        super().closeEvent(event)
 
-class MainApp:
-    def __init__(self, root, auto_file_path=None):
+
+class DropFrame(QFrame):
+    """Frame che accetta il drag & drop di file PDF."""
+    def __init__(self, on_drop_callback, parent=None):
+        super().__init__(parent)
+        self.on_drop_callback = on_drop_callback
+        self.setAcceptDrops(True)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLORS['bg_tertiary']};
+                border: 2px dashed {COLORS['border']};
+                border-radius: 8px;
+            }}
+        """)
+        lbl = QLabel("Trascina file o cartelle qui per avviare l'elaborazione automatica", self)
+        lbl.setFont(FONTS['small'])
+        lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout = QVBoxLayout(self)
+        layout.addWidget(lbl)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.setStyleSheet(f"""QFrame {{ background-color: {COLORS['accent']}20;
+                border: 2px dashed {COLORS['accent']}; border-radius: 8px; }}""")
+
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet(f"""QFrame {{ background-color: {COLORS['bg_tertiary']};
+            border: 2px dashed {COLORS['border']}; border-radius: 8px; }}""")
+
+    def dropEvent(self, event: QDropEvent):
+        self.setStyleSheet(f"""QFrame {{ background-color: {COLORS['bg_tertiary']};
+            border: 2px dashed {COLORS['border']}; border-radius: 8px; }}""")
+        files = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.exists(path):
+                if os.path.isdir(path):
+                    for root_dir, _, fnames in os.walk(path):
+                        for name in fnames:
+                            if name.lower().endswith('.pdf'):
+                                files.append(os.path.join(root_dir, name))
+                elif path.lower().endswith('.pdf'):
+                    files.append(path)
+        if files:
+            self.on_drop_callback(files)
+        event.acceptProposedAction()
+
+
+class MainApp(QMainWindow):
+    def __init__(self, auto_file_path=None):
+        super().__init__()
         logger.info("Inizializzazione MainApp...")
-        self.root = root
-        self.root.title(f"Intelleo PDF Splitter v{version.__version__}")
-        self.root.state('zoomed')
-        self.root.configure(bg=COLORS['bg_primary'])
+        self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
+        self.setStyleSheet(GLOBAL_QSS)
         self.setup_icon()
-        
+
         self.config, self.pdf_files, self.log_queue = {}, [], queue.Queue()
         self.processing_start_time, self.files_processed_count, self.pages_processed_count = None, 0, 0
         self._target_progress = 0
@@ -396,79 +495,69 @@ class MainApp:
         self._is_processing = False
         self._pending_completion_data = None
 
-        logger.info("Configurazione stili e UI...")
-        self._setup_styles()
-        
-        # Inizializza notifiche PRIMA di setup_ui_layout (perché usato in dashboard_tab)
-        nm_module = globals().get('notification_manager')
-        if nm_module:
-            try:
-                self.notifier = nm_module.NotificationManager(self.root)
-            except Exception as e:
-                self.notifier = None
-                logger.error(f"Errore inizializzazione notifiche: {e}")
-        else:
+        # Notifiche
+        try:
+            self.notifier = notification_manager.NotificationManager(self)
+        except Exception as e:
             self.notifier = None
-            logger.warning("Notification Manager non disponibile (import fallito)")
-        
-        self._setup_ui_layout()
+            logger.error(f"Errore inizializzazione notifiche: {e}")
+
+        logger.info("Configurazione UI...")
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+
+        self.notebook = QTabWidget()
+        main_layout.addWidget(self.notebook)
+
+        self.dashboard_tab = QWidget()
+        self.processing_tab = QWidget()
+        self.config_tab = QWidget()
+        self.help_tab = QWidget()
+        self.notebook.addTab(self.dashboard_tab, " Dashboard ")
+        self.notebook.addTab(self.processing_tab, " Elaborazione ")
+        self.notebook.addTab(self.config_tab, " Configurazione ")
+        self.notebook.addTab(self.help_tab, " Guida ")
+
         self._setup_dashboard_tab()
         self._setup_processing_tab()
         self._setup_config_tab()
         self._setup_help_tab()
-        
-        logger.info("Configurazione Drag & Drop...")
-        self._setup_drag_drop()
 
         logger.info("Avvio logica applicazione...")
         self.update_last_access()
         self.load_settings()
         self._display_license_info()
-        self.root.after(100, self._process_log_queue)
-        self.root.after(150, self._check_for_updates)
-        self.root.after(500, self._check_for_restore)
-        self.root.after(50, self._smooth_progress_tick)
-        self.root.after(100, self._spinner_tick)
-        self.root.after(3000, lambda: app_updater.check_for_updates(silent=True, on_confirm=self._auto_save_settings))
 
-        
+        # Timers
+        self._log_timer = QTimer(self)
+        self._log_timer.timeout.connect(self._process_log_queue)
+        self._log_timer.start(50)
+
+        self._update_timer = QTimer(self)
+        self._update_timer.timeout.connect(self._check_for_updates)
+        self._update_timer.start(150)
+
+        self._progress_timer = QTimer(self)
+        self._progress_timer.timeout.connect(self._smooth_progress_tick)
+        self._progress_timer.start(30)
+
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.timeout.connect(self._spinner_tick)
+        self._spinner_timer.start(100)
+
+        self._clock_timer = QTimer(self)
+        self._clock_timer.timeout.connect(self._update_clock)
+        self._clock_timer.start(1000)
+
+        QTimer.singleShot(500, self._check_for_restore)
+        QTimer.singleShot(3000, lambda: app_updater.check_for_updates(
+            silent=True, on_confirm=self._auto_save_settings))
+
         if auto_file_path and os.path.exists(auto_file_path):
-            self.root.after(500, lambda: self._handle_cli_start(auto_file_path))
+            QTimer.singleShot(500, lambda: self._handle_cli_start(auto_file_path))
         logger.info("MainApp inizializzata con successo")
-
-    def _smooth_progress_tick(self):
-        """Anima la barra di progresso verso il target in modo fluido."""
-        if abs(self._current_progress - self._target_progress) > 0.05:
-            step = (self._target_progress - self._current_progress) * 0.2
-            self._current_progress += step
-            self.progress_var.set(self._current_progress)
-        elif self._current_progress != self._target_progress:
-            self._current_progress = self._target_progress
-            self.progress_var.set(self._current_progress)
-            
-            # Se siamo arrivati al 100% e abbiamo dati pendenti, finalizza
-            if self._current_progress >= 99.9 and self._pending_completion_data:
-                self._finalize_processing()
-                
-        self.root.after(30, self._smooth_progress_tick)
-
-    def _spinner_tick(self):
-        """Anima lo spinner di caricamento se l'elaborazione è attiva."""
-        if self._is_processing:
-            self._spinner_idx = (self._spinner_idx + 1) % len(self._spinner_frames)
-            self.spinner_label.config(text=self._spinner_frames[self._spinner_idx])
-        else:
-            self.spinner_label.config(text="")
-        self.root.after(100, self._spinner_tick)
-
-    def update_last_access(self):
-        """Aggiorna la data dell'ultimo accesso nella configurazione."""
-        try:
-            config = config_manager.load_config()
-            config['last_access'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            config_manager.save_config(config)
-        except Exception as e:
-            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
 
     def setup_icon(self):
         try:
@@ -476,518 +565,363 @@ class MainApp:
             if hasattr(sys, '_MEIPASS'):
                 icon_path = os.path.join(sys._MEIPASS, "resources", "icon.ico")
             if os.path.exists(icon_path):
-                self.root.iconbitmap(default=icon_path)
+                self.setWindowIcon(QIcon(icon_path))
         except Exception as e:
             logger.warning(f"Impossibile caricare icona: {e}")
 
-    def _setup_ui_layout(self):
-        self.notebook = ttk.Notebook(self.root, style='Main.TNotebook')
-        self.notebook.pack(expand=True, fill='both', padx=15, pady=15)
-        self.dashboard_tab = ttk.Frame(self.notebook, style='Card.TFrame')
-        self.processing_tab = ttk.Frame(self.notebook, style='Card.TFrame')
-        self.config_tab = ttk.Frame(self.notebook, style='Card.TFrame')
-        self.help_tab = ttk.Frame(self.notebook, style='Card.TFrame')
-        self.notebook.add(self.dashboard_tab, text=' Dashboard ')
-        self.notebook.add(self.processing_tab, text=' Elaborazione ')
-        self.notebook.add(self.config_tab, text=' Configurazione ')
-        self.notebook.add(self.help_tab, text=' Guida ')
-    
-    def _setup_styles(self):
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('Main.TNotebook', background=COLORS['bg_primary'], borderwidth=0)
-        style.configure('Main.TNotebook.Tab', font=FONTS['body_bold'], padding=[20, 10], background=COLORS['bg_secondary'], foreground=COLORS['text_primary'])
-        style.map('Main.TNotebook.Tab', background=[('selected', COLORS['accent'])], foreground=[('selected', COLORS['bg_primary'])])
-        style.configure('Card.TFrame', background=COLORS['bg_primary'])
-        style.configure('TLabelframe', background=COLORS['bg_primary'], bordercolor=COLORS['border'])
-        style.configure('TLabelframe.Label', font=FONTS['subheading'], foreground=COLORS['text_primary'], background=COLORS['bg_primary'])
-        style.configure('TLabel', background=COLORS['bg_primary'], font=FONTS['body'], foreground=COLORS['text_primary'])
-        style.configure('Header.TLabel', font=FONTS['heading'], foreground=COLORS['accent'])
-        style.configure('Muted.TLabel', font=FONTS['small'], foreground=COLORS['text_secondary'])
-        style.configure('TButton', font=FONTS['body'], padding=[15, 8])
-        style.configure('Accent.TButton', font=FONTS['body_bold'])
-        style.map('TButton', background=[('active', COLORS['accent_hover'])], foreground=[('active', COLORS['bg_primary'])])
-        style.configure('TEntry', font=FONTS['body'], padding=8)
-        style.configure('Treeview', font=FONTS['body'], rowheight=30, background=COLORS['bg_primary'], fieldbackground=COLORS['bg_primary'])
-        style.configure('Treeview.Heading', font=FONTS['body_bold'], background=COLORS['bg_secondary'], foreground=COLORS['text_primary'])
-        style.map('Treeview', background=[('selected', COLORS['accent'])], foreground=[('selected', COLORS['bg_primary'])])
-        style.configure('TSeparator', background=COLORS['border'])
-        
-        # Stile Barra di Progresso Verde
-        style.configure("Green.Horizontal.TProgressbar", 
-                        troughcolor=COLORS['bg_tertiary'], 
-                        background=COLORS['success'], 
-                        thickness=18, 
-                        borderwidth=0)
-
-    def _setup_drag_drop(self):
-        if hasattr(self.root, 'drop_target_register'):
-            try:
-                # Bypass UAC per Drag & Drop se su Windows ed elevato
-                if sys.platform == 'win32':
-                    try:
-                        import ctypes
-                        from ctypes import wintypes
-                        
-                        # Definizioni Windows API
-                        WM_DROPFILES = 0x0233
-                        WM_COPYDATA = 0x004A
-                        WM_COPYGLOBALDATA = 0x0049
-                        MSGFLT_ALLOW = 1
-                        
-                        change_msg_filter = ctypes.windll.user32.ChangeWindowMessageFilterEx
-                        hwnd = self.root.winfo_id()
-                        
-                        # Verifica se hwnd è un intero valido (non un mock durante i test)
-                        if isinstance(hwnd, int):
-                            change_msg_filter(hwnd, WM_DROPFILES, MSGFLT_ALLOW, None)
-                            change_msg_filter(hwnd, WM_COPYDATA, MSGFLT_ALLOW, None)
-                            change_msg_filter(hwnd, WM_COPYGLOBALDATA, MSGFLT_ALLOW, None)
-                            logger.info("UAC Message Filter bypass applicato per Drag & Drop")
-                        else:
-                            logger.debug("Bypass UAC saltato: hwnd non è un intero (probabile mock in test)")
-                    except Exception as e:
-                        logger.warning(f"Impossibile applicare bypass UAC: {e}")
-
-                target_widget = getattr(self, 'hint_frame', self.processing_tab)
-                target_widget.drop_target_register(DND_FILES)
-                target_widget.dnd_bind('<<Drop>>', self._on_drop)
-                for child in target_widget.winfo_children():
-                    child.drop_target_register(DND_FILES)
-                    child.dnd_bind('<<Drop>>', self._on_drop)
-                logger.info(f"Drag & Drop registrato su {target_widget.__class__.__name__} e figli.")
-            except Exception as e:
-                logger.warning(f"Drag & Drop non disponibile: {e}", exc_info=True)
-
+    # ======== DASHBOARD ========
     def _setup_dashboard_tab(self):
-        main_frame = ttk.Frame(self.dashboard_tab, style='Card.TFrame', padding=25)
-        main_frame.pack(fill='both', expand=True)
-        
-        header_frame = ttk.Frame(main_frame, style='Card.TFrame')
-        header_frame.pack(fill='x', pady=(0, 25))
-        ttk.Label(header_frame, text="SISTEMA DI ELABORAZIONE INTELLIGENTE", style='Header.TLabel').pack(side='left')
-        
-        # Bell Icon Container (sarà popolato dal manager)
-        if getattr(self, 'notifier', None):
-            self.notifier.setup_bell_icon(header_frame)
+        layout = QVBoxLayout(self.dashboard_tab)
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(15)
 
-        self.clock_label = ttk.Label(header_frame, text="", font=FONTS['mono_bold'], foreground=COLORS['text_secondary'])
-        self.clock_label.pack(side='right', padx=10)
+        # Header
+        header = QHBoxLayout()
+        h_label = QLabel("SISTEMA DI ELABORAZIONE INTELLIGENTE")
+        h_label.setFont(FONTS['heading'])
+        h_label.setStyleSheet(f"color: {COLORS['accent']};")
+        header.addWidget(h_label)
+        if self.notifier:
+            self.notifier.setup_bell_icon(header)
+        self.clock_label = QLabel("")
+        self.clock_label.setFont(FONTS['mono_bold'])
+        self.clock_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        header.addWidget(self.clock_label)
+        layout.addLayout(header)
         self._update_clock()
-        
-        # Statistiche in alto
-        cards_frame = ttk.Frame(main_frame, style='Card.TFrame')
-        cards_frame.pack(fill='x', pady=(0, 20))
-        cards_frame.columnconfigure((0, 1, 2, 3), weight=1, uniform='card')
-        self._create_stat_card(cards_frame, 0, "STATO LICENZA", "license_status", "Verificando...")
-        self._create_stat_card(cards_frame, 1, "DOC ANALIZZATI", "files_count", "0")
-        self._create_stat_card(cards_frame, 2, "PAGINE TOTALI", "pages_count", "0")
-        self._create_stat_card(cards_frame, 3, "REGOLE ATTIVE", "rules_count", "0")
 
-        # Layout Centrale: Licenza e Azioni
-        middle_container = ttk.Frame(main_frame, style='Card.TFrame')
-        middle_container.pack(fill='both', expand=True)
-        middle_container.columnconfigure(0, weight=3)
-        middle_container.columnconfigure(1, weight=1)
+        # Stat cards
+        cards = QHBoxLayout()
+        self._create_stat_card(cards, "STATO LICENZA", "license_status", "Verificando...")
+        self._create_stat_card(cards, "DOC ANALIZZATI", "files_count", "0")
+        self._create_stat_card(cards, "PAGINE TOTALI", "pages_count", "0")
+        self._create_stat_card(cards, "REGOLE ATTIVE", "rules_count", "0")
+        layout.addLayout(cards)
 
-        # Sezione Licenza d'Elite
-        self.license_container = ttk.LabelFrame(middle_container, text=" PARAMETRI DI AUTENTICAZIONE E SICUREZZA ", padding=20)
-        self.license_container.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
-        
-        info_grid = tk.Frame(self.license_container, bg=COLORS['bg_primary'])
-        info_grid.pack(fill='both', expand=True)
-        
+        # Middle: License + Actions
+        middle = QHBoxLayout()
+
+        # License panel
+        license_group = QGroupBox(" PARAMETRI DI AUTENTICAZIONE E SICUREZZA ")
+        lic_layout = QGridLayout(license_group)
         self.license_fields = {}
-        fields = [
-            ("UTENTE REGISTRATO", "cliente", "👤"), 
-            ("TERMINE VALIDITÀ", "scadenza", "📅"), 
-            ("HARDWARE IDENTIFIER", "hwid", "🆔"), 
-            ("ULTIMO ACCESSO RILEVATO", "last_access", "🕒")
-        ]
-        
+        fields = [("UTENTE REGISTRATO", "cliente", "👤"), ("TERMINE VALIDITÀ", "scadenza", "📅"),
+                  ("HARDWARE IDENTIFIER", "hwid", "🆔"), ("ULTIMO ACCESSO RILEVATO", "last_access", "🕒")]
         for i, (label, key, icon) in enumerate(fields):
             row, col = divmod(i, 2)
-            card = tk.Frame(info_grid, bg=COLORS['bg_secondary'], padx=15, pady=12, 
-                           highlightthickness=1, highlightbackground=COLORS['border'])
-            card.grid(row=row, column=col, sticky='nsew', padx=8, pady=8)
-            
-            top_f = tk.Frame(card, bg=COLORS['bg_secondary'])
-            top_f.pack(fill='x')
-            tk.Label(top_f, text=icon, font=('Segoe UI Emoji', 11), bg=COLORS['bg_secondary']).pack(side='left', padx=(0, 8))
-            tk.Label(top_f, text=label, font=FONTS['small'], fg=COLORS['text_secondary'], bg=COLORS['bg_secondary']).pack(side='left')
-            
-            v_lab = tk.Label(card, text="ATTESA DATI...", font=FONTS['mono_bold'], fg=COLORS['accent'], bg=COLORS['bg_secondary'])
-            v_lab.pack(anchor='w', pady=(5, 0))
+            card = QFrame()
+            card.setStyleSheet(f"""QFrame {{ background-color: {COLORS['bg_secondary']};
+                border: 1px solid {COLORS['border']}; border-radius: 4px; padding: 12px; }}""")
+            clayout = QVBoxLayout(card)
+            top = QHBoxLayout()
+            icon_lbl = QLabel(icon)
+            icon_lbl.setFont(QFont("Segoe UI Emoji", 11))
+            top.addWidget(icon_lbl)
+            label_lbl = QLabel(label)
+            label_lbl.setFont(FONTS['small'])
+            label_lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
+            top.addWidget(label_lbl)
+            top.addStretch()
+            clayout.addLayout(top)
+            v_lab = QLabel("ATTESA DATI...")
+            v_lab.setFont(FONTS['mono_bold'])
+            v_lab.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
+            clayout.addWidget(v_lab)
             self.license_fields[key] = v_lab
-            
-        info_grid.columnconfigure((0, 1), weight=1)
-        info_grid.rowconfigure((0, 1), weight=1)
+            lic_layout.addWidget(card, row, col)
+        middle.addWidget(license_group, 3)
 
-        # Pannello Azioni
-        actions_panel = ttk.LabelFrame(middle_container, text=" COMANDI RAPIDI ", padding=20)
-        actions_panel.grid(row=0, column=1, sticky='nsew')
-        
-        ttk.Button(actions_panel, text="NUOVA ANALISI", command=self._quick_select_pdf, style='Accent.TButton').pack(fill='x', pady=5)
-        ttk.Button(actions_panel, text="GESTISCI REGOLE", command=lambda: self.notebook.select(self.config_tab)).pack(fill='x', pady=5)
-        ttk.Button(actions_panel, text="UTILITY ROI", command=self._launch_roi_utility).pack(fill='x', pady=5)
-        
-        ttk.Separator(actions_panel, orient='horizontal').pack(fill='x', pady=15)
-        
-        self.restore_btn = ttk.Button(actions_panel, text="RECUPERO SESSIONE", command=self._restore_session, state='disabled')
-        self.restore_btn.pack(fill='x', pady=5)
+        # Actions
+        actions_group = QGroupBox(" COMANDI RAPIDI ")
+        act_layout = QVBoxLayout(actions_group)
+        btn_new = QPushButton("NUOVA ANALISI")
+        btn_new.setFont(FONTS['body_bold'])
+        btn_new.setStyleSheet(f"background-color: {COLORS['accent']}; color: white;")
+        btn_new.clicked.connect(self._quick_select_pdf)
+        act_layout.addWidget(btn_new)
+        btn_rules = QPushButton("GESTISCI REGOLE")
+        btn_rules.clicked.connect(lambda: self.notebook.setCurrentWidget(self.config_tab))
+        act_layout.addWidget(btn_rules)
+        btn_roi = QPushButton("UTILITY ROI")
+        btn_roi.clicked.connect(self._launch_roi_utility)
+        act_layout.addWidget(btn_roi)
 
-        # Log attività
-        recent_frame = ttk.LabelFrame(main_frame, text=" TERMINALE ATTIVITÀ ", padding=15)
-        recent_frame.pack(fill='x', pady=(20, 0))
-        self.recent_log = scrolledtext.ScrolledText(recent_frame, height=5, font=FONTS['mono'], 
-                                                  bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], 
-                                                  relief='flat', state='disabled', wrap='word')
-        self.recent_log.pack(fill='both', expand=True)
-        self.recent_log.tag_config("INFO", foreground=COLORS['text_primary'])
-        self.recent_log.tag_config("SUCCESS", foreground=COLORS['success'])
-        self.recent_log.tag_config("WARNING", foreground=COLORS['warning'])
-        self.recent_log.tag_config("ERROR", foreground=COLORS['danger'])
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        act_layout.addWidget(sep)
 
-    def _create_stat_card(self, parent, col, title, var_name, initial_value):
-        card = tk.Frame(parent, bg=COLORS['bg_secondary'], relief='flat', bd=0, highlightthickness=1, highlightbackground=COLORS['border'])
-        card.grid(row=0, column=col, padx=8, pady=5, sticky='nsew')
-        tk.Label(card, text=title, font=FONTS['small'], bg=COLORS['bg_secondary'], fg=COLORS['text_secondary']).pack(pady=(15, 5))
-        value_label = tk.Label(card, text=initial_value, font=('Segoe UI', 16, 'bold'), bg=COLORS['bg_secondary'], fg=COLORS['accent'])
-        value_label.pack(pady=(0, 15))
-        setattr(self, f'{var_name}_label', value_label)
+        self.restore_btn = QPushButton("RECUPERO SESSIONE")
+        self.restore_btn.setEnabled(False)
+        self.restore_btn.clicked.connect(self._restore_session)
+        act_layout.addWidget(self.restore_btn)
+        act_layout.addStretch()
+        middle.addWidget(actions_group, 1)
+        layout.addLayout(middle, 1)
+
+        # Activity log
+        log_group = QGroupBox(" TERMINALE ATTIVITÀ ")
+        log_layout = QVBoxLayout(log_group)
+        self.recent_log = QTextEdit()
+        self.recent_log.setReadOnly(True)
+        self.recent_log.setFixedHeight(120)
+        self.recent_log.setFont(FONTS['mono'])
+        log_layout.addWidget(self.recent_log)
+        layout.addWidget(log_group)
+
+    def _create_stat_card(self, parent_layout, title, var_name, initial_value):
+        card = QFrame()
+        card.setStyleSheet(f"""QFrame {{ background-color: {COLORS['bg_secondary']};
+            border: 1px solid {COLORS['border']}; border-radius: 4px; }}""")
+        clayout = QVBoxLayout(card)
+        clayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t = QLabel(title)
+        t.setFont(FONTS['small'])
+        t.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        clayout.addWidget(t)
+        v = QLabel(initial_value)
+        v.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        v.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
+        v.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        clayout.addWidget(v)
+        setattr(self, f'{var_name}_label', v)
+        parent_layout.addWidget(card)
 
     def _update_clock(self):
-        self.clock_label.config(text=datetime.now().strftime("%d %b %Y | %H:%M:%S"))
-        self.root.after(1000, self._update_clock)
+        self.clock_label.setText(datetime.now().strftime("%d %b %Y | %H:%M:%S"))
 
     def _quick_select_pdf(self):
-        self.notebook.select(self.processing_tab)
-        self.root.after(100, self._select_pdf)
+        self.notebook.setCurrentWidget(self.processing_tab)
+        QTimer.singleShot(100, self._select_pdf)
 
+    # ======== PROCESSING TAB ========
     def _setup_processing_tab(self):
-        main_frame = ttk.Frame(self.processing_tab, style='Card.TFrame', padding=20)
-        main_frame.pack(fill='both', expand=True)
-        
-        header_p = ttk.Frame(main_frame, style='Card.TFrame')
-        header_p.pack(fill='x', pady=(0, 20))
-        ttk.Label(header_p, text="Elaborazione PDF", style='Header.TLabel').pack(side='left')
-        self.spinner_label = tk.Label(header_p, text="", font=('Consolas', 14, 'bold'), fg=COLORS['accent'], bg=COLORS['bg_primary'])
-        self.spinner_label.pack(side='left', padx=15)
+        layout = QVBoxLayout(self.processing_tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
-        input_frame = ttk.LabelFrame(main_frame, text=" Input ", padding=15)
-        input_frame.pack(fill='x', pady=(0, 15))
-        odc_frame = ttk.Frame(input_frame)
-        odc_frame.pack(fill='x', pady=5)
-        ttk.Label(odc_frame, text="Codice ODC (default):", font=FONTS['body_bold'], width=20).pack(side='left')
-        self.odc_var = tk.StringVar(value="5400")
-        odc_entry = ttk.Entry(odc_frame, textvariable=self.odc_var, width=30, font=FONTS['body'])
-        odc_entry.pack(side='left', padx=10)
-        file_frame = ttk.Frame(input_frame)
-        file_frame.pack(fill='x', pady=10)
-        ttk.Button(file_frame, text="Seleziona PDF...", command=self._select_pdf).pack(side='left', padx=(0, 5))
-        ttk.Button(file_frame, text="Seleziona Cartella...", command=self._select_folder).pack(side='left')
-        self.pdf_path_label = ttk.Label(file_frame, text="Nessun file selezionato", style='Muted.TLabel', font=FONTS['body'])
-        self.pdf_path_label.pack(side='left', padx=15)
-        self.hint_frame = tk.Frame(input_frame, bg=COLORS['bg_tertiary'], relief='flat')
-        self.hint_frame.pack(fill='x', pady=10)
-        tk.Label(self.hint_frame, text="Trascina file o cartelle qui per avviare l'elaborazione automatica", font=FONTS['small'], bg=COLORS['bg_tertiary'], fg=COLORS['text_secondary'], pady=10).pack()
-        self.progress_frame = ttk.LabelFrame(main_frame, text=" Progresso ", padding=15)
-        self.progress_frame.pack(fill='x', pady=10)
-        
-        # Info Container: Label progress + ETA
-        info_container = ttk.Frame(self.progress_frame)
-        info_container.pack(fill='x', padx=2, pady=(0, 5))
-        
-        self.progress_label = ttk.Label(info_container, text="Pronto", style='Muted.TLabel', font=FONTS['body_bold'])
-        self.progress_label.pack(side='left')
-        
-        self.eta_label = ttk.Label(info_container, text="--:--", style='Muted.TLabel', font=FONTS['mono_bold'])
-        self.eta_label.pack(side='right')
+        header = QHBoxLayout()
+        h_lbl = QLabel("Elaborazione PDF")
+        h_lbl.setFont(FONTS['heading'])
+        h_lbl.setStyleSheet(f"color: {COLORS['accent']};")
+        header.addWidget(h_lbl)
+        self.spinner_label = QLabel("")
+        self.spinner_label.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
+        self.spinner_label.setStyleSheet(f"color: {COLORS['accent']};")
+        header.addWidget(self.spinner_label)
+        header.addStretch()
+        layout.addLayout(header)
 
-        self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100, length=400, mode='determinate', style="Green.Horizontal.TProgressbar")
-        self.progress_bar.pack(fill='x', pady=5)
-        
-        log_frame = ttk.LabelFrame(main_frame, text=" Log Elaborazione ", padding=15)
-        log_frame.pack(fill='both', expand=True, pady=10)
-        self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state='disabled', font=FONTS['mono'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat')
-        self.log_area.pack(expand=True, fill='both')
-        for tag, color in [("ERROR", COLORS['danger']), ("WARNING", '#E67E22'), ("SUCCESS", COLORS['success']), ("PROGRESS", COLORS['accent']), ("HEADER", COLORS['accent'])]:
-            self.log_area.tag_config(tag, foreground=color)
-    
+        # Input
+        input_group = QGroupBox(" Input ")
+        ilayout = QVBoxLayout(input_group)
+        odc_row = QHBoxLayout()
+        odc_row.addWidget(QLabel("Codice ODC (default):"))
+        self.odc_entry = QLineEdit("5400")
+        self.odc_entry.setFixedWidth(200)
+        odc_row.addWidget(self.odc_entry)
+        odc_row.addStretch()
+        ilayout.addLayout(odc_row)
+
+        file_row = QHBoxLayout()
+        btn_pdf = QPushButton("Seleziona PDF...")
+        btn_pdf.clicked.connect(self._select_pdf)
+        file_row.addWidget(btn_pdf)
+        btn_folder = QPushButton("Seleziona Cartella...")
+        btn_folder.clicked.connect(self._select_folder)
+        file_row.addWidget(btn_folder)
+        self.pdf_path_label = QLabel("Nessun file selezionato")
+        self.pdf_path_label.setFont(FONTS['body'])
+        self.pdf_path_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        file_row.addWidget(self.pdf_path_label)
+        file_row.addStretch()
+        ilayout.addLayout(file_row)
+
+        self.drop_frame = DropFrame(self._on_drop)
+        ilayout.addWidget(self.drop_frame)
+        layout.addWidget(input_group)
+
+        # Progress
+        prog_group = QGroupBox(" Progresso ")
+        playout = QVBoxLayout(prog_group)
+        info_row = QHBoxLayout()
+        self.progress_label = QLabel("Pronto")
+        self.progress_label.setFont(FONTS['body_bold'])
+        self.progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        info_row.addWidget(self.progress_label)
+        self.eta_label = QLabel("--:--")
+        self.eta_label.setFont(FONTS['mono_bold'])
+        self.eta_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        info_row.addWidget(self.eta_label, 0, Qt.AlignmentFlag.AlignRight)
+        playout.addLayout(info_row)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(1000)  # Use 1000 for smooth animation
+        self.progress_bar.setValue(0)
+        playout.addWidget(self.progress_bar)
+        layout.addWidget(prog_group)
+
+        # Log
+        log_group = QGroupBox(" Log Elaborazione ")
+        llayout = QVBoxLayout(log_group)
+        self.log_area = QTextEdit()
+        self.log_area.setReadOnly(True)
+        self.log_area.setFont(FONTS['mono'])
+        llayout.addWidget(self.log_area)
+        layout.addWidget(log_group, 1)
+
+    # ======== CONFIG TAB ========
     def _setup_config_tab(self):
-        main_frame = ttk.Frame(self.config_tab, style='Card.TFrame', padding=20)
-        main_frame.pack(fill='both', expand=True)
-        ttk.Label(main_frame, text="Configurazione", style='Header.TLabel').pack(anchor='w', pady=(0, 20))
-        path_frame = ttk.LabelFrame(main_frame, text=" Tesseract OCR ", padding=15)
-        path_frame.pack(fill='x', pady=(0, 15))
-        path_frame.columnconfigure(1, weight=1)
-        ttk.Label(path_frame, text="Percorso:", font=FONTS['body_bold']).grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.tesseract_path_var = tk.StringVar()
-        self.tesseract_path_var.trace("w", self._on_tesseract_path_change)
-        ttk.Entry(path_frame, textvariable=self.tesseract_path_var, font=FONTS['body']).grid(row=0, column=1, padx=5, pady=5, sticky='ew')
-        btn_frame = ttk.Frame(path_frame)
-        btn_frame.grid(row=0, column=2, padx=5)
-        ttk.Button(btn_frame, text="Sfoglia", command=self._browse_tesseract).pack(side='left', padx=2)
-        ttk.Button(btn_frame, text="Auto-Rileva", command=self._auto_detect_tesseract).pack(side='left', padx=2)
-        rules_frame = ttk.LabelFrame(main_frame, text=" Regole di Classificazione ", padding=15)
-        rules_frame.pack(expand=True, fill='both', pady=10)
-        rules_frame.columnconfigure(1, weight=1)
-        rules_frame.rowconfigure(0, weight=1)
-        tree_container = ttk.Frame(rules_frame)
-        tree_container.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
-        tree_container.columnconfigure(0, weight=1)
-        tree_container.rowconfigure(0, weight=1)
-        self.rules_tree = ttk.Treeview(tree_container, columns=("ColorCode", "Category", "Suffix"), show='headings', height=12)
-        self.rules_tree.heading("ColorCode", text="Colore")
-        self.rules_tree.column("ColorCode", width=80, anchor='center', stretch=False)
-        self.rules_tree.heading("Category", text="Categoria")
-        self.rules_tree.column("Category", width=150)
-        self.rules_tree.heading("Suffix", text="Suffisso")
-        self.rules_tree.column("Suffix", width=100)
-        self.rules_tree.grid(row=0, column=0, sticky='nsew')
-        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.rules_tree.yview)
-        self.rules_tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky='ns')
-        self.rules_tree.bind("<<TreeviewSelect>>", self._update_rule_details_panel)
-        self.rule_details_frame = ttk.LabelFrame(rules_frame, text=" Dettagli Regola ", padding=15)
-        self.rule_details_frame.grid(row=0, column=1, sticky='nsew')
-        self.rule_details_frame.columnconfigure(0, weight=1)
-        ttk.Label(self.rule_details_frame, text="Keywords:", font=FONTS['body_bold']).grid(row=0, column=0, sticky='w', pady=(0, 5))
-        self.keywords_text = tk.Text(self.rule_details_frame, height=5, font=FONTS['body'], bg=COLORS['bg_secondary'], fg=COLORS['text_primary'], relief='flat', state='disabled', wrap='word')
-        self.keywords_text.grid(row=1, column=0, sticky='nsew', pady=(0, 15))
-        ttk.Label(self.rule_details_frame, text="Aree ROI:", font=FONTS['body_bold']).grid(row=2, column=0, sticky='w', pady=(0, 5))
-        self.roi_details_var = tk.StringVar()
-        ttk.Label(self.rule_details_frame, textvariable=self.roi_details_var, style='Muted.TLabel').grid(row=3, column=0, sticky='w')
-        buttons_frame = ttk.Frame(rules_frame)
-        buttons_frame.grid(row=0, column=2, sticky='n', padx=(10, 0))
-        ttk.Button(buttons_frame, text="Aggiungi", command=self._add_rule).pack(fill='x', pady=3)
-        ttk.Button(buttons_frame, text="Modifica", command=self._modify_rule).pack(fill='x', pady=3)
-        ttk.Button(buttons_frame, text="Rimuovi", command=self._remove_rule).pack(fill='x', pady=3)
-        ttk.Separator(buttons_frame, orient='horizontal').pack(fill='x', pady=15)
-        ttk.Button(buttons_frame, text="Utility ROI", command=self._launch_roi_utility).pack(fill='x', pady=3)
+        layout = QVBoxLayout(self.config_tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        h = QLabel("Configurazione")
+        h.setFont(FONTS['heading'])
+        h.setStyleSheet(f"color: {COLORS['accent']};")
+        layout.addWidget(h)
 
+        # Tesseract
+        tess_group = QGroupBox(" Tesseract OCR ")
+        tess_layout = QHBoxLayout(tess_group)
+        tess_layout.addWidget(QLabel("Percorso:"))
+        self.tesseract_path_entry = QLineEdit()
+        self.tesseract_path_entry.textChanged.connect(self._on_tesseract_path_change)
+        tess_layout.addWidget(self.tesseract_path_entry, 1)
+        btn_browse = QPushButton("Sfoglia")
+        btn_browse.clicked.connect(self._browse_tesseract)
+        tess_layout.addWidget(btn_browse)
+        btn_detect = QPushButton("Auto-Rileva")
+        btn_detect.clicked.connect(self._auto_detect_tesseract)
+        tess_layout.addWidget(btn_detect)
+        layout.addWidget(tess_group)
+
+        # Rules
+        rules_group = QGroupBox(" Regole di Classificazione ")
+        rlayout = QHBoxLayout(rules_group)
+
+        # Tree
+        self.rules_tree = QTreeWidget()
+        self.rules_tree.setHeaderLabels(["Colore", "Categoria", "Suffisso"])
+        self.rules_tree.setColumnWidth(0, 80)
+        self.rules_tree.setColumnWidth(1, 150)
+        self.rules_tree.setAlternatingRowColors(True)
+        self.rules_tree.itemSelectionChanged.connect(self._update_rule_details_panel)
+        rlayout.addWidget(self.rules_tree, 2)
+
+        # Details
+        det_widget = QWidget()
+        det_layout = QVBoxLayout(det_widget)
+        det_layout.addWidget(QLabel("Keywords:"))
+        self.keywords_text = QTextEdit()
+        self.keywords_text.setReadOnly(True)
+        self.keywords_text.setFixedHeight(100)
+        det_layout.addWidget(self.keywords_text)
+        det_layout.addWidget(QLabel("Aree ROI:"))
+        self.roi_details_label = QLabel("")
+        self.roi_details_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        det_layout.addWidget(self.roi_details_label)
+        det_layout.addStretch()
+        rlayout.addWidget(det_widget, 2)
+
+        # Buttons
+        btns = QVBoxLayout()
+        btn_add = QPushButton("Aggiungi")
+        btn_add.clicked.connect(self._add_rule)
+        btns.addWidget(btn_add)
+        btn_mod = QPushButton("Modifica")
+        btn_mod.clicked.connect(self._modify_rule)
+        btns.addWidget(btn_mod)
+        btn_rem = QPushButton("Rimuovi")
+        btn_rem.clicked.connect(self._remove_rule)
+        btns.addWidget(btn_rem)
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+        btns.addWidget(sep)
+        btn_roi = QPushButton("Utility ROI")
+        btn_roi.clicked.connect(self._launch_roi_utility)
+        btns.addWidget(btn_roi)
+        btns.addStretch()
+        rlayout.addLayout(btns)
+        layout.addWidget(rules_group, 1)
+
+    # ======== HELP TAB ========
     def _setup_help_tab(self):
-        main_frame = ttk.Frame(self.help_tab, style='Card.TFrame', padding=20)
-        main_frame.pack(fill='both', expand=True)
-        
-        # Header
-        header_frame = ttk.Frame(main_frame, style='Card.TFrame')
-        header_frame.pack(fill='x', pady=(0, 15))
-        ttk.Label(header_frame, text="Guida all'Uso", style='Header.TLabel').pack(side='left')
-        ttk.Button(header_frame, text="Apri Cartella Dati", 
-                  command=lambda: os.startfile(APP_DATA_DIR)).pack(side='right')
+        layout = QVBoxLayout(self.help_tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        header = QHBoxLayout()
+        h = QLabel("Guida all'Uso")
+        h.setFont(FONTS['heading'])
+        h.setStyleSheet(f"color: {COLORS['accent']};")
+        header.addWidget(h)
+        btn_open = QPushButton("Apri Cartella Dati")
+        btn_open.clicked.connect(lambda: os.startfile(APP_DATA_DIR))
+        header.addWidget(btn_open)
+        layout.addLayout(header)
 
-        # Layout Master-Detail
-        content_split = ttk.PanedWindow(main_frame, orient='horizontal')
-        content_split.pack(fill='both', expand=True)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.help_topics_list = QListWidget()
+        self.help_detail_text = QTextEdit()
+        self.help_detail_text.setReadOnly(True)
+        self.help_detail_text.setFont(FONTS['body'])
+        splitter.addWidget(self.help_topics_list)
+        splitter.addWidget(self.help_detail_text)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
+        layout.addWidget(splitter, 1)
 
-        # Sidebar (Topics)
-        sidebar_frame = ttk.Frame(content_split, width=200, style='Card.TFrame')
-        self.help_topics_list = tk.Listbox(sidebar_frame, font=FONTS['body'], bg=COLORS['bg_secondary'], 
-                                          relief='flat', selectbackground=COLORS['accent'], 
-                                          selectforeground='white', activestyle='none', highlightthickness=0)
-        self.help_topics_list.pack(fill='both', expand=True, padx=(0, 5))
-        
-        # Detail View
-        detail_frame = ttk.Frame(content_split, style='Card.TFrame')
-        self.help_detail_text = scrolledtext.ScrolledText(detail_frame, wrap='word', font=FONTS['body'], 
-                                                         bg=COLORS['bg_primary'], relief='flat', padx=20, pady=20)
-        self.help_detail_text.pack(fill='both', expand=True)
-        
-        # Add panes
-        content_split.add(sidebar_frame, weight=1)
-        content_split.add(detail_frame, weight=3)
-
-        # Topics Data
         self.help_data = {
-            "🚀 Introduzione": """
-# BENVENUTO IN INTELLEO PDF SPLITTER
-
-Intelleo è uno strumento professionale per l'automazione documentale.
-Permette di dividere massicci volumi di scansioni PDF in singoli documenti, classificandoli automaticamente.
-
----
-### ✨ FUNZIONALITÀ CHIAVE
-
-1. **Smart Splitting**: Riconoscimento intelligente delle pagine tramite parole chiave.
-2. **Supporto ROI**: Aree di interesse specifiche per aumentare la precisione.
-3. **Analisi Ibrida**: Combina estrazione testo nativa (velocissima) con OCR Tesseract (potente).
-4. **Revisione Manuale**: Interfaccia dedicata per gestire i file non riconosciuti.
-""",
-            "⚙️ Configurazione Iniziale": """
-# PRIMA CONFIGURAZIONE
-
-Per iniziare a usare il software al massimo delle sue potenzialità:
-
-1. **Installazione Tesseract OCR**
-   Il motore OCR è fondamentale per i PDF scansionati.
-   - Vai nella tab 'Configurazione'.
-   - Seleziona il percorso dell'eseguibile `tesseract.exe`.
-   - Usa il tasto 'Auto-Rileva' per trovarlo automaticamente.
-
-2. **Creazione Regole**
-   Definisci cosa cercare nei documenti.
-   - Tab 'Configurazione' -> 'Regole di Classificazione'.
-   - Clicca 'Aggiungi'.
-   - Imposta **Nome Categoria** (es. "FATTURA") e **Parole Chiave** (es. "Fattura n.", "Totale").
-   - Assegna un colore per riconoscerla visivamente.
-""",
-            "🎯 Utility ROI": """
-# UTILITY ROI (Region of Interest)
-
-Se la ricerca generica non basta, usa le ROI per dire al software DOVE guardare.
-
-### COME USARLA:
-1. Apri l'utility dal pulsante "Utility ROI" nella Dashboard.
-2. Carica un PDF di esempio ("Apri PDF").
-3. Seleziona una pagina rappresentativa.
-4. **Disegna un rettangolo** tenendo premuto il tasto sinistro del mouse attorno all'area che contiene la parola chiave (es. l'intestazione in alto a destra).
-5. Rilascia e assegna la ROI alla categoria desiderata.
-
-💡 **Consiglio Pro**: Aree più piccole = Analisi più veloce!
-""",
-            "📂 Elaborazione": """
-# ELABORAZIONE DOCUMENTI
-
-1. Vai alla scheda **Elaborazione**.
-2. **Trascina (Drag & Drop)** i file PDF o intere cartelle nell'area tratteggiata.
-3. Verifica il codice ODC (identificativo pratica).
-4. La barra di progresso ti mostrerà l'avanzamento in tempo reale.
-
-### STATI POSSIBILI:
-- 🟢 **Verde**: File analizzato e diviso correttamente.
-- 🟠 **Arancione**: Attenzione (es. pagina non riconosciuta).
-- 🔴 **Rosso**: Errore critico.
-""",
-            "📝 Revisione Manuale": """
-# REVISIONE FILE SCONOSCIUTI
-
-Al termine dell'elaborazione, se alcune pagine non corrispondono a nessuna regola, si aprirà la finestra di Revisione.
-
-- **Lista a Sinistra**: Seleziona le pagine che compongono un singolo documento.
-- **Anteprima a Destra**: Controlla visivamente il contenuto.
-- **Tasto RINOMINA**: Crea il file PDF finale assegnando ODC e Categoria manualmente.
-- **Tasto SALTA**: Passa al prossimo gruppo di pagine sconosciute.
-
-Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza.
-"""
+            "🚀 Introduzione": "BENVENUTO IN INTELLEO PDF SPLITTER\n\nIntelleo è uno strumento professionale per l'automazione documentale.\nPermette di dividere massicci volumi di scansioni PDF in singoli documenti, classificandoli automaticamente.\n\n✨ FUNZIONALITÀ CHIAVE\n1. Smart Splitting: Riconoscimento intelligente delle pagine tramite parole chiave.\n2. Supporto ROI: Aree di interesse specifiche per aumentare la precisione.\n3. Analisi Ibrida: Combina estrazione testo nativa con OCR Tesseract.\n4. Revisione Manuale: Interfaccia dedicata per gestire i file non riconosciuti.",
+            "⚙️ Configurazione Iniziale": "PRIMA CONFIGURAZIONE\n\n1. Installazione Tesseract OCR\n   Tab 'Configurazione' -> Seleziona il percorso di tesseract.exe.\n   Usa 'Auto-Rileva' per trovarlo automaticamente.\n\n2. Creazione Regole\n   Tab 'Configurazione' -> 'Regole di Classificazione' -> 'Aggiungi'.\n   Imposta Nome Categoria e Parole Chiave.",
+            "🎯 Utility ROI": "UTILITY ROI (Region of Interest)\n\nSe la ricerca generica non basta, usa le ROI.\n\n1. Apri l'utility dal pulsante 'Utility ROI'.\n2. Carica un PDF di esempio.\n3. Disegna un rettangolo sull'area di interesse.\n4. Assegna la ROI alla categoria.",
+            "📂 Elaborazione": "ELABORAZIONE DOCUMENTI\n\n1. Vai alla scheda Elaborazione.\n2. Trascina i file PDF nell'area tratteggiata.\n3. Verifica il codice ODC.\n4. La barra di progresso mostrerà l'avanzamento.",
+            "📝 Revisione Manuale": "REVISIONE FILE SCONOSCIUTI\n\nSe pagine non corrispondono a nessuna regola:\n- Lista a Sinistra: Seleziona le pagine.\n- Anteprima a Destra: Controlla il contenuto.\n- RINOMINA: Crea il file PDF finale.\n- SALTA: Passa al prossimo gruppo.",
         }
-
-        # Populate Listbox
         for topic in self.help_data.keys():
-            self.help_topics_list.insert('end', topic)
+            self.help_topics_list.addItem(topic)
+        self.help_topics_list.currentItemChanged.connect(self._on_help_topic_select)
+        self.help_topics_list.setCurrentRow(0)
 
-        # Bind selection
-        self.help_topics_list.bind('<<ListboxSelect>>', self._on_help_topic_select)
-        
-        # Select first item
-        self.help_topics_list.selection_set(0)
-        self._on_help_topic_select(None)
+    def _on_help_topic_select(self, current, previous=None):
+        if current:
+            self.help_detail_text.setPlainText(self.help_data.get(current.text(), ""))
 
-    def _on_help_topic_select(self, event):
-        selection = self.help_topics_list.curselection()
-        if not selection: return
-        
-        topic = self.help_topics_list.get(selection[0])
-        content = self.help_data.get(topic, "")
-        
-        self.help_detail_text.config(state='normal')
-        self.help_detail_text.delete('1.0', 'end')
-        self.help_detail_text.insert('1.0', content)
-        
-        # Simple Markdown-like styling
-        self._apply_help_styles()
-        
-        self.help_detail_text.config(state='disabled')
-
-    def _apply_help_styles(self):
-        # Headers
-        count = tk.IntVar()
-        start = "1.0"
-        while True:
-            pos = self.help_detail_text.search(r"^# .*", start, stopindex="end", count=count, regexp=True)
-            if not pos: break
-            end = f"{pos}+{count.get()}c"
-            self.help_detail_text.tag_add("h1", pos, end)
-            self.help_detail_text.tag_config("h1", font=FONTS['heading'], foreground=COLORS['accent'])
-            start = end
-            
-        # Subheaders
-        start = "1.0"
-        while True:
-            pos = self.help_detail_text.search(r"^### .*", start, stopindex="end", count=count, regexp=True)
-            if not pos: break
-            end = f"{pos}+{count.get()}c"
-            self.help_detail_text.tag_add("h3", pos, end)
-            self.help_detail_text.tag_config("h3", font=FONTS['subheading'], foreground=COLORS['text_primary'])
-            start = end
-
-        # Bold
-        start = "1.0"
-        while True:
-            pos = self.help_detail_text.search(r"\*\*.*?\*\*", start, stopindex="end", count=count, regexp=True)
-            if not pos: break
-            end = f"{pos}+{count.get()}c"
-            self.help_detail_text.tag_add("bold", pos, end)
-            self.help_detail_text.tag_config("bold", font=FONTS['body_bold'])
-            start = end
-
-
+    # ======== BUSINESS LOGIC ========
     def _display_license_info(self):
         try:
             payload = license_validator.get_license_info()
             hw_id = license_validator.get_hardware_id()
             config = config_manager.load_config()
             last_access = config.get('last_access', 'N/A')
-
             if payload:
-                self.license_status_label.config(text="✓ SISTEMA ATTIVO", fg=COLORS['success'])
-                self.license_fields['cliente'].config(text=payload.get('Cliente', 'N/A').upper())
-                self.license_fields['scadenza'].config(text=payload.get('Scadenza Licenza', 'N/A'))
+                self.license_status_label.setText("✓ SISTEMA ATTIVO")
+                self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; border: none;")
+                self.license_fields['cliente'].setText(payload.get('Cliente', 'N/A').upper())
+                self.license_fields['scadenza'].setText(payload.get('Scadenza Licenza', 'N/A'))
             else:
-                self.license_status_label.config(text="⚠ NON LICENZIATO", fg=COLORS['warning'])
-                self.license_fields['cliente'].config(text="UTENTE NON REGISTRATO", fg=COLORS['danger'])
-                self.license_fields['scadenza'].config(text="---")
-            
-            self.license_fields['hwid'].config(text=hw_id)
-            self.license_fields['last_access'].config(text=last_access)
-            
-        except Exception as e:
-            self.license_status_label.config(text="✖ ERRORE CRITICO", fg=COLORS['danger'])
-
-    def _add_recent_log(self, message, level="INFO"):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.recent_log.config(state='normal')
-        self.recent_log.insert('end', f"[{timestamp}] {message}\n", level)
-        self.recent_log.config(state='disabled')
-        self.recent_log.see('end')
+                self.license_status_label.setText("⚠ NON LICENZIATO")
+                self.license_status_label.setStyleSheet(f"color: {COLORS['warning']}; border: none;")
+                self.license_fields['cliente'].setText("UTENTE NON REGISTRATO")
+                self.license_fields['scadenza'].setText("---")
+            self.license_fields['hwid'].setText(hw_id)
+            self.license_fields['last_access'].setText(last_access)
+        except Exception:
+            self.license_status_label.setText("✖ ERRORE CRITICO")
+            self.license_status_label.setStyleSheet(f"color: {COLORS['danger']}; border: none;")
 
     def _add_log_message(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_area.config(state='normal')
-        if level == "PROGRESS":
-            last_idx = self.log_area.index("end-2l")
-            last_line = self.log_area.get(last_idx, "end-1c")
-            if "Elaborazione pagina" in last_line:
-                self.log_area.delete(last_idx, "end-1c")
-        prefix = ""
-        if level == "ERROR": prefix = "[X] "
-        elif level == "WARNING": prefix = "[!] "
-        elif level == "SUCCESS": prefix = "[OK] "
-        elif level == "HEADER": prefix = "=== "
-        
-        # Trigger notifica toast per eventi importanti
-        if level in ["SUCCESS", "ERROR"] and getattr(self, 'notifier', None):
-            # Filtra messaggi troppo frequenti o tecnici
-            if "File completato" in message or "ELABORAZIONE COMPLETATA" in message or "Errore" in message:
+        color_map = {"ERROR": COLORS['danger'], "WARNING": "#E67E22",
+                     "SUCCESS": COLORS['success'], "PROGRESS": COLORS['accent'],
+                     "HEADER": COLORS['accent']}
+        prefix_map = {"ERROR": "[X] ", "WARNING": "[!] ", "SUCCESS": "[OK] ", "HEADER": "=== "}
+        prefix = prefix_map.get(level, "")
+        color = color_map.get(level, COLORS['text_primary'])
+        self.log_area.append(f'<span style="color:{color}">[{timestamp}] {prefix}{message}</span>')
+        if level in ["SUCCESS", "ERROR"] and self.notifier:
+            if any(kw in message for kw in ["File completato", "ELABORAZIONE COMPLETATA", "Errore"]):
                 self.notifier.notify(level, message, level)
-
-        self.log_area.insert('end', f"[{timestamp}] {prefix}{message}\n", level)
-        self.log_area.config(state='disabled')
-        self.log_area.see('end')
         if level in ["SUCCESS", "ERROR", "WARNING"]:
-            self._add_recent_log(message, level)
+            self.recent_log.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
+
+    def _add_recent_log(self, message, level="INFO"):
+        pass  # Handled inline in _add_log_message
 
     def _process_log_queue(self):
         try:
@@ -998,13 +932,10 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
                 elif isinstance(item, dict):
                     action = item.get('action')
                     if action == 'show_unknown_dialog':
-                        # Non mostriamo subito il dialog, attendiamo il 100% della barra
                         self._pending_completion_data = item
                     elif action == 'update_progress':
                         self._target_progress = item.get('value', 0)
-                        self.progress_label.config(text=item.get('text', ''))
-                        
-                        # Gestione ETA se presente
+                        self.progress_label.setText(item.get('text', ''))
                         eta_seconds = item.get('eta_seconds')
                         if eta_seconds is not None:
                             if eta_seconds > 60:
@@ -1012,38 +943,47 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
                                 eta_text = f"Tempo stimato: {m}m {s}s"
                             else:
                                 eta_text = f"Tempo stimato: {int(eta_seconds)}s"
-                            self.eta_label.config(text=eta_text, foreground=COLORS['accent'])
+                            self.eta_label.setText(eta_text)
+                            self.eta_label.setStyleSheet(f"color: {COLORS['accent']};")
                         else:
-                            self.eta_label.config(text="")
-
+                            self.eta_label.setText("")
                     elif action == 'increment_pages':
                         self.pages_processed_count += item.get('count', 1)
-                        self.pages_count_label.config(text=str(self.pages_processed_count))
+                        self.pages_count_label.setText(str(self.pages_processed_count))
                 else:
                     self._add_log_message(str(item))
         except queue.Empty:
             pass
-        finally:
-            self.root.after(50, self._process_log_queue)
+
+    def _smooth_progress_tick(self):
+        if abs(self._current_progress - self._target_progress) > 0.05:
+            step = (self._target_progress - self._current_progress) * 0.2
+            self._current_progress += step
+            self.progress_bar.setValue(int(self._current_progress * 10))
+        elif self._current_progress != self._target_progress:
+            self._current_progress = self._target_progress
+            self.progress_bar.setValue(int(self._current_progress * 10))
+            if self._current_progress >= 99.9 and self._pending_completion_data:
+                self._finalize_processing()
 
     def _finalize_processing(self):
-        """Esegue le azioni finali dopo che l'animazione del progresso è terminata."""
-        if not self._pending_completion_data:
-            return
-            
+        if not self._pending_completion_data: return
         data = self._pending_completion_data
         self._pending_completion_data = None
-        
-        # Mostra dialog solo se ci sono effettivamente file da revisionare
         if data.get('action') == 'show_unknown_dialog' and data.get('files'):
             self._show_unknown_dialog(data['files'], data.get('odc', ''))
-        
         elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
         elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
-        
         self._add_log_message("-" * 60, "INFO")
         self._add_log_message(f"ELABORAZIONE COMPLETATA IN {elapsed_str}", "HEADER")
         self._is_processing = False
+
+    def _spinner_tick(self):
+        if self._is_processing:
+            self._spinner_idx = (self._spinner_idx + 1) % len(self._spinner_frames)
+            self.spinner_label.setText(self._spinner_frames[self._spinner_idx])
+        else:
+            self.spinner_label.setText("")
 
     def _check_for_updates(self):
         if os.path.exists(SIGNAL_FILE):
@@ -1053,32 +993,23 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
                 self._add_log_message("Configurazione aggiornata dall'utility ROI", "SUCCESS")
             except OSError as e:
                 logger.error(f"Gestione signal file: {e}")
-        self.root.after(150, self._check_for_updates)
 
-    def _on_drop(self, event):
-        files_to_add = []
+    def update_last_access(self):
         try:
-            raw_files = self.root.tk.splitlist(event.data)
-            for f in raw_files:
-                if os.path.exists(f):
-                    if os.path.isdir(f):
-                        for root_dir, _, files in os.walk(f):
-                            for name in files:
-                                if name.lower().endswith('.pdf'):
-                                    files_to_add.append(os.path.join(root_dir, name))
-                    elif f.lower().endswith('.pdf'):
-                        files_to_add.append(f)
+            config = config_manager.load_config()
+            config['last_access'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            config_manager.save_config(config)
         except Exception as e:
-            self._add_log_message(f"Errore parsing drop: {e}", "ERROR")
-            return
+            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
 
-        if files_to_add:
-            self.pdf_files = files_to_add
+    def _on_drop(self, files):
+        if files:
+            self.pdf_files = files
             if len(self.pdf_files) == 1:
-                self.pdf_path_label.config(text=f"{os.path.basename(self.pdf_files[0])}")
+                self.pdf_path_label.setText(os.path.basename(self.pdf_files[0]))
             else:
-                self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati")
-            self.notebook.select(self.processing_tab)
+                self.pdf_path_label.setText(f"{len(self.pdf_files)} file selezionati")
+            self.notebook.setCurrentWidget(self.processing_tab)
             self._start_processing()
 
     def _handle_cli_start(self, path):
@@ -1091,127 +1022,102 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
                     if name.lower().endswith('.pdf'):
                         found_pdfs.append(os.path.join(root_dir, name))
         if not found_pdfs:
-            messagebox.showerror("Errore", "Nessun file PDF trovato nel percorso specificato.")
+            QMessageBox.critical(self, "Errore", "Nessun file PDF trovato.")
             return
         self.pdf_files = found_pdfs
-        self.pdf_path_label.config(text=f"{len(found_pdfs)} file trovati")
-        odc = simpledialog.askstring("Input ODC", "Inserisci il codice ODC:", parent=self.root)
-        if odc:
-            self.odc_var.set(odc)
-            self.notebook.select(self.processing_tab)
+        self.pdf_path_label.setText(f"{len(found_pdfs)} file trovati")
+        odc, ok = QInputDialog.getText(self, "Input ODC", "Inserisci il codice ODC:")
+        if ok and odc:
+            self.odc_entry.setText(odc)
+            self.notebook.setCurrentWidget(self.processing_tab)
             self._start_processing()
 
     def _select_pdf(self):
-        paths = filedialog.askopenfilenames(title="Seleziona file PDF", filetypes=[("PDF Files", "*.pdf")])
+        paths, _ = QFileDialog.getOpenFileNames(self, "Seleziona file PDF", "", "PDF Files (*.pdf)")
         if paths:
             self.pdf_files = list(paths)
-            self.pdf_path_label.config(text=f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1 else os.path.basename(self.pdf_files[0]))
+            self.pdf_path_label.setText(
+                f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1
+                else os.path.basename(self.pdf_files[0]))
             self._start_processing()
 
     def _select_folder(self):
-        folder_path = filedialog.askdirectory(title="Seleziona Cartella")
-        if not folder_path: return
-        found_pdfs = [os.path.join(r, f) for r, d, fs in os.walk(folder_path) for f in fs if f.lower().endswith('.pdf')]
-        if found_pdfs:
-            self.pdf_files = found_pdfs
-            self.pdf_path_label.config(text=f"{len(found_pdfs)} file trovati")
-            self.notebook.select(self.processing_tab)
+        folder = QFileDialog.getExistingDirectory(self, "Seleziona Cartella")
+        if not folder: return
+        found = [os.path.join(r, f) for r, d, fs in os.walk(folder) for f in fs if f.lower().endswith('.pdf')]
+        if found:
+            self.pdf_files = found
+            self.pdf_path_label.setText(f"{len(found)} file trovati")
+            self.notebook.setCurrentWidget(self.processing_tab)
             self._start_processing()
         else:
-            messagebox.showinfo("Info", "Nessun file PDF trovato.")
-    
+            QMessageBox.information(self, "Info", "Nessun file PDF trovato.")
+
     def _update_restore_button_state(self):
-        """Aggiorna lo stato del pulsante di ripristino."""
-        if os.path.exists(SESSION_FILE):
-            self.restore_btn.config(state='normal')
-        else:
-            self.restore_btn.config(state='disabled')
+        self.restore_btn.setEnabled(os.path.exists(SESSION_FILE))
 
     def _check_for_restore(self):
-        """Verifica se esiste una sessione da ripristinare."""
         self._update_restore_button_state()
         if os.path.exists(SESSION_FILE):
-            if messagebox.askyesno("Ripristino Sessione", "Trovata una sessione precedente non completata.\nVuoi ripristinare i file da revisionare?"):
-                 self._restore_session()
+            reply = QMessageBox.question(self, "Ripristino Sessione",
+                "Trovata una sessione precedente non completata.\nVuoi ripristinare i file da revisionare?")
+            if reply == QMessageBox.StandardButton.Yes:
+                self._restore_session()
 
     def _clear_session(self):
-        """Rimuove il file di sessione."""
         if os.path.exists(SESSION_FILE):
-            try:
-                os.remove(SESSION_FILE)
-            except OSError as e:
-                logger.error(f"Errore rimozione session file: {e}")
+            try: os.remove(SESSION_FILE)
+            except OSError as e: logger.error(f"Errore rimozione session file: {e}")
         self._update_restore_button_state()
 
     def _restore_session(self):
-        """Ripristina la sessione precedente."""
-        if not os.path.exists(SESSION_FILE):
-            return
-        
+        if not os.path.exists(SESSION_FILE): return
         try:
             with open(SESSION_FILE, 'r') as f:
                 data = json.load(f)
-            
             if data:
-                tasks = []
-                odc = "Unknown"
-                
-                # Support both old list format and new dict format
-                if isinstance(data, list):
-                    tasks = data
-                elif isinstance(data, dict):
-                    tasks = data.get('tasks', [])
-                    odc = data.get('odc', "Unknown")
-                
-                if tasks:
-                    self._show_unknown_dialog(tasks, odc)
-                else:
-                    self._clear_session()
-            else:
-                self._clear_session()
-                
+                tasks, odc = [], "Unknown"
+                if isinstance(data, list): tasks = data
+                elif isinstance(data, dict): tasks = data.get('tasks', []); odc = data.get('odc', "Unknown")
+                if tasks: self._show_unknown_dialog(tasks, odc)
+                else: self._clear_session()
+            else: self._clear_session()
         except Exception as e:
             logger.error(f"Errore ripristino sessione: {e}")
-            messagebox.showerror("Errore", f"Impossibile ripristinare la sessione:\n{e}")
+            QMessageBox.critical(self, "Errore", f"Impossibile ripristinare la sessione:\n{e}")
             self._clear_session()
 
     def _start_processing(self):
-        """Avvia l'elaborazione dei PDF."""
-        odc_input = self.odc_var.get().strip()
+        odc_input = self.odc_entry.text().strip()
         if not odc_input:
-            messagebox.showerror("Errore", "Inserire un codice ODC valido.")
+            QMessageBox.critical(self, "Errore", "Inserire un codice ODC valido.")
             return
-
         if not self.pdf_files:
-            messagebox.showerror("Errore", "Seleziona almeno un file PDF.")
+            QMessageBox.critical(self, "Errore", "Seleziona almeno un file PDF.")
             return
-        self.log_area.config(state='normal')
-        self.log_area.delete('1.0', 'end')
-        self.log_area.config(state='disabled')
+        self.log_area.clear()
         self._target_progress = 0
         self._current_progress = 0
-        self.progress_var.set(0)
-        self.progress_label.config(text="Avvio in corso...")
-        self.eta_label.config(text="Calcolo stima...")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("Avvio in corso...")
+        self.eta_label.setText("Calcolo stima...")
         self._add_log_message("AVVIO ELABORAZIONE", "HEADER")
         self._add_log_message(f"File da elaborare: {len(self.pdf_files)}", "INFO")
         self._add_log_message("-" * 60, "INFO")
         self.processing_start_time = datetime.now()
         self._is_processing = True
-        thread = threading.Thread(target=self._processing_worker, args=(list(self.pdf_files), self.odc_var.get(), self.config))
+        thread = threading.Thread(target=self._processing_worker,
+                                  args=(list(self.pdf_files), self.odc_entry.text(), self.config))
         thread.daemon = True
         thread.start()
 
     def _processing_worker(self, pdf_files, odc, config):
-        """Worker thread per l'elaborazione PDF."""
         try:
             unknown_files = []
             total_files = len(pdf_files)
-
             for i, pdf_path in enumerate(pdf_files):
                 def progress_callback(message, level="INFO"):
                     self.log_queue.put((message, level))
-                    
                     if "Elaborazione pagina" in message:
                         try:
                             parts = message.split()
@@ -1221,403 +1127,242 @@ Tutti i file originali vengono spostati nella cartella `ORIGINALI` per sicurezza
                                     page_progress = int(current) / int(total) * 100
                                     file_progress = (i / total_files) * 100
                                     combined = file_progress + (page_progress / total_files)
-                                    
-                                    # Estrai ETA se presente nella stringa (fallback legacy) o calcola qui
-                                    # Nota: pdf_processor ora dovrebbe passare l'ETA strutturato
-                                    
                                     self.log_queue.put({
-                                        'action': 'update_progress',
-                                        'value': combined,
+                                        'action': 'update_progress', 'value': combined,
                                         'text': f"File {i+1}/{total_files} - Pagina {current}/{total}",
-                                        'eta_seconds': None # Sarà popolato dal processor se supportato
+                                        'eta_seconds': None
                                     })
-                                    self.log_queue.put({'action': 'increment_pages', 'count': 0})
                                     break
-                        except:
-                            pass
-                
-                # Callback esteso per supportare dati strutturati dal processore
+                        except: pass
+
                 def advanced_progress_callback(data, level="INFO"):
                     if isinstance(data, dict) and data.get('type') == 'page_progress':
-                        # Calcolo progresso globale combinando info file e pagine
                         current = data.get('current', 0)
                         total = data.get('total', 1)
                         eta = data.get('eta_seconds', 0)
                         phase_pct = data.get('phase_pct', 0)
                         phase = data.get('phase', 'analysis')
-                        
-                        # Se il processore invia una percentuale di fase esplicita, usala per calcolare
-                        # la porzione relativa a questo file.
-                        # Altrimenti usa il calcolo lineare standard sulle pagine
-                        if phase_pct > 0:
-                            file_internal_progress = phase_pct # 0-100 relativo al singolo file
-                        else:
-                            file_internal_progress = (current / total) * 100
-                            
-                        # Progresso base dei file completati
+                        file_internal_progress = phase_pct if phase_pct > 0 else (current / total) * 100
                         base_pct = (i / total_files) * 100
-                        # Incremento per il file corrente
-                        file_contribution = (1.0 / total_files) * 100
-                        
-                        combined = base_pct + (file_internal_progress * (1.0/total_files))
-                        
-                        # Testo stato
+                        combined = base_pct + (file_internal_progress * (1.0 / total_files))
                         status_text = f"File {i+1}/{total_files}"
-                        if phase == 'saving':
-                            status_text += " - Salvataggio..."
-                        else:
-                            status_text += f" - Analisi {current}/{total}"
-
-                        self.log_queue.put({
-                            'action': 'update_progress',
-                            'value': combined,
-                            'text': status_text,
-                            'eta_seconds': eta
-                        })
-                        self.log_queue.put({'action': 'increment_pages', 'count': 0})
-                        
-                    elif isinstance(data, dict):
-                        self.log_queue.put(data)
-                    else:
-                        # Fallback per messaggi stringa
-                        progress_callback(str(data), level)
+                        status_text += " - Salvataggio..." if phase == 'saving' else f" - Analisi {current}/{total}"
+                        self.log_queue.put({'action': 'update_progress', 'value': combined,
+                                            'text': status_text, 'eta_seconds': eta})
+                    elif isinstance(data, dict): self.log_queue.put(data)
+                    else: progress_callback(str(data), level)
 
                 self.log_queue.put((f"=== FILE {i+1}/{total_files}: {os.path.basename(pdf_path)} ===", "HEADER"))
-
-                success, message, generated, moved_original_path = pdf_processor.process_pdf(
+                success, message, generated, moved = pdf_processor.process_pdf(
                     pdf_path, odc, config, advanced_progress_callback)
-
                 if not success:
                     self.log_queue.put((f"Errore: {message}", "ERROR"))
                 else:
                     self.files_processed_count += 1
-                    self.log_queue.put((f"File completato con successo", "SUCCESS"))
-
-                    has_unknown = any(f['category'] == 'sconosciuto' for f in generated)
-                    if has_unknown:
+                    self.log_queue.put(("File completato con successo", "SUCCESS"))
+                    if any(f['category'] == 'sconosciuto' for f in generated):
                         unknown_paths = [f['path'] for f in generated if f['category'] == 'sconosciuto']
                         siblings = [f['path'] for f in generated if f['category'] != 'sconosciuto']
-
                         for u_path in unknown_paths:
-                            unknown_files.append({
-                                'unknown_path': u_path,
-                                'source_path': moved_original_path,
-                                'siblings': siblings
-                            })
+                            unknown_files.append({'unknown_path': u_path, 'source_path': moved, 'siblings': siblings})
 
             self.log_queue.put({'action': 'update_progress', 'value': 100, 'text': 'Completato!'})
-            
             elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
             elapsed_str = str(elapsed).split('.')[0] if elapsed else "N/A"
-            
             self.log_queue.put(("-" * 60, "INFO"))
             self.log_queue.put((f"ELABORAZIONE COMPLETATA in {elapsed_str}", "HEADER"))
             self.log_queue.put((f"File elaborati: {total_files}", "SUCCESS"))
-
             if unknown_files:
                 self.log_queue.put({'action': 'show_unknown_dialog', 'files': unknown_files, 'odc': odc})
-
-            self.root.after(0, lambda: self.files_count_label.config(text=str(self.files_processed_count)))
-            self.root.after(0, lambda: self.odc_var.set("5400"))
+            # Update UI from main thread
+            QTimer.singleShot(0, lambda: self.files_count_label.setText(str(self.files_processed_count)))
+            QTimer.singleShot(0, lambda: self.odc_entry.setText("5400"))
         finally:
             self._is_processing = False
 
     def _show_unknown_dialog(self, files, odc):
-        """Mostra il dialog per file sconosciuti."""
-        if not files:
-            return
-
+        if not files: return
         def on_close():
             self._add_log_message("Revisione file sconosciuti completata", "SUCCESS")
-            # Update restore button state when dialog finishes/closes
-            self.root.after(100, self._update_restore_button_state)
-
-        def on_dialog_closed_event():
-            # Called when the dialog window is closed (by user X or finish)
-            self.root.after(100, self._update_restore_button_state)
-
-        UnknownFilesReviewDialog(self.root, files, on_finish=on_close, odc=odc, on_close_callback=on_dialog_closed_event)
+            QTimer.singleShot(100, self._update_restore_button_state)
+        def on_dialog_closed():
+            QTimer.singleShot(100, self._update_restore_button_state)
+        dlg = UnknownFilesReviewDialog(self, files, on_finish=on_close, odc=odc, on_close_callback=on_dialog_closed)
+        dlg.exec()
 
     def load_settings(self):
-        """Carica le impostazioni."""
         self.config = config_manager.load_config()
-        
-        if hasattr(self, 'tesseract_path_var'):
-            try:
-                for trace in self.tesseract_path_var.trace_info():
-                    self.tesseract_path_var.trace_remove(trace[0], trace[1])
-            except:
-                pass
-            
-            self.tesseract_path_var.set(self.config.get("tesseract_path", ""))
-            self.tesseract_path_var.trace("w", self._on_tesseract_path_change)
-
+        if hasattr(self, 'tesseract_path_entry'):
+            self.tesseract_path_entry.blockSignals(True)
+            self.tesseract_path_entry.setText(self.config.get("tesseract_path", ""))
+            self.tesseract_path_entry.blockSignals(False)
         self._populate_rules_tree()
-        
         rules_count = len(self.config.get("classification_rules", []))
         if hasattr(self, 'rules_count_label'):
-            self.rules_count_label.config(text=str(rules_count))
+            self.rules_count_label.setText(str(rules_count))
 
     def _auto_save_settings(self):
-        """Salva automaticamente le impostazioni."""
-        try:
-            config_manager.save_config(self.config)
-        except Exception as e:
-            logger.error(f"Auto-Save: {e}")
+        try: config_manager.save_config(self.config)
+        except Exception as e: logger.error(f"Auto-Save: {e}")
 
     def _populate_rules_tree(self):
-        """Popola la treeview delle regole."""
-        self.keywords_text.config(state='normal')
-        self.keywords_text.delete("1.0", 'end')
-        self.keywords_text.config(state='disabled')
-        self.roi_details_var.set("")
-
-        for item in self.rules_tree.get_children():
-            self.rules_tree.delete(item)
-
+        self.keywords_text.clear()
+        self.roi_details_label.setText("")
+        self.rules_tree.clear()
         for rule in self.config.get("classification_rules", []):
             color = rule.get("color", "#FFFFFF")
             suffix = rule.get("filename_suffix", rule["category_name"])
-            tag_name = f"color_{color}"
-
+            item = QTreeWidgetItem([color, rule["category_name"], suffix])
+            item.setBackground(0, QBrush(QColor(color)))
             h = color.lstrip('#')
             try:
                 rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
-                brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
-                text_color = "black" if brightness > 128 else "white"
-            except:
-                text_color = "black"
+                brightness = (rgb[0]*299+rgb[1]*587+rgb[2]*114)/1000
+                item.setForeground(0, QBrush(QColor("black" if brightness > 128 else "white")))
+            except: pass
+            self.rules_tree.addTopLevelItem(item)
 
-            self.rules_tree.tag_configure(tag_name, background=color, foreground=text_color)
-            self.rules_tree.insert("", 'end', values=(color, rule["category_name"], suffix), tags=(tag_name,))
-
-    def _update_rule_details_panel(self, event=None):
-        """Aggiorna il pannello dettagli regola."""
-        selected_item = self.rules_tree.focus()
-        if not selected_item:
-            self.keywords_text.config(state='normal')
-            self.keywords_text.delete("1.0", 'end')
-            self.keywords_text.config(state='disabled')
-            self.roi_details_var.set("")
+    def _update_rule_details_panel(self):
+        items = self.rules_tree.selectedItems()
+        if not items:
+            self.keywords_text.clear()
+            self.roi_details_label.setText("")
             return
-
-        item_values = self.rules_tree.item(selected_item, "values")
-        category_name = item_values[1]
-
-        rule = next((r for r in self.config.get("classification_rules", []) 
-                    if r["category_name"] == category_name), None)
-
+        category_name = items[0].text(1)
+        rule = next((r for r in self.config.get("classification_rules", [])
+                     if r["category_name"] == category_name), None)
         if rule:
-            keywords_str = ", ".join(rule.get("keywords", []))
-            rois_count = len(rule.get("rois", []))
+            self.keywords_text.setPlainText(", ".join(rule.get("keywords", [])))
+            self.roi_details_label.setText(f"{len(rule.get('rois', []))} aree ROI definite")
 
-            self.keywords_text.config(state='normal')
-            self.keywords_text.delete("1.0", 'end')
-            self.keywords_text.insert('end', keywords_str)
-            self.keywords_text.config(state='disabled')
-
-            self.roi_details_var.set(f"{rois_count} aree ROI definite")
-
-    def _on_tesseract_path_change(self, *args):
-        """Gestisce il cambio del path Tesseract."""
-        self.config["tesseract_path"] = self.tesseract_path_var.get()
+    def _on_tesseract_path_change(self):
+        self.config["tesseract_path"] = self.tesseract_path_entry.text()
         self._auto_save_settings()
 
     def _browse_tesseract(self):
-        """Apre il dialog per selezionare Tesseract."""
-        path = filedialog.askopenfilename(
-            title="Seleziona Tesseract", 
-            filetypes=[("Executable", "*.exe")])
-        if path:
-            self.tesseract_path_var.set(path)
+        path, _ = QFileDialog.getOpenFileName(self, "Seleziona Tesseract", "", "Executable (*.exe)")
+        if path: self.tesseract_path_entry.setText(path)
 
     def _auto_detect_tesseract(self):
-        """Rileva automaticamente Tesseract."""
         search_paths = [
-            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), 
-                        "Tesseract-OCR", "tesseract.exe"),
-            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), 
-                        "Tesseract-OCR", "tesseract.exe"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), 
-                        "Tesseract-OCR", "tesseract.exe")
+            os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Tesseract-OCR", "tesseract.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Tesseract-OCR", "tesseract.exe")
         ]
-        
-        for path in search_paths:
-            if path and os.path.exists(path):
-                self.tesseract_path_var.set(path)
-                messagebox.showinfo("Trovato", f"Tesseract trovato:\n{path}")
+        for p in search_paths:
+            if p and os.path.exists(p):
+                self.tesseract_path_entry.setText(p)
+                QMessageBox.information(self, "Trovato", f"Tesseract trovato:\n{p}")
                 return
-        
-        messagebox.showwarning("Non Trovato", 
-                              "Tesseract non trovato automaticamente.\nIndicalo manualmente.")
+        QMessageBox.warning(self, "Non Trovato", "Tesseract non trovato automaticamente.\nIndicalo manualmente.")
 
-    def _add_rule(self):
-        """Aggiunge una nuova regola."""
-        self._show_rule_editor()
-
+    def _add_rule(self): self._show_rule_editor()
     def _modify_rule(self):
-        """Modifica una regola esistente."""
-        selected_item = self.rules_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Selezione", "Selezionare una regola da modificare.")
+        items = self.rules_tree.selectedItems()
+        if not items:
+            QMessageBox.warning(self, "Selezione", "Selezionare una regola da modificare.")
             return
-        
-        item_values = self.rules_tree.item(selected_item, "values")
-        rule = next((r for r in self.config["classification_rules"] 
-                    if r["category_name"] == item_values[1]), None)
-        if rule:
-            self._show_rule_editor(rule)
+        rule = next((r for r in self.config["classification_rules"]
+                     if r["category_name"] == items[0].text(1)), None)
+        if rule: self._show_rule_editor(rule)
 
     def _remove_rule(self):
-        """Rimuove una regola."""
-        selected_item = self.rules_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Selezione", "Selezionare una regola da rimuovere.")
+        items = self.rules_tree.selectedItems()
+        if not items:
+            QMessageBox.warning(self, "Selezione", "Selezionare una regola da rimuovere.")
             return
-        
-        category_name = self.rules_tree.item(selected_item, "values")[1]
-        if messagebox.askyesno("Conferma", f"Rimuovere la regola '{category_name}'?"):
-            self.config["classification_rules"] = [
-                r for r in self.config["classification_rules"] 
-                if r["category_name"] != category_name
-            ]
+        cat = items[0].text(1)
+        reply = QMessageBox.question(self, "Conferma", f"Rimuovere la regola '{cat}'?")
+        if reply == QMessageBox.StandardButton.Yes:
+            self.config["classification_rules"] = [r for r in self.config["classification_rules"] if r["category_name"] != cat]
             self._populate_rules_tree()
             self._auto_save_settings()
-            
-            self.rules_count_label.config(
-                text=str(len(self.config.get("classification_rules", []))))
+            self.rules_count_label.setText(str(len(self.config.get("classification_rules", []))))
 
     def _show_rule_editor(self, rule=None):
-        """Mostra l'editor di regole."""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Modifica Regola" if rule else "Nuova Regola")
-        dialog.configure(bg=COLORS['bg_primary'])
-        dialog.geometry("500x400")  # Aumentato leggermente
-        dialog.minsize(450, 350)
-        dialog.resizable(True, True)  # Abilitato ridimensionamento
-        dialog.transient(self.root)
-        dialog.grab_set()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Modifica Regola" if rule else "Nuova Regola")
+        dialog.setFixedSize(500, 400)
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
 
-        main_frame = ttk.Frame(dialog, padding=20)
-        main_frame.pack(fill='both', expand=True)
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Nome Categoria:"), 0, 0)
+        cat_entry = QLineEdit(rule["category_name"] if rule else "")
+        if rule: cat_entry.setReadOnly(True)
+        grid.addWidget(cat_entry, 0, 1, 1, 2)
 
-        category_var = tk.StringVar(value=rule["category_name"] if rule else "")
-        suffix_var = tk.StringVar(value=rule.get("filename_suffix", "") if rule else "")
-        keywords_var = tk.StringVar(value=", ".join(rule.get("keywords", [])) if rule else "")
-        chosen_color = tk.StringVar(value=rule.get("color", "#0D6EFD") if rule else "#0D6EFD")
+        grid.addWidget(QLabel("Suffisso File:"), 1, 0)
+        suffix_entry = QLineEdit(rule.get("filename_suffix", "") if rule else "")
+        grid.addWidget(suffix_entry, 1, 1, 1, 2)
 
-        row = 0
-        
-        ttk.Label(main_frame, text="Nome Categoria:", font=FONTS['body_bold']).grid(
-            row=row, column=0, sticky='w', pady=8)
-        cat_entry = ttk.Entry(main_frame, textvariable=category_var, width=35)
-        cat_entry.grid(row=row, column=1, columnspan=2, pady=8, sticky='ew')
-        if rule:
-            cat_entry.config(state='readonly')
-        
-        row += 1
-        
-        ttk.Label(main_frame, text="Suffisso File:", font=FONTS['body_bold']).grid(
-            row=row, column=0, sticky='w', pady=8)
-        ttk.Entry(main_frame, textvariable=suffix_var, width=35).grid(
-            row=row, column=1, columnspan=2, pady=8, sticky='ew')
-        
-        row += 1
-        
-        ttk.Label(main_frame, text="Keywords:", font=FONTS['body_bold']).grid(
-            row=row, column=0, sticky='w', pady=8)
-        ttk.Entry(main_frame, textvariable=keywords_var, width=35).grid(
-            row=row, column=1, columnspan=2, pady=8, sticky='ew')
-        ttk.Label(main_frame, text="(separate da virgola)", style='Muted.TLabel').grid(
-            row=row+1, column=1, sticky='w')
-        
-        row += 2
-        
-        ttk.Label(main_frame, text="Colore:", font=FONTS['body_bold']).grid(
-            row=row, column=0, sticky='w', pady=8)
-        
-        color_swatch = tk.Label(main_frame, text="     ", bg=chosen_color.get(), 
-                               relief='solid', bd=1, width=8)
-        color_swatch.grid(row=row, column=1, sticky='w', pady=8)
+        grid.addWidget(QLabel("Keywords:"), 2, 0)
+        kw_entry = QLineEdit(", ".join(rule.get("keywords", [])) if rule else "")
+        grid.addWidget(kw_entry, 2, 1, 1, 2)
+        grid.addWidget(QLabel("(separate da virgola)"), 3, 1)
 
+        grid.addWidget(QLabel("Colore:"), 4, 0)
+        chosen_color = [rule.get("color", "#0D6EFD") if rule else "#0D6EFD"]
+        color_swatch = QLabel("     ")
+        color_swatch.setStyleSheet(f"background-color: {chosen_color[0]}; border: 1px solid black;")
+        color_swatch.setFixedSize(60, 25)
+        grid.addWidget(color_swatch, 4, 1)
         def choose_color():
-            result = colorchooser.askcolor(title="Scegli Colore", 
-                                          initialcolor=chosen_color.get())
-            if result and result[1]:
-                chosen_color.set(result[1])
-                color_swatch.config(bg=result[1])
+            c = QColorDialog.getColor(QColor(chosen_color[0]), dialog, "Scegli Colore")
+            if c.isValid():
+                chosen_color[0] = c.name()
+                color_swatch.setStyleSheet(f"background-color: {c.name()}; border: 1px solid black;")
+        btn_color = QPushButton("Scegli")
+        btn_color.clicked.connect(choose_color)
+        grid.addWidget(btn_color, 4, 2)
 
-        ttk.Button(main_frame, text="Scegli", command=choose_color).grid(
-            row=row, column=2, pady=8)
-        
-        row += 1
-        
-        ttk.Label(main_frame, text="Aree ROI:", font=FONTS['body_bold']).grid(
-            row=row, column=0, sticky='w', pady=8)
+        grid.addWidget(QLabel("Aree ROI:"), 5, 0)
         roi_count = len(rule.get("rois", [])) if rule else 0
-        ttk.Label(main_frame, text=f"{roi_count} aree definite", 
-                 style='Muted.TLabel').grid(row=row, column=1, sticky='w', pady=8)
+        grid.addWidget(QLabel(f"{roi_count} aree definite"), 5, 1)
+        layout.addLayout(grid)
 
         def on_save():
-            category = category_var.get().strip()
-            suffix = suffix_var.get().strip() or category
-            keywords = [k.strip() for k in keywords_var.get().split(',') if k.strip()]
-            color = chosen_color.get()
-
+            category = cat_entry.text().strip()
+            suffix = suffix_entry.text().strip() or category
+            keywords = [k.strip() for k in kw_entry.text().split(',') if k.strip()]
+            color = chosen_color[0]
             if not category or not keywords:
-                messagebox.showerror("Errore", 
-                                    "Nome categoria e almeno una keyword sono obbligatori.", 
-                                    parent=dialog)
+                QMessageBox.critical(dialog, "Errore", "Nome categoria e almeno una keyword sono obbligatori.")
                 return
-
-            new_data = {
-                "category_name": category,
-                "filename_suffix": suffix,
-                "keywords": keywords,
-                "color": color
-            }
-
+            new_data = {"category_name": category, "filename_suffix": suffix, "keywords": keywords, "color": color}
             if rule:
                 new_data['rotate_roi'] = rule.get('rotate_roi', 0)
                 new_data['rois'] = rule.get('rois', [])
                 rule.update(new_data)
             else:
-                if any(r["category_name"] == category 
-                      for r in self.config.get("classification_rules", [])):
-                    messagebox.showerror("Errore", "Categoria gia' esistente.", parent=dialog)
+                if any(r["category_name"] == category for r in self.config.get("classification_rules", [])):
+                    QMessageBox.critical(dialog, "Errore", "Categoria già esistente.")
                     return
                 new_data["rois"] = []
                 self.config.setdefault("classification_rules", []).append(new_data)
-
             self._populate_rules_tree()
             self._auto_save_settings()
-            self.rules_count_label.config(
-                text=str(len(self.config.get("classification_rules", []))))
-            dialog.destroy()
+            self.rules_count_label.setText(str(len(self.config.get("classification_rules", []))))
+            dialog.accept()
 
-        ttk.Separator(main_frame, orient='horizontal').grid(
-            row=row+1, column=0, columnspan=3, sticky='ew', pady=15)
-        
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=row+2, column=0, columnspan=3)
-        
-        ttk.Button(btn_frame, text="Salva", command=on_save).pack(side='left', padx=10)
-        ttk.Button(btn_frame, text="Annulla", command=dialog.destroy).pack(side='left', padx=10)
+        btn_layout = QHBoxLayout()
+        btn_save = QPushButton("Salva"); btn_save.clicked.connect(on_save)
+        btn_cancel = QPushButton("Annulla"); btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_save); btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+        dialog.exec()
 
     def _launch_roi_utility(self):
-        """Lancia l'utility ROI."""
         try:
             if getattr(sys, 'frozen', False):
-                # Se l'app è congelata (PyInstaller), lancia l'eseguibile con un flag
                 subprocess.Popen([sys.executable, "--utility"])
             else:
-                # Se è uno script Python, lancia il file roi_utility.py
                 script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_utility.py')
                 subprocess.Popen([sys.executable, script_path])
-
             self._add_log_message("Utility ROI avviata", "SUCCESS")
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile avviare l'utility ROI:\n{e}")
+            QMessageBox.critical(self, "Errore", f"Impossibile avviare l'utility ROI:\n{e}")
 
 
 # ============================================================================
@@ -1633,33 +1378,34 @@ if __name__ == "__main__":
             logger.critical(f"Failed to launch ROI utility: {e}", exc_info=True)
         sys.exit(0)
 
-    logger.info("="*68)
+    logger.info("=" * 68)
     logger.info("           INTELLEO PDF SPLITTER - AVVIO APPLICAZIONE")
-    logger.info("="*68)
+    logger.info("=" * 68)
     logger.info(f"  Versione: {version.__version__}")
     logger.info(f"  Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    logger.info("="*68)
+    logger.info("=" * 68)
 
     # License Update & Check
     logger.info("Verifica licenza in corso...")
+    qt_app = QApplication(sys.argv)
+    qt_app.setStyleSheet(GLOBAL_QSS)
+
     try:
         license_updater.run_update()
         logger.info("Aggiornamento licenza completato")
     except Exception as e:
         logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
-        messagebox.showerror("Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        QMessageBox.critical(None, "Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
         sys.exit(1)
 
     is_valid, msg = license_validator.verify_license()
     if not is_valid:
         logger.error(f"Licenza non valida: {msg}")
-        root = tk.Tk()
-        root.withdraw()
         hw_id = license_validator.get_hardware_id()
         err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
-        root.clipboard_clear()
-        root.clipboard_append(hw_id)
-        messagebox.showerror("Licenza Non Valida", err_msg)
+        clipboard = qt_app.clipboard()
+        clipboard.setText(hw_id)
+        QMessageBox.critical(None, "Licenza Non Valida", err_msg)
         sys.exit(1)
 
     logger.info("Licenza valida")
@@ -1668,14 +1414,6 @@ if __name__ == "__main__":
     # Pulizia signal file
     if os.path.exists(SIGNAL_FILE):
         os.remove(SIGNAL_FILE)
-
-    # Inizializzazione Tk con DnD
-    try:
-        root = TkinterDnD.Tk()
-        logger.info("Drag & Drop abilitato")
-    except Exception as e:
-        logger.warning(f"Drag & Drop non disponibile: {e}")
-        root = tk.Tk()
 
     # Check CLI args
     cli_path = None
@@ -1688,8 +1426,8 @@ if __name__ == "__main__":
 
     logger.info("Applicazione pronta")
 
-    app = MainApp(root, auto_file_path=cli_path)
-    
-    logger.info("Avvio mainloop")
-    root.mainloop()
-    logger.info("Applicazione chiusa normalmente")
+    window = MainApp(auto_file_path=cli_path)
+    window.showMaximized()
+
+    logger.info("Avvio event loop")
+    sys.exit(qt_app.exec())
