@@ -2,25 +2,37 @@
 Intelleo PDF Splitter - Utility ROI (PySide6)
 Gestisce la definizione delle aree ROI per l'OCR.
 """
-import pymupdf as fitz
-from PIL import Image
-import os
+
+import contextlib
 import math
-import config_manager
+import os
 
+import pymupdf as fitz
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QBrush, QColor, QCursor, QFont, QImage, QKeySequence, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QCheckBox, QListWidget,
-    QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsSimpleTextItem,
-    QFileDialog, QMessageBox, QDialog, QComboBox, QGroupBox, QSplitter,
-    QSizePolicy
-)
-from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import (
-    QFont, QColor, QPen, QBrush, QPixmap, QImage, QCursor,
-    QAction, QKeySequence, QShortcut
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGraphicsScene,
+    QGraphicsSimpleTextItem,
+    QGraphicsView,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
 )
 
+import config_manager
 
 SIGNAL_FILE = ".update_signal"
 
@@ -28,18 +40,18 @@ SIGNAL_FILE = ".update_signal"
 # COSTANTI STILE - TEMA CHIARO PROFESSIONALE
 # ============================================================================
 COLORS = {
-    'bg_primary': '#FFFFFF',
-    'bg_secondary': '#F8F9FA',
-    'bg_tertiary': '#E9ECEF',
-    'accent': '#0D6EFD',
-    'accent_hover': '#0B5ED7',
-    'success': '#198754',
-    'warning': '#FFC107',
-    'danger': '#DC3545',
-    'text_primary': '#212529',
-    'text_secondary': '#6C757D',
-    'text_muted': '#ADB5BD',
-    'border': '#DEE2E6',
+    "bg_primary": "#FFFFFF",
+    "bg_secondary": "#F8F9FA",
+    "bg_tertiary": "#E9ECEF",
+    "accent": "#0D6EFD",
+    "accent_hover": "#0B5ED7",
+    "success": "#198754",
+    "warning": "#FFC107",
+    "danger": "#DC3545",
+    "text_primary": "#212529",
+    "text_secondary": "#6C757D",
+    "text_muted": "#ADB5BD",
+    "border": "#DEE2E6",
 }
 
 
@@ -51,10 +63,8 @@ class ROIGraphicsView(QGraphicsView):
         self.app = app
         self.scene_ref = QGraphicsScene(self)
         self.setScene(self.scene_ref)
-        self.setRenderHints(
-            self.renderHints()
-        )
-        self.setBackgroundBrush(QBrush(QColor(COLORS['bg_tertiary'])))
+        self.setRenderHints(self.renderHints())
+        self.setBackgroundBrush(QBrush(QColor(COLORS["bg_tertiary"])))
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
 
@@ -97,10 +107,8 @@ class ROIGraphicsView(QGraphicsView):
                     self.scene_ref.removeItem(self._current_rect)
                     self._current_rect = None
 
-                pen = QPen(QColor(COLORS['accent']), 2, Qt.PenStyle.DashLine)
-                self._current_rect = self.scene_ref.addRect(
-                    QRectF(scene_pos, scene_pos), pen
-                )
+                pen = QPen(QColor(COLORS["accent"]), 2, Qt.PenStyle.DashLine)
+                self._current_rect = self.scene_ref.addRect(QRectF(scene_pos, scene_pos), pen)
             event.accept()
         else:
             super().mousePressEvent(event)
@@ -110,12 +118,8 @@ class ROIGraphicsView(QGraphicsView):
         if self._panning and self._pan_start:
             delta = event.position().toPoint() - self._pan_start
             self._pan_start = event.position().toPoint()
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta.x()
-            )
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta.y()
-            )
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             event.accept()
             return
 
@@ -131,9 +135,7 @@ class ROIGraphicsView(QGraphicsView):
             pdf_x = int(scene_pos.x() * factor)
             pdf_y = int(scene_pos.y() * factor)
             if not self.app.delete_mode:
-                self.app.status_bar.setText(
-                    f"[DISEGNO] Modalità attiva | Coordinate PDF: ({pdf_x}, {pdf_y})"
-                )
+                self.app.status_bar.setText(f"[DISEGNO] Modalità attiva | Coordinate PDF: ({pdf_x}, {pdf_y})")
 
         if not self.app.delete_mode and self._current_rect and self._start_point:
             rect = QRectF(self._start_point, scene_pos).normalized()
@@ -155,10 +157,7 @@ class ROIGraphicsView(QGraphicsView):
         if not self.app.delete_mode and self._start_point:
             end_point = self.mapToScene(event.position().toPoint())
 
-            dist = math.hypot(
-                end_point.x() - self._start_point.x(),
-                end_point.y() - self._start_point.y()
-            )
+            dist = math.hypot(end_point.x() - self._start_point.x(), end_point.y() - self._start_point.y())
             if dist < 10:
                 if self._current_rect:
                     self.scene_ref.removeItem(self._current_rect)
@@ -326,12 +325,12 @@ class ROIDrawingApp(QMainWindow):
         self.rules_listbox.setFont(QFont("Segoe UI", 10))
         self.rules_listbox.setStyleSheet(f"""
             QListWidget {{
-                background-color: {COLORS['bg_secondary']};
-                border: 1px solid {COLORS['border']};
+                background-color: {COLORS["bg_secondary"]};
+                border: 1px solid {COLORS["border"]};
                 border-radius: 4px;
             }}
             QListWidget::item:selected {{
-                background-color: {COLORS['accent']};
+                background-color: {COLORS["accent"]};
                 color: white;
             }}
         """)
@@ -427,12 +426,7 @@ class ROIDrawingApp(QMainWindow):
 
     def open_pdf(self):
         """Apre un file PDF."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Seleziona un PDF di esempio",
-            "",
-            "PDF Files (*.pdf)"
-        )
+        filepath, _ = QFileDialog.getOpenFileName(self, "Seleziona un PDF di esempio", "", "PDF Files (*.pdf)")
 
         if not filepath:
             return
@@ -447,14 +441,10 @@ class ROIDrawingApp(QMainWindow):
                 self.zoom_label.setText("100%")
                 self.render_page(self.current_page_index)
                 self.status_bar.setText(
-                    f"[OK] PDF caricato: {os.path.basename(filepath)} "
-                    f"({self.pdf_doc.page_count} pagine)"
+                    f"[OK] PDF caricato: {os.path.basename(filepath)} ({self.pdf_doc.page_count} pagine)"
                 )
             else:
-                QMessageBox.warning(
-                    self, "Attenzione",
-                    "Il PDF selezionato non contiene pagine."
-                )
+                QMessageBox.warning(self, "Attenzione", "Il PDF selezionato non contiene pagine.")
         except Exception as e:
             QMessageBox.critical(self, "Errore", f"Impossibile aprire il PDF:\n{e}")
 
@@ -471,10 +461,7 @@ class ROIDrawingApp(QMainWindow):
         pix = page.get_pixmap(dpi=dpi)
 
         # Converti PyMuPDF pixmap → QPixmap (senza passare da PIL/ImageTk)
-        qimage = QImage(
-            pix.samples, pix.width, pix.height,
-            pix.stride, QImage.Format.Format_RGB888
-        )
+        qimage = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
         qpixmap = QPixmap.fromImage(qimage)
 
         # Aggiorna scena
@@ -495,10 +482,8 @@ class ROIDrawingApp(QMainWindow):
 
         # Rimuovi solo le ROI, non il pixmap
         for item_id in list(self.roi_item_map.keys()):
-            try:
+            with contextlib.suppress(Exception):
                 scene.removeItem(item_id)
-            except Exception:
-                pass
         self.roi_item_map.clear()
 
         factor = (150 * self.zoom_level) / 72
@@ -521,16 +506,12 @@ class ROIDrawingApp(QMainWindow):
 
                 # Etichetta categoria con sfondo
                 text_width = len(category_name) * 8 + 10
-                text_bg = scene.addRect(
-                    QRectF(x0, y0, text_width, 18),
-                    QPen(Qt.PenStyle.NoPen),
-                    QBrush(color)
-                )
+                text_bg = scene.addRect(QRectF(x0, y0, text_width, 18), QPen(Qt.PenStyle.NoPen), QBrush(color))
 
                 # Calcola contrasto testo
-                h = color_hex.lstrip('#')
+                h = color_hex.lstrip("#")
                 try:
-                    rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+                    rgb = tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
                     brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
                     text_color = QColor("white") if brightness < 128 else QColor("black")
                 except Exception:
@@ -562,9 +543,9 @@ class ROIDrawingApp(QMainWindow):
                 rule_index = roi_info["rule_index"]
                 roi_index = roi_info["roi_index"]
 
-                if (rule_index < len(self.config["classification_rules"]) and
-                    roi_index < len(self.config["classification_rules"][rule_index].get("rois", []))):
-
+                if rule_index < len(self.config["classification_rules"]) and roi_index < len(
+                    self.config["classification_rules"][rule_index].get("rois", [])
+                ):
                     rule = self.config["classification_rules"][rule_index]
                     category_name = rule.get("category_name", "N/A")
 
@@ -572,7 +553,7 @@ class ROIDrawingApp(QMainWindow):
                         self,
                         "Conferma Cancellazione",
                         f"Eliminare questa ROI per la categoria '{category_name}'?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     )
 
                     if reply == QMessageBox.StandardButton.Yes:
@@ -583,16 +564,13 @@ class ROIDrawingApp(QMainWindow):
 
     def prompt_and_save_roi(self, roi_coords):
         """Mostra il dialog per salvare la ROI."""
-        categories = [
-            rule["category_name"]
-            for rule in self.config.get("classification_rules", [])
-        ]
+        categories = [rule["category_name"] for rule in self.config.get("classification_rules", [])]
 
         if not categories:
             QMessageBox.warning(
-                self, "Nessuna Categoria",
-                "Non ci sono categorie definite.\n"
-                "Crea prima una categoria nell'applicazione principale."
+                self,
+                "Nessuna Categoria",
+                "Non ci sono categorie definite.\nCrea prima una categoria nell'applicazione principale.",
             )
             return
 
@@ -668,10 +646,7 @@ class ROIDrawingApp(QMainWindow):
             self._update_rules_list()
 
         except Exception as e:
-            QMessageBox.critical(
-                self, "Errore",
-                f"Impossibile salvare la configurazione:\n{e}"
-            )
+            QMessageBox.critical(self, "Errore", f"Impossibile salvare la configurazione:\n{e}")
 
     def prev_page(self):
         """Va alla pagina precedente."""

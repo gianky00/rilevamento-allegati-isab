@@ -2,21 +2,20 @@
 Intelleo PDF Splitter - App Updater (PySide6)
 Gestisce il controllo e la notifica di aggiornamenti dell'applicazione.
 """
-import requests
-import version
-import webbrowser
-from packaging import version as pkg_version
-import tempfile
+
+import os
 import subprocess
 import sys
-import os
+import tempfile
 import time
 
-from PySide6.QtWidgets import (
-    QMessageBox, QDialog, QVBoxLayout, QLabel, QProgressBar, QApplication
-)
-from PySide6.QtCore import Qt, QTimer
+import requests
+from packaging import version as pkg_version
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout
+
+import version
 
 
 def check_for_updates(silent=True, on_confirm=None):
@@ -66,7 +65,7 @@ def check_for_updates(silent=True, on_confirm=None):
                         None,
                         "🔄 Aggiornamento Disponibile",
                         msg,
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     )
 
                     if reply == QMessageBox.StandardButton.Yes:
@@ -80,19 +79,14 @@ def check_for_updates(silent=True, on_confirm=None):
                         if download_url:
                             perform_auto_update(download_url)
                         else:
-                            QMessageBox.information(
-                                None,
-                                "ℹ️ Info",
-                                "Visita il sito per scaricare l'aggiornamento."
-                            )
+                            QMessageBox.information(None, "ℹ️ Info", "Visita il sito per scaricare l'aggiornamento.")
                 else:
                     print("[SISTEMA] ✓ Applicazione aggiornata")
                     if not silent:
                         QMessageBox.information(
                             None,
                             "✅ Aggiornamento",
-                            f"L'applicazione è già aggiornata.\n"
-                            f"Versione: {version.__version__}"
+                            f"L'applicazione è già aggiornata.\nVersione: {version.__version__}",
                         )
         else:
             if not silent:
@@ -118,15 +112,9 @@ def perform_auto_update(download_url):
         progress_win = QDialog()
         progress_win.setWindowTitle("Download Aggiornamento")
         progress_win.setFixedSize(400, 180)
-        progress_win.setWindowFlags(
-            progress_win.windowFlags()
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
+        progress_win.setWindowFlags(progress_win.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         # Rimuovi pulsante chiudi (non deve chiudere durante il download)
-        progress_win.setWindowFlags(
-            progress_win.windowFlags()
-            & ~Qt.WindowType.WindowCloseButtonHint
-        )
+        progress_win.setWindowFlags(progress_win.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
 
         layout = QVBoxLayout(progress_win)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -177,8 +165,8 @@ def perform_auto_update(download_url):
         QApplication.processEvents()
 
         # Scarica file in temp
-        local_filename = download_url.split('/')[-1]
-        if not local_filename.endswith('.exe'):
+        local_filename = download_url.split("/")[-1]
+        if not local_filename.endswith(".exe"):
             local_filename = "update_setup.exe"
 
         temp_dir = tempfile.gettempdir()
@@ -189,7 +177,7 @@ def perform_auto_update(download_url):
         response.raise_for_status()
 
         # Ottieni dimensione totale
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
         if total_size > 0:
             pb.setMaximum(total_size)
 
@@ -197,7 +185,7 @@ def perform_auto_update(download_url):
         chunk_size = 8192
         start_time = time.time()
 
-        with open(setup_path, 'wb') as f:
+        with open(setup_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
                     f.write(chunk)
@@ -239,11 +227,7 @@ def perform_auto_update(download_url):
         sys.exit(0)
 
     except Exception as e:
-        QMessageBox.critical(
-            None,
-            "Errore Aggiornamento",
-            f"Impossibile completare l'aggiornamento:\n{e}"
-        )
+        QMessageBox.critical(None, "Errore Aggiornamento", f"Impossibile completare l'aggiornamento:\n{e}")
 
 
 if __name__ == "__main__":

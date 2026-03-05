@@ -2,18 +2,20 @@
 Intelleo PDF Splitter - License Validator
 Gestisce la validazione della licenza software.
 """
-import os
-import sys
-import subprocess
-import json
+
 import hashlib
+import json
+import os
 import platform
+import subprocess
+import sys
 import uuid
 from datetime import date
+
 from cryptography.fernet import Fernet
 
 # Chiave segreta per decifratura licenza
-LICENSE_SECRET_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
+LICENSE_SECRET_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
 
 
 def _calculate_sha256(filepath):
@@ -28,7 +30,7 @@ def _calculate_sha256(filepath):
 def get_hardware_id():
     """
     Ottiene un ID hardware univoco per la macchina.
-    
+
     Strategia con fallback multipli:
     1. WMIC (Windows Legacy)
     2. PowerShell CIM (Windows Modern)
@@ -39,14 +41,12 @@ def get_hardware_id():
     """
     system = platform.system()
 
-    if system == 'Windows':
+    if system == "Windows":
         # 1. Try WMIC (Legacy)
         try:
-            cmd = 'wmic diskdrive get serialnumber'
-            output = subprocess.check_output(
-                cmd, shell=True, stderr=subprocess.DEVNULL
-            ).decode()
-            parts = output.strip().split('\n')
+            cmd = "wmic diskdrive get serialnumber"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+            parts = output.strip().split("\n")
             if len(parts) > 1:
                 return parts[1].strip()
         except Exception:
@@ -55,17 +55,16 @@ def get_hardware_id():
         # 2. Try PowerShell (Disk Serial)
         try:
             cmd = [
-                "powershell", "-NoProfile", "-Command",
-                "Get-CimInstance -Class Win32_DiskDrive | "
-                "Select-Object -ExpandProperty SerialNumber"
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance -Class Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber",
             ]
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-            output = subprocess.check_output(
-                cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL
-            ).decode().strip()
-            
+            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+
             if output:
                 return output.splitlines()[0].strip()
         except Exception:
@@ -74,42 +73,36 @@ def get_hardware_id():
         # 3. Try PowerShell (System UUID)
         try:
             cmd = [
-                "powershell", "-NoProfile", "-Command",
-                "Get-CimInstance -Class Win32_ComputerSystemProduct | "
-                "Select-Object -ExpandProperty UUID"
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID",
             ]
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            
-            output = subprocess.check_output(
-                cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL
-            ).decode().strip()
-            
+
+            output = subprocess.check_output(cmd, startupinfo=startupinfo, stderr=subprocess.DEVNULL).decode().strip()
+
             if output:
                 return output
         except Exception:
             pass
 
-    elif system == 'Linux':
+    elif system == "Linux":
         # Try lsblk
         try:
-            cmd = (
-                "lsblk --nodeps -o name,serial | "
-                "grep -v 'NAME' | head -n 1 | awk '{print $2}'"
-            )
-            output = subprocess.check_output(
-                cmd, shell=True, stderr=subprocess.DEVNULL
-            ).decode().strip()
-            
+            cmd = "lsblk --nodeps -o name,serial | grep -v 'NAME' | head -n 1 | awk '{print $2}'"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
+
             if output:
                 return output
         except Exception:
             pass
 
         # Fallback to machine-id
-        if os.path.exists('/etc/machine-id'):
+        if os.path.exists("/etc/machine-id"):
             try:
-                with open('/etc/machine-id', 'r') as f:
+                with open("/etc/machine-id") as f:
                     return f.read().strip()
             except Exception:
                 pass
@@ -124,27 +117,27 @@ def get_hardware_id():
 def _get_license_paths():
     """Restituisce i percorsi dei file di licenza."""
     # Use APPDATA for license storage to ensure write permissions
-    if sys.platform == 'win32':
-        appdata = os.environ.get('APPDATA')
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
         if not appdata:
-            appdata = os.path.expanduser('~')
+            appdata = os.path.expanduser("~")
         license_dir = os.path.join(appdata, "Intelleo PDF Splitter", "Licenza")
     else:
         # Linux/Mac fallback
-        license_dir = os.path.join(os.path.expanduser('~'), ".intelleo-pdf-splitter", "licenza")
+        license_dir = os.path.join(os.path.expanduser("~"), ".intelleo-pdf-splitter", "licenza")
 
     return {
         "dir": license_dir,
         "config": os.path.join(license_dir, "config.dat"),
         "rkey": os.path.join(license_dir, "pyarmor.rkey"),
-        "manifest": os.path.join(license_dir, "manifest.json")
+        "manifest": os.path.join(license_dir, "manifest.json"),
     }
 
 
 def get_license_info():
     """
     Ottiene le informazioni della licenza decifrate.
-    
+
     Returns:
         dict: Dati della licenza o None in caso di errore
     """
@@ -160,7 +153,7 @@ def get_license_info():
 
         cipher = Fernet(LICENSE_SECRET_KEY)
         decrypted_data = cipher.decrypt(encrypted_data)
-        return json.loads(decrypted_data.decode('utf-8'))
+        return json.loads(decrypted_data.decode("utf-8"))
     except Exception:
         return None
 
@@ -168,14 +161,14 @@ def get_license_info():
 def verify_license():
     """
     Verifica la validità della licenza.
-    
+
     Controlli effettuati:
     1. Esistenza cartella e file licenza
     2. Integrità file tramite hash (manifest)
     3. Decifratura dati licenza
     4. Validazione Hardware ID
     5. Verifica data di scadenza
-    
+
     Returns:
         tuple: (is_valid: bool, message: str)
     """
@@ -191,7 +184,7 @@ def verify_license():
 
     # 1. Verifica integrità tramite manifest
     try:
-        with open(paths["manifest"], "r") as f:
+        with open(paths["manifest"]) as f:
             manifest = json.load(f)
 
         # Verifica hash config.dat
@@ -217,29 +210,25 @@ def verify_license():
         license_hw_id = payload.get("Hardware ID", "")
 
         # Normalizzazione ID
-        norm_current = current_hw_id.strip().rstrip('.')
-        norm_license = license_hw_id.strip().rstrip('.')
+        norm_current = current_hw_id.strip().rstrip(".")
+        norm_license = license_hw_id.strip().rstrip(".")
 
         if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
-            return False, (
-                f"Hardware ID non valido\n"
-                f"Atteso: {license_hw_id}\n"
-                f"Rilevato: {current_hw_id}"
-            )
+            return False, (f"Hardware ID non valido\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}")
 
         # Validazione scadenza
         expiry_str = payload.get("Scadenza Licenza", "")
         if expiry_str:
             try:
-                day, month, year = map(int, expiry_str.split('/'))
+                day, month, year = map(int, expiry_str.split("/"))
                 expiry_date = date(year, month, day)
-                
+
                 if date.today() > expiry_date:
                     return False, f"Licenza SCADUTA il {expiry_str}"
             except ValueError:
                 return False, "Formato data scadenza non valido"
 
-        cliente = payload.get('Cliente', 'Utente')
+        cliente = payload.get("Cliente", "Utente")
         return True, f"Licenza valida per: {cliente}"
 
     except Exception as e:

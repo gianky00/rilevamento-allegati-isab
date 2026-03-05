@@ -2,6 +2,9 @@
 Intelleo PDF Splitter - Configuration Manager
 Gestisce il caricamento e salvataggio della configurazione JSON.
 """
+
+import builtins
+import contextlib
 import json
 import os
 import sys
@@ -10,26 +13,26 @@ import sys
 def get_config_details():
     """
     Determina la directory base e il percorso del file di configurazione.
-    
+
     Logica:
     1. Se esiste in APPDATA, usa quello per lettura e scrittura.
     2. Se esiste solo nella cartella dell'app, usalo per caricare i default,
        ma imposta il salvataggio in APPDATA.
     3. Altrimenti, usa APPDATA come default assoluto.
     """
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         app_dir = os.path.dirname(sys.executable)
     else:
         app_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    local_config = os.path.join(app_dir, 'config.json')
-    
-    app_data_root = os.getenv('APPDATA')
+
+    local_config = os.path.join(app_dir, "config.json")
+
+    app_data_root = os.getenv("APPDATA")
     if not app_data_root:
-        app_data_root = os.path.expanduser('~')
-    
-    app_data_dir = os.path.join(app_data_root, 'Intelleo PDF Splitter')
-    appdata_config = os.path.join(app_data_dir, 'config.json')
+        app_data_root = os.path.expanduser("~")
+
+    app_data_dir = os.path.join(app_data_root, "Intelleo PDF Splitter")
+    appdata_config = os.path.join(app_data_dir, "config.json")
 
     # 1. Priorità assoluta: se esiste in APPDATA, è il file dell'utente.
     if os.path.exists(appdata_config):
@@ -37,10 +40,8 @@ def get_config_details():
 
     # 2. Se esiste in locale ma non in APPDATA, usalo come sorgente iniziale.
     if os.path.exists(local_config):
-        try:
+        with contextlib.suppress(builtins.BaseException):
             os.makedirs(app_data_dir, exist_ok=True)
-        except:
-            pass
         return app_data_dir, appdata_config
 
     # 3. Default: usa APPDATA
@@ -48,7 +49,7 @@ def get_config_details():
         os.makedirs(app_data_dir, exist_ok=True)
     except Exception:
         return app_dir, local_config
-    
+
     return app_data_dir, appdata_config
 
 
@@ -64,9 +65,9 @@ def load_config():
     # 1. Tenta il caricamento dal file principale (solitamente APPDATA)
     try:
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
                 return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         print(f"[AVVISO] File di configurazione '{CONFIG_FILE}' corrotto o inaccessibile: {e}")
         try:
             backup_path = CONFIG_FILE + ".bak"
@@ -79,14 +80,14 @@ def load_config():
 
     # 2. Se non trovato o corrotto, prova a leggere il template locale dalla cartella dell'app
     try:
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             app_dir = os.path.dirname(sys.executable)
         else:
             app_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        local_config = os.path.join(app_dir, 'config.json')
+
+        local_config = os.path.join(app_dir, "config.json")
         if os.path.exists(local_config):
-            with open(local_config, 'r', encoding='utf-8') as f:
+            with open(local_config, encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
         print(f"[ERRORE] Impossibile caricare configurazione locale: {e}")
@@ -104,8 +105,8 @@ def save_config(data):
         dir_name = os.path.dirname(CONFIG_FILE)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        
-        with open(tmp_file, 'w', encoding='utf-8') as f:
+
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
@@ -115,8 +116,6 @@ def save_config(data):
     except Exception as e:
         print(f"[ERRORE] Salvataggio configurazione in '{CONFIG_FILE}': {e}")
         if os.path.exists(tmp_file):
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 os.remove(tmp_file)
-            except:
-                pass
         raise e

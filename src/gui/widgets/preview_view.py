@@ -2,20 +2,22 @@
 Intelleo PDF Splitter — PreviewGraphicsView
 Vista grafica con zoom e pan per anteprima PDF.
 """
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QCursor, QPixmap
+from PySide6.QtGui import QBrush, QColor, QCursor
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
 
 from gui.theme import COLORS
 
 
 class PreviewGraphicsView(QGraphicsView):
     """Vista grafica per anteprima PDF nel dialog di revisione."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
-        self.setBackgroundBrush(QBrush(QColor(COLORS['bg_tertiary'])))
+        self.setBackgroundBrush(QBrush(QColor(COLORS["bg_tertiary"])))
         self._zoom = 1.0
         self._panning = False
         self._pan_start = None

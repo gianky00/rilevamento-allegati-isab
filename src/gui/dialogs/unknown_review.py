@@ -2,27 +2,39 @@
 Intelleo PDF Splitter — UnknownFilesReviewDialog
 Dialog per la revisione manuale dei file sconosciuti (Splitter).
 """
-import os
+
 import json
 import logging
+import os
 
-from PySide6.QtWidgets import (
-    QDialog, QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QPushButton, QListWidget, QGroupBox, QGridLayout, QLineEdit,
-    QMessageBox, QAbstractItemView
-)
 from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 try:
     import pymupdf as fitz
 except ImportError:
     import fitz
 
+import contextlib
+
 from gui.theme import COLORS, FONTS
 from gui.widgets.preview_view import PreviewGraphicsView
 from shared.constants import SESSION_FILE
 
-logger = logging.getLogger('MAIN')
+logger = logging.getLogger("MAIN")
 
 
 class UnknownFilesReviewDialog(QDialog):
@@ -55,12 +67,12 @@ class UnknownFilesReviewDialog(QDialog):
         left.setFixedWidth(300)
 
         self.lbl_file_info = QLabel("Caricamento...")
-        self.lbl_file_info.setFont(FONTS['subheading'])
+        self.lbl_file_info.setFont(FONTS["subheading"])
         self.lbl_file_info.setWordWrap(True)
         left_layout.addWidget(self.lbl_file_info)
 
         lbl_pages = QLabel("Seleziona le pagine da unire:")
-        lbl_pages.setFont(FONTS['body_bold'])
+        lbl_pages.setFont(FONTS["body_bold"])
         left_layout.addWidget(lbl_pages)
 
         self.pages_listbox = QListWidget()
@@ -71,7 +83,7 @@ class UnknownFilesReviewDialog(QDialog):
         action_group = QGroupBox(" Azione ")
         action_layout = QVBoxLayout(action_group)
         btn_rename = QPushButton("RINOMINA (Estrai Pagine)")
-        btn_rename.setFont(FONTS['body_bold'])
+        btn_rename.setFont(FONTS["body_bold"])
         btn_rename.setStyleSheet(f"background-color: {COLORS['accent']}; color: white; font-weight: bold;")
         btn_rename.clicked.connect(self.extract_and_rename)
         action_layout.addWidget(btn_rename)
@@ -92,8 +104,8 @@ class UnknownFilesReviewDialog(QDialog):
         if index >= len(self.review_tasks):
             QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
             if os.path.exists(SESSION_FILE):
-                try: os.remove(SESSION_FILE)
-                except Exception: pass
+                with contextlib.suppress(Exception):
+                    os.remove(SESSION_FILE)
             if self.on_finish:
                 self.on_finish()
             self.accept()
@@ -101,17 +113,19 @@ class UnknownFilesReviewDialog(QDialog):
 
         self.task_index = index
         self.task = self.review_tasks[index]
-        self.current_doc_path = self.task['unknown_path']
+        self.current_doc_path = self.task["unknown_path"]
 
         if self.current_doc:
-            try: self.current_doc.close()
-            except Exception: pass
+            with contextlib.suppress(Exception):
+                self.current_doc.close()
             self.current_doc = None
 
         try:
             self.current_doc = fitz.open(self.current_doc_path)
             self.available_pages = list(range(self.current_doc.page_count))
-            self.lbl_file_info.setText(f"File {index+1}/{len(self.review_tasks)}\n{os.path.basename(self.current_doc_path)}")
+            self.lbl_file_info.setText(
+                f"File {index + 1}/{len(self.review_tasks)}\n{os.path.basename(self.current_doc_path)}"
+            )
             self._refresh_pages_list()
             if self.available_pages:
                 self.pages_listbox.setCurrentRow(0)
@@ -127,14 +141,16 @@ class UnknownFilesReviewDialog(QDialog):
 
     def _on_page_select(self):
         items = self.pages_listbox.selectedItems()
-        if not items: return
+        if not items:
+            return
         last_row = self.pages_listbox.row(items[-1])
         if last_row < len(self.available_pages):
             self.preview_page_index = self.available_pages[last_row]
             self._render_preview()
 
     def _render_preview(self):
-        if not self.current_doc: return
+        if not self.current_doc:
+            return
         try:
             page = self.current_doc[self.preview_page_index]
             pix = page.get_pixmap(dpi=150)
@@ -167,10 +183,11 @@ class UnknownFilesReviewDialog(QDialog):
         dlayout.addLayout(grid)
 
         result = {}
+
         def on_ok():
-            result['odc'] = odc_entry.text().strip()
-            result['suffix'] = suffix_entry.text().strip()
-            if not result['odc'] or not result['suffix']:
+            result["odc"] = odc_entry.text().strip()
+            result["suffix"] = suffix_entry.text().strip()
+            if not result["odc"] or not result["suffix"]:
                 QMessageBox.warning(dialog, "Dati Mancanti", "Sia ODC che Suffisso sono obbligatori.")
                 return
             dialog.accept()
@@ -184,7 +201,7 @@ class UnknownFilesReviewDialog(QDialog):
         btn_layout.addWidget(btn_cancel)
         dlayout.addLayout(btn_layout)
 
-        if dialog.exec() != QDialog.DialogCode.Accepted or not result.get('odc'):
+        if dialog.exec() != QDialog.DialogCode.Accepted or not result.get("odc"):
             return
 
         selected_indices = [self.pages_listbox.row(item) for item in selected]
@@ -221,8 +238,8 @@ class UnknownFilesReviewDialog(QDialog):
 
     def finish_task(self):
         if self.current_doc:
-            try: self.current_doc.close()
-            except Exception: pass
+            with contextlib.suppress(Exception):
+                self.current_doc.close()
             self.current_doc = None
         try:
             if os.path.exists(self.current_doc_path):
@@ -234,13 +251,14 @@ class UnknownFilesReviewDialog(QDialog):
             del self.review_tasks[self.task_index]
             if self.review_tasks:
                 try:
-                    with open(SESSION_FILE, 'w') as f:
-                        json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
-                except Exception: pass
+                    with open(SESSION_FILE, "w") as f:
+                        json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
+                except Exception:
+                    pass
             else:
                 if os.path.exists(SESSION_FILE):
-                    try: os.remove(SESSION_FILE)
-                    except Exception: pass
+                    with contextlib.suppress(Exception):
+                        os.remove(SESSION_FILE)
             self.load_task(self.task_index)
         else:
             self.load_task(0)
@@ -250,18 +268,20 @@ class UnknownFilesReviewDialog(QDialog):
 
     def closeEvent(self, event):
         if self.current_doc:
-            try: self.current_doc.close()
-            except Exception: pass
+            with contextlib.suppress(Exception):
+                self.current_doc.close()
             self.current_doc = None
         if self.review_tasks:
             try:
                 os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
-                with open(SESSION_FILE, 'w') as f:
-                    json.dump({'odc': self.odc, 'tasks': self.review_tasks}, f, indent=4)
+                with open(SESSION_FILE, "w") as f:
+                    json.dump({"odc": self.odc, "tasks": self.review_tasks}, f, indent=4)
                 logger.info(f"Sessione salvata: {len(self.review_tasks)} task rimasti.")
             except Exception as e:
                 logger.error(f"Errore salvataggio sessione: {e}")
         if self.on_close_callback:
-            try: self.on_close_callback()
-            except Exception as e: logger.error(f"Error in on_close_callback: {e}")
+            try:
+                self.on_close_callback()
+            except Exception as e:
+                logger.error(f"Error in on_close_callback: {e}")
         super().closeEvent(event)

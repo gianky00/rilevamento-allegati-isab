@@ -1,9 +1,11 @@
-import unittest
+import builtins
+import contextlib
 import os
-import json
-import time
-from unittest.mock import patch, mock_open, MagicMock
+import unittest
+from unittest.mock import patch
+
 import config_manager
+
 
 class TestConfigManager(unittest.TestCase):
     def setUp(self):
@@ -11,20 +13,14 @@ class TestConfigManager(unittest.TestCase):
 
     def tearDown(self):
         if os.path.exists(self.test_config_file):
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 os.remove(self.test_config_file)
-            except:
-                pass
         if os.path.exists(self.test_config_file + ".bak"):
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 os.remove(self.test_config_file + ".bak")
-            except:
-                pass
         if os.path.exists(self.test_config_file + ".tmp"):
-            try:
+            with contextlib.suppress(Exception):
                 os.remove(self.test_config_file + ".tmp")
-            except:
-                pass
 
     @patch("config_manager.CONFIG_FILE", "test_config_temp.json")
     def test_load_config_defaults(self):
@@ -64,12 +60,11 @@ class TestConfigManager(unittest.TestCase):
             f.write("{ invalid")
 
         # Mock os.rename to raise OSError
-        with patch("os.rename", side_effect=OSError("Mock fail")):
-            with patch("builtins.print") as mock_print:
-                config = config_manager.load_config()
-                self.assertEqual(config, {})
-                # Check if error printed
-                mock_print.assert_called()
+        with patch("os.rename", side_effect=OSError("Mock fail")), patch("builtins.print") as mock_print:
+            config = config_manager.load_config()
+            self.assertEqual(config, {})
+            # Check if error printed
+            mock_print.assert_called()
 
     @patch("config_manager.CONFIG_FILE", "test_config_temp.json")
     def test_atomic_save_failure(self):
@@ -82,6 +77,7 @@ class TestConfigManager(unittest.TestCase):
 
             # Temp file should be removed by exception handler
             self.assertFalse(os.path.exists(self.test_config_file + ".tmp"))
+
 
 if __name__ == "__main__":
     unittest.main()

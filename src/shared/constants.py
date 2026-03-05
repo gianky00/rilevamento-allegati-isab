@@ -2,7 +2,9 @@
 Intelleo PDF Splitter — Costanti Globali
 Percorsi, signal file e costanti condivise tra tutti i layer.
 """
+
 import os
+
 import config_manager
 
 # Segnale per comunicazione tra utility ROI e app principale

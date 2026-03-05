@@ -2,24 +2,63 @@
 Intelleo PDF Splitter - License Updater
 Gestisce l'aggiornamento e la validazione della licenza.
 """
+
 import os
-import requests
-import json
 import sys
 from datetime import datetime, timedelta, timezone
+
+import requests
 from cryptography.fernet import Fernet
+
 import license_validator
 
 # Chiave per cifratura token grace period
-GRACE_PERIOD_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
+GRACE_PERIOD_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
 
 
 def get_github_token():
     """Ricostruisce il token GitHub offuscato."""
     chars = [
-        103, 104, 112, 95, 99, 57, 68, 103, 54, 116, 79, 67, 75, 104, 57, 89,
-        106, 112, 97, 70, 117, 66, 54, 73, 52, 79, 66, 121, 107, 103, 120, 114,
-        113, 98, 49, 85, 106, 106, 65, 105
+        103,
+        104,
+        112,
+        95,
+        99,
+        57,
+        68,
+        103,
+        54,
+        116,
+        79,
+        67,
+        75,
+        104,
+        57,
+        89,
+        106,
+        112,
+        97,
+        70,
+        117,
+        66,
+        54,
+        73,
+        52,
+        79,
+        66,
+        121,
+        107,
+        103,
+        120,
+        114,
+        113,
+        98,
+        49,
+        85,
+        106,
+        106,
+        65,
+        105,
     ]
     return "".join(chr(c) for c in chars)
 
@@ -27,14 +66,14 @@ def get_github_token():
 def get_license_dir():
     """Restituisce il percorso della cartella Licenza."""
     # Use APPDATA for license storage to ensure write permissions
-    if sys.platform == 'win32':
-        appdata = os.environ.get('APPDATA')
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
         if not appdata:
-            appdata = os.path.expanduser('~')
+            appdata = os.path.expanduser("~")
         license_dir = os.path.join(appdata, "Intelleo PDF Splitter", "Licenza")
     else:
         # Linux/Mac fallback
-        license_dir = os.path.join(os.path.expanduser('~'), ".intelleo-pdf-splitter", "licenza")
+        license_dir = os.path.join(os.path.expanduser("~"), ".intelleo-pdf-splitter", "licenza")
 
     return license_dir
 
@@ -49,12 +88,12 @@ def update_grace_timestamp():
     try:
         token_path = _get_validity_token_path()
         current_time = datetime.now(timezone.utc).isoformat()
-        
+
         cipher = Fernet(GRACE_PERIOD_KEY)
-        encrypted_time = cipher.encrypt(current_time.encode('utf-8'))
-        
+        encrypted_time = cipher.encrypt(current_time.encode("utf-8"))
+
         os.makedirs(os.path.dirname(token_path), exist_ok=True)
-        
+
         with open(token_path, "wb") as f:
             f.write(encrypted_time)
     except Exception as e:
@@ -64,51 +103,47 @@ def update_grace_timestamp():
 def check_grace_period():
     """
     Verifica se l'applicazione può funzionare offline.
-    
+
     Condizioni:
     1. Il file 'validity.token' deve esistere e essere decifrabile
     2. L'ultimo controllo online deve essere < 3 giorni fa
     3. L'orologio di sistema non deve essere stato modificato
-    
+
     Returns:
         True se consentito
-    
+
     Raises:
         Exception se il periodo di grazia è scaduto
     """
     token_path = _get_validity_token_path()
-    
+
     if not os.path.exists(token_path):
-        raise Exception(
-            "Nessuna validazione online precedente.\n"
-            "Connessione internet richiesta per il primo avvio."
-        )
-        
+        raise Exception("Nessuna validazione online precedente.\nConnessione internet richiesta per il primo avvio.")
+
     try:
         with open(token_path, "rb") as f:
             encrypted_data = f.read()
-            
+
         cipher = Fernet(GRACE_PERIOD_KEY)
-        decrypted_data = cipher.decrypt(encrypted_data).decode('utf-8')
+        decrypted_data = cipher.decrypt(encrypted_data).decode("utf-8")
         last_online = datetime.fromisoformat(decrypted_data)
         now = datetime.now(timezone.utc)
-        
+
         # Controllo rollback orologio
         if now < last_online - timedelta(minutes=5):
             raise Exception("Rilevata incoerenza orologio di sistema.")
-            
+
         # Controllo 3 giorni
         days_offline = (now - last_online).days
         if days_offline >= 3:
             raise Exception(
-                "Periodo di grazia offline (3 giorni) SCADUTO.\n"
-                "Connettiti a internet per rinnovare la licenza."
+                "Periodo di grazia offline (3 giorni) SCADUTO.\nConnettiti a internet per rinnovare la licenza."
             )
-            
+
         remaining_days = 3 - days_offline
         print(f"[LICENZA] Modalita' offline: {remaining_days} giorni rimanenti")
         return True
-        
+
     except Exception as e:
         if any(x in str(e) for x in ["SCADUTO", "incoerenza", "Nessuna validazione"]):
             raise e
@@ -118,7 +153,7 @@ def check_grace_period():
 def run_update():
     """
     Controlla e scarica aggiornamenti licenza da GitHub.
-    
+
     - Usa l'API GitHub per scaricare i file di licenza
     - Se tutti i file sono disponibili (200 OK), li scarica
     - Se qualche file manca (404), mantiene i file locali
@@ -126,12 +161,12 @@ def run_update():
     """
     print("[LICENZA] ======================================================")
     print("[LICENZA] Controllo aggiornamenti licenza...")
-    
-    hw_id = license_validator.get_hardware_id().strip().rstrip('.')
+
+    hw_id = license_validator.get_hardware_id().strip().rstrip(".")
     license_dir = get_license_dir()
-    
+
     print(f"[LICENZA] Hardware ID: {hw_id[:20]}...")
-    
+
     if not os.path.exists(license_dir):
         try:
             os.makedirs(license_dir)
@@ -142,28 +177,21 @@ def run_update():
 
     base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
     token = get_github_token()
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.raw"
-    }
-    
-    files_map = {
-        "config.dat": "config.dat",
-        "pyarmor.rkey": "pyarmor.rkey",
-        "manifest.json": "manifest.json" 
-    }
-    
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.raw"}
+
+    files_map = {"config.dat": "config.dat", "pyarmor.rkey": "pyarmor.rkey", "manifest.json": "manifest.json"}
+
     downloaded_content = {}
     incomplete_update = False
     network_error_occurred = False
-    
+
     # Tentativo download
     for remote_name, local_name in files_map.items():
         url = f"{base_url}/{remote_name}"
-        
+
         try:
             response = requests.get(url, headers=headers, timeout=10)
-            
+
             if response.status_code == 200:
                 downloaded_content[local_name] = response.content
                 print(f"[LICENZA] [OK] {remote_name} scaricato")
@@ -177,12 +205,12 @@ def run_update():
             else:
                 print(f"[AVVISO] {remote_name}: HTTP {response.status_code}")
                 incomplete_update = True
-                
+
         except requests.RequestException as e:
             print(f"[AVVISO] Connessione fallita: {e}")
             network_error_occurred = True
             break
-            
+
     if network_error_occurred:
         print("[LICENZA] Modalita' offline - verifica periodo di grazia...")
         check_grace_period()

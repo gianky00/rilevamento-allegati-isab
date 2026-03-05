@@ -2,10 +2,12 @@
 Intelleo PDF Splitter - Notification Manager (PySide6)
 Gestisce le notifiche toast a comparsa.
 """
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFrame
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont, QCursor
+
 import time
+
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
+from PySide6.QtGui import QCursor, QFont
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 
 class ToastNotification(QWidget):
@@ -16,11 +18,7 @@ class ToastNotification(QWidget):
         self._on_close_callback = on_close
 
         # Finestra senza bordi, sempre in primo piano
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setFixedSize(300, 80)
 
@@ -44,9 +42,7 @@ class ToastNotification(QWidget):
 
         close_btn = QLabel("✕")
         close_btn.setFont(QFont("Segoe UI", 10))
-        close_btn.setStyleSheet(
-            f"color: {fg_color}; background: transparent; padding: 2px 4px;"
-        )
+        close_btn.setStyleSheet(f"color: {fg_color}; background: transparent; padding: 2px 4px;")
         close_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         close_btn.mousePressEvent = lambda e: self.close_toast()
         header_layout.addWidget(close_btn)
@@ -112,9 +108,9 @@ class NotificationManager:
         container_layout.addWidget(self.bell_label)
 
         # Compatibilità: accetta sia layout che widget
-        if hasattr(parent_layout_or_widget, 'addWidget'):
+        if hasattr(parent_layout_or_widget, "addWidget"):
             parent_layout_or_widget.addWidget(container)
-        elif hasattr(parent_layout_or_widget, 'layout') and parent_layout_or_widget.layout():
+        elif hasattr(parent_layout_or_widget, "layout") and parent_layout_or_widget.layout():
             parent_layout_or_widget.layout().addWidget(container)
 
     def notify(self, title, message, level="INFO"):
@@ -135,6 +131,7 @@ class NotificationManager:
 
         # Calcolo posizione (stacking dal basso a destra)
         from PySide6.QtWidgets import QApplication
+
         screen = QApplication.primaryScreen()
         if screen:
             screen_geo = screen.availableGeometry()
@@ -149,38 +146,29 @@ class NotificationManager:
         margin = 20
 
         # Trova slot libero (conta solo toast ancora visibili)
-        active_toasts = [n for n in self.notifications if n['window'].isVisible()]
+        active_toasts = [n for n in self.notifications if n["window"].isVisible()]
         offset_y = margin + (len(active_toasts) * (window_height + 10))
 
         x = screen_width - window_width - margin
         y = screen_height - window_height - offset_y
 
         # Crea toast
-        toast = ToastNotification(
-            title, message, bg_color, fg_color,
-            on_close=self._on_toast_closed
-        )
+        toast = ToastNotification(title, message, bg_color, fg_color, on_close=self._on_toast_closed)
         toast.move(x, y)
         toast.show_animated()
 
         # Tracking
-        self.notifications.append({
-            'window': toast, 'title': title,
-            'msg': message, 'time': time.time()
-        })
+        self.notifications.append({"window": toast, "title": title, "msg": message, "time": time.time()})
 
         # Auto close dopo 5 secondi
         QTimer.singleShot(5000, lambda t=toast: self._close_toast(t))
 
     def _on_toast_closed(self, toast):
         """Callback quando un toast viene chiuso."""
-        self.notifications = [
-            n for n in self.notifications if n['window'] is not toast
-        ]
+        self.notifications = [n for n in self.notifications if n["window"] is not toast]
 
     def _fade_in(self, window, alpha=0):
         """Mantenuto per compatibilità, ma il fade è gestito da QPropertyAnimation."""
-        pass
 
     def _close_toast(self, window):
         """Chiude un toast se ancora visibile."""
@@ -194,11 +182,9 @@ class NotificationManager:
     def _update_bell(self):
         """Aggiorna il contatore sulla campanella."""
         if self.bell_label:
-            color = '#DC3545' if self.unread_count > 0 else '#6C757D'
+            color = "#DC3545" if self.unread_count > 0 else "#6C757D"
             self.bell_label.setText(f"🔔 {self.unread_count}")
-            self.bell_label.setStyleSheet(
-                f"color: {color}; background: transparent;"
-            )
+            self.bell_label.setStyleSheet(f"color: {color}; background: transparent;")
 
     def show_history(self, event=None):
         """Reset del contatore notifiche."""

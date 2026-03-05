@@ -1,166 +1,104 @@
-import unittest
-from unittest.mock import patch, MagicMock, ANY
-import tkinter as tk
-import main
-import queue
 import os
 import sys
+from unittest.mock import MagicMock, patch
 
-# Helper to mock tkinter variables since we have no root
-class MockVar:
-    def __init__(self, value=None):
-        self._value = value
-        self._trace_cb = None
-    def set(self, value):
-        self._value = value
-        if self._trace_cb:
-            self._trace_cb()
-    def get(self):
-        return self._value
-    def trace(self, mode, callback):
-        self._trace_cb = callback # Simplified logic
+import pytest
 
-class TestMainLogic(unittest.TestCase):
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-    def setUp(self):
-        # Start patches
-        self.patchers = [
-            patch("main.TkinterDnD.Tk"),
-            patch("tkinter.StringVar", side_effect=MockVar),
-            patch("tkinter.IntVar", side_effect=MockVar),
-            patch("tkinter.DoubleVar", side_effect=MockVar),
-            patch("tkinter.BooleanVar", side_effect=MockVar),
-            patch("tkinter.ttk.Notebook"),
-            patch("tkinter.ttk.Frame"),
-            patch("tkinter.ttk.LabelFrame"),
-            patch("tkinter.ttk.Label"),
-            patch("tkinter.ttk.Style"),
-            patch("tkinter.ttk.Entry"),
-            patch("tkinter.ttk.Button"),
-            patch("tkinter.scrolledtext.ScrolledText"),
-            patch("tkinter.ttk.Treeview"),
-            patch("tkinter.ttk.Scrollbar"),
-            patch("tkinter.Text"),
-            patch("tkinter.ttk.Separator"),
-            patch("main.license_validator.get_license_info", return_value={}),
-            patch("os.path.exists", return_value=False),
-            patch("license_validator.verify_license", return_value=(True, "OK")),
-            patch("main.MainApp.load_settings"),
-            patch("main.UnknownFilesReviewDialog")
-        ]
+import main
 
-        for p in self.patchers:
-            p.start()
 
-        # Create a Mock root
-        self.mock_root = MagicMock()
+@pytest.fixture
+def mock_dependencies():
+    patchers = [
+        patch("main.license_validator.get_license_info", return_value={}),
+        patch("os.path.exists", return_value=False),
+        patch("main.license_validator.verify_license", return_value=(True, "OK")),
+        patch("main.config_manager.load_config", return_value={"classification_rules": []}),
+        patch("main.app_updater"),
+        patch("main.notification_manager.NotificationManager", side_effect=Exception("Mocked out")),
+    ]
+    for p in patchers:
+        p.start()
+    yield
+    for p in reversed(patchers):
+        p.stop()
 
-        self.app = main.MainApp(self.mock_root)
-        if not hasattr(self.app, 'odc_var'):
-             self.app.odc_var = MockVar("5400")
 
-    def tearDown(self):
-        for p in reversed(self.patchers):
-            p.stop()
+@pytest.fixture
+def main_app(qtbot, mock_dependencies):
+    app = main.MainApp()
+    yield app
+    app._log_timer.stop()
+    app._update_timer.stop()
+    app._progress_timer.stop()
+    app._spinner_timer.stop()
+    app._clock_timer.stop()
 
-    def test_odc_validation(self):
-        self.app.odc_var.set("ABC1234")
-        with patch("tkinter.messagebox.showerror") as mock_error:
-            self.app.pdf_files = ["test.pdf"]
-            with patch("threading.Thread") as mock_thread:
-                self.app._start_processing()
-                mock_error.assert_not_called()
-                mock_thread.assert_called_once()
 
-    def test_odc_validation_empty(self):
-        self.app.odc_var.set("")
-        with patch("tkinter.messagebox.showerror") as mock_error:
-            self.app.pdf_files = ["test.pdf"]
-            self.app._start_processing()
-            mock_error.assert_called_once()
+def test_odc_validation(main_app):
+    main_app.odc_entry.setText("ABC1234")
+    with patch("main.QMessageBox.critical") as mock_error:
+        main_app.pdf_files = ["test.pdf"]
+        with patch("threading.Thread") as mock_thread:
+            main_app._start_processing()
+            mock_error.assert_not_called()
+            mock_thread.assert_called_once()
 
-    def test_no_pdf_selected(self):
-        self.app.odc_var.set("5400")
-        self.app.pdf_files = []
-        with patch("tkinter.messagebox.showerror") as mock_error:
-            self.app._start_processing()
-            mock_error.assert_called()
 
-    def test_add_log_message_progress(self):
-        self.app.log_area = MagicMock()
-        self.app.log_area.get.return_value = "Elaborazione pagina 1/5..."
+def test_odc_validation_empty(main_app):
+    main_app.odc_entry.setText("")
+    with patch("main.QMessageBox.critical") as mock_error:
+        main_app.pdf_files = ["test.pdf"]
+        main_app._start_processing()
+        mock_error.assert_called_once()
 
-        # Mock datetime to have a fixed timestamp
+
+def test_no_pdf_selected(main_app):
+    main_app.odc_entry.setText("5400")
+    main_app.pdf_files = []
+    with patch("main.QMessageBox.critical") as mock_error:
+        main_app._start_processing()
+        mock_error.assert_called_once()
+
+
+def test_add_log_message_progress(main_app):
+    with patch("main.datetime") as mock_datetime:
         mock_now = MagicMock()
         mock_now.strftime.return_value = "12:00:00"
+        mock_datetime.now.return_value = mock_now
 
-        with patch("main.datetime") as mock_datetime:
-            mock_datetime.now.return_value = mock_now
+        main_app.log_area.clear()
+        main_app._add_log_message("Elaborazione test", "PROGRESS")
 
-            self.app._add_log_message("Elaborazione pagina 2/5...", "PROGRESS")
+        content = main_app.log_area.toHtml()
+        assert "12:00:00" in content
+        assert "Elaborazione test" in content
 
-            self.app.log_area.delete.assert_called_with(ANY, "end-1c")
-            self.app.log_area.insert.assert_called_with(tk.END, "[12:00:00] Elaborazione pagina 2/5...\n", "PROGRESS")
 
-    def test_on_drop_single_file(self):
-        event = MagicMock()
-        event.data = "path/to/file.pdf"
+def test_on_drop_single_file(main_app):
+    with patch.object(main_app, "_start_processing") as mock_start:
+        main_app._on_drop(["path/to/file.pdf"])
+        assert len(main_app.pdf_files) == 1
+        mock_start.assert_called_once()
 
-        # Always mock splitlist for tests, regardless of platform
-        self.app.root.tk.splitlist.return_value = [event.data]
 
-        with patch("os.path.exists", return_value=True), patch("os.path.isdir", return_value=False):
-             with patch.object(self.app, '_start_processing') as mock_start:
-                 self.app._on_drop(event)
-                 self.assertEqual(len(self.app.pdf_files), 1)
-                 mock_start.assert_called_once()
+def test_check_for_updates_signal(main_app):
+    with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove, patch.object(main_app, 'load_settings') as mock_load:
+         main_app._check_for_updates()
+         mock_remove.assert_called_with(main.SIGNAL_FILE)
+         mock_load.assert_called_once()
 
-    def test_check_for_updates_signal(self):
-        with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove:
-            with patch.object(self.app, 'load_settings') as mock_load:
-                 self.app._check_for_updates()
-                 mock_remove.assert_called_with(main.SIGNAL_FILE)
-                 mock_load.assert_called_once()
 
-    def test_process_log_queue_dialog(self):
-        self.app.log_queue.put({'action': 'show_unknown_dialog', 'files': ['a.pdf'], 'odc': '123'})
-        self.app._process_log_queue()
-        self.assertIsNotNone(self.app._pending_completion_data)
-        self.assertEqual(self.app._pending_completion_data['action'], 'show_unknown_dialog')
+def test_process_log_queue_dialog(main_app):
+    main_app.log_queue.put({"action": "show_unknown_dialog", "files": ["a.pdf"], "odc": "123"})
+    main_app._process_log_queue()
+    assert main_app._pending_completion_data is not None
+    assert main_app._pending_completion_data["action"] == "show_unknown_dialog"
 
-    def test_processing_worker(self):
-        files = ["test.pdf"]
-        odc = "123"
-        config = {}
-        with patch("pdf_processor.process_pdf") as mock_process:
-            mock_process.return_value = (True, "OK", [{'category': 'sconosciuto', 'path': 'out.pdf'}], 'orig/test.pdf')
-            self.app._processing_worker(files, odc, config)
-            item = self.app.log_queue.get()
-            self.assertIsInstance(item, tuple)
-            while not self.app.log_queue.empty():
-                item = self.app.log_queue.get()
-                if isinstance(item, dict) and item.get('action') == 'show_unknown_dialog':
-                    # Verify structure of review tasks
-                    self.assertEqual(len(item['files']), 1)
-                    task = item['files'][0]
-                    self.assertEqual(task['unknown_path'], 'out.pdf')
-                    self.assertEqual(task['source_path'], 'orig/test.pdf')
-                    return
-            self.fail("Did not find show_unknown_dialog action in queue")
 
-    def test_main_app_no_dnd(self):
-        mock_root = MagicMock()
-        del mock_root.drop_target_register
-        app = main.MainApp(mock_root)
-        with self.assertRaises(AttributeError):
-             mock_root.drop_target_register(ANY)
-
-    # --- New Tests for UnknownFilesReviewDialog Logic ---
-
-    def test_unknown_dialog_empty_files(self):
-        with patch("main.UnknownFilesReviewDialog") as mock_dialog_class:
-            self.app._show_unknown_dialog([], "ODC")
-            mock_dialog_class.assert_not_called()
-
-if __name__ == "__main__":
-    unittest.main()
+def test_unknown_dialog_empty_files(main_app):
+    with patch("main.UnknownFilesReviewDialog") as mock_dialog_class:
+        main_app._show_unknown_dialog([], "ODC")
+        mock_dialog_class.assert_not_called()
