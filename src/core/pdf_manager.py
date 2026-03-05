@@ -9,6 +9,7 @@ class PdfManager:
     """Gestisce il caricamento e il rendering delle pagine PDF."""
 
     def __init__(self) -> None:
+        """Inizializza il gestore PDF con impostazioni predefinite."""
         self.doc: Optional[fitz.Document] = None
         self.current_path: Optional[str] = None
         self.dpi: int = 150

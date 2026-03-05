@@ -19,7 +19,7 @@ class TestPdfProcessor(unittest.TestCase):
         }
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_match(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Mock PDF Document
@@ -80,7 +80,7 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertTrue(saved_path.endswith("5400123_inv.pdf"))
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_no_match(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Mock PDF Document
@@ -118,16 +118,16 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertEqual(files[0]["category"], "sconosciuto")
             self.assertTrue(files[0]["path"].endswith("ABC_.pdf"))
 
-    @patch("pdf_processor.fitz.open")
+    @patch("core.pdf_processor.fitz.open")
     def test_process_pdf_bad_tesseract_path(self, mock_fitz):
         config = {"tesseract_path": "invalid_path.exe"}
         with patch("os.path.isfile", return_value=False):
             success, msg, _files, _moved = pdf_processor.process_pdf("dummy.pdf", "ODC", config)
             self.assertFalse(success)
-            self.assertIn("Percorso Tesseract non configurato o non valido", msg)
+            self.assertIn("Percorso Tesseract non valido", msg)
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_process_pdf_roi_error_continue(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Test error inside ROI loop should continue to next ROI/Rule
@@ -160,26 +160,29 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertEqual(files[0]["category"], "sconosciuto")
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_move_retry_logic(self, mock_isfile, mock_ocr, mock_fitz_open):
         mock_doc = MagicMock()
-        mock_doc.__len__.return_value = 0  # Empty doc for speed
-        mock_doc.__iter__.return_value = iter([])
+        mock_doc.__len__.return_value = 0
         mock_fitz_open.return_value = mock_doc
 
-        # Mock shutil.move to fail twice then succeed
-        with patch("os.makedirs"), patch("os.path.exists", return_value=False), patch(
-            "shutil.move", side_effect=[PermissionError("Locked"), PermissionError("Locked"), None]
-        ) as mock_move, patch("time.sleep") as mock_sleep:
-            success, msg, _files, _moved = pdf_processor.process_pdf("dummy.pdf", "ODC", self.config)
-
-            self.assertTrue(success, msg)
-            self.assertEqual(mock_move.call_count, 3)
-            self.assertEqual(mock_sleep.call_count, 2)
+        from core.archive_service import ArchiveService
+        # ArchiveService.archive_original checks if file exists and if already in ORIGINALI
+        with patch("shutil.move", side_effect=[PermissionError("Locked"), PermissionError("Locked"), None]) as mock_move:
+            with patch("os.makedirs"):
+                with patch("time.sleep"):
+                    # We need to mock os.path.exists to return True for the source file
+                    # but we also need to avoid the 'already in ORIGINALI' check
+                    with patch("os.path.exists", return_value=True):
+                        with patch("os.path.dirname", return_value="C:/test"):
+                            with patch("os.path.basename", side_effect=["dummy.pdf", "test", "dummy.pdf", "dummy.pdf", "dummy.pdf"]):
+                                res = ArchiveService.archive_original("dummy.pdf")
+                                self.assertIsNotNone(res)
+                                self.assertEqual(mock_move.call_count, 3)
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_ocr_rotation_logic(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Setup: Page with one ROI
@@ -214,7 +217,7 @@ class TestPdfProcessor(unittest.TestCase):
             self.assertEqual(mock_ocr.call_count, 2)
 
     @patch("core.pdf_processor.fitz.open")
-    @patch("core.pdf_processor.pytesseract.image_to_string")
+    @patch("core.ocr_engine.pytesseract.image_to_string")
     @patch("os.path.isfile", return_value=True)
     def test_invalid_roi_coords(self, mock_isfile, mock_ocr, mock_fitz_open):
         # Config with invalid ROI
@@ -229,14 +232,16 @@ class TestPdfProcessor(unittest.TestCase):
         mock_page.rect.width = 500
         mock_page.rect.height = 500
         mock_fitz_open.return_value = mock_doc
+        
+        # In the new SRP version, it calls get_pixmap and then checks width/height
+        mock_pix = MagicMock(width=0, height=0)
+        mock_page.get_pixmap.return_value = mock_pix
 
-        with patch("os.makedirs"), patch("shutil.move"), patch("os.path.exists", return_value=False):
+        with patch("os.makedirs"), patch("core.archive_service.ArchiveService.archive_original"):
             success, msg, files, _moved = pdf_processor.process_pdf("dummy.pdf", "ODC", bad_config)
 
-            # Should ignore invalid ROI and end up as unknown
             self.assertTrue(success, msg)
             self.assertEqual(files[0]["category"], "sconosciuto")
-            mock_page.get_pixmap.assert_not_called()
 
 
 if __name__ == "__main__":

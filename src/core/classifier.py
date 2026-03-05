@@ -8,6 +8,7 @@ class DocumentClassifier:
     """Gestisce la classificazione delle pagine basata su regole e keyword."""
 
     def __init__(self, rules: List[Dict[str, Any]]) -> None:
+        """Inizializza il classificatore con le regole di business."""
         self.rules = rules
 
     def classify_text(self, text: str) -> Optional[str]:

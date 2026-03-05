@@ -6,11 +6,22 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QLabel, QGroupBox, QPushButton, QSizePolicy
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtSvgWidgets import QSvgWidget
+import os
+from core.path_manager import get_asset_path
 from gui.theme import COLORS, FONTS
 
 class UIFactory:
     """Collezione di metodi statici per la creazione di componenti UI standardizzati."""
+
+    @staticmethod
+    def create_svg_icon(filename: str, size: int = 20) -> QSvgWidget:
+        """Crea un widget SVG caricando il file specificato."""
+        path = get_asset_path(filename)
+        svg = QSvgWidget(path)
+        svg.setFixedSize(size, size)
+        return svg
 
     @staticmethod
     def create_stat_card(title: str, initial_value: str) -> tuple[QFrame, QLabel]:
@@ -77,3 +88,27 @@ class UIFactory:
         layout.addWidget(v_label)
         
         return card, v_label
+
+    @staticmethod
+    def create_compact_info_row(label: str, icon_file: str) -> tuple[QFrame, QLabel]:
+        """Crea una riga informativa compatta con icona SVG."""
+        row = QFrame()
+        row.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border-radius: 4px; padding: 4px;")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 4, 8, 4)
+        
+        svg_icon = UIFactory.create_svg_icon(icon_file, 16)
+        layout.addWidget(svg_icon)
+        
+        text_lbl = QLabel(label + ":")
+        text_lbl.setFont(FONTS["body_bold"])
+        text_lbl.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        layout.addWidget(text_lbl)
+        
+        v_label = QLabel("...")
+        v_label.setFont(FONTS["mono_bold"])
+        v_label.setStyleSheet(f"color: {COLORS['accent']};")
+        layout.addWidget(v_label)
+        layout.addStretch()
+        
+        return row, v_label

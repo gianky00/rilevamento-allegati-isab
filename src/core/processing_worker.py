@@ -14,6 +14,7 @@ class PdfProcessingWorker:
     """Esegue l'elaborazione OCR PDF su un thread separato comunicando via coda thread-safe."""
 
     def __init__(self, log_queue: Queue, pdf_files: List[str], odc: str, config: Dict[str, Any], on_complete: Callable[[int, List[Dict[str, Any]]], None]):
+        """Inizializza il worker con la coda dei log, i file da elaborare e la callback di completamento."""
         self.log_queue = log_queue
         self.pdf_files = pdf_files
         self.odc = odc
@@ -37,6 +38,7 @@ class PdfProcessingWorker:
         for i, pdf_path in enumerate(self.pdf_files):
 
             def progress_callback(message: str, level: str = "INFO", current_idx: int = i, total: int = total_files) -> None:
+                """Gestisce i messaggi di log standard durante l'elaborazione."""
                 self.log_queue.put((message, level))
                 if "Elaborazione pagina" in message:
                     try:
@@ -60,6 +62,7 @@ class PdfProcessingWorker:
                         pass
 
             def advanced_progress_callback(data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files) -> None:
+                """Gestisce messaggi di progresso strutturati (percentuali, ETA) per aggiornare la barra di progresso."""
                 if isinstance(data, dict) and data.get("type") == "page_progress":
                     current_page = data.get("current", 0)
                     total_p = data.get("total", 1)

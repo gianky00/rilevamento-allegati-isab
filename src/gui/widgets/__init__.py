@@ -1,1 +1,3 @@
-# gui.widgets - Widget riutilizzabili
+"""
+Widget - Componenti UI riutilizzabili e specializzati.
+"""

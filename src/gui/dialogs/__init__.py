@@ -1,1 +1,3 @@
-# gui.dialogs - Finestre di dialogo
+"""
+Dialoghi - Finestre modali e editor per la configurazione.
+"""

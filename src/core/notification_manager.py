@@ -6,14 +6,16 @@ Gestisce le notifiche toast a comparsa.
 import time
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
-from PySide6.QtGui import QCursor, QFont
+from PySide6.QtGui import QCursor, QFont, QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
-
+from PySide6.QtSvgWidgets import QSvgWidget
+import os
 
 class ToastNotification(QWidget):
     """Widget per una singola notifica toast."""
 
     def __init__(self, title, message, bg_color, fg_color, on_close=None):
+        """Inizializza un widget di notifica toast a comparsa."""
         super().__init__()
         self._on_close_callback = on_close
 
@@ -81,37 +83,50 @@ class NotificationManager:
     """Gestisce le notifiche toast a comparsa."""
 
     def __init__(self, parent_widget):
+        """Inizializza il gestore delle notifiche e lo collega al controller se disponibile."""
         self.parent = parent_widget
         self.notifications = []
         self.unread_count = 0
-        self.bell_label = None
+        self.bell_container = None
+        self.bell_svg = None
+        self.bell_count_label = None
+        
+        # Connessione automatica ai segnali del controller se presente
+        if hasattr(parent_widget, "controller"):
+            parent_widget.controller.log_received.connect(self._on_controller_log)
+
+    def _on_controller_log(self, message: str, level: str) -> None:
+        """Riceve log dal controller e mostra notifiche per eventi critici."""
+        if level in ["SUCCESS", "ERROR"]:
+            # Filtra solo i messaggi più importanti per i toast
+            important_keywords = ["File completato", "ELABORAZIONE COMPLETATA", "Errore", "sincronizzata", "aggiornata"]
+            if any(kw in message for kw in important_keywords):
+                self.notify(level, message, level)
 
     def setup_bell_icon(self, parent_layout_or_widget):
         """
         Aggiunge l'icona della campanella alla dashboard.
-
-        Args:
-            parent_layout_or_widget: Il layout o widget padre dove aggiungere l'icona.
-                                      Accetta QLayout, QWidget, o oggetto con metodo addWidget.
         """
-        container = QFrame()
-        container.setStyleSheet("background: transparent;")
+        self.bell_container = QFrame()
+        self.bell_container.setStyleSheet("background: transparent;")
+        self.bell_container_layout = QHBoxLayout(self.bell_container)
+        self.bell_container_layout.setContentsMargins(10, 0, 10, 0)
+        self.bell_container_layout.setSpacing(5)
 
-        container_layout = QHBoxLayout(container)
-        container_layout.setContentsMargins(10, 0, 10, 0)
+        self.bell_svg = None
+        self.bell_count_label = QLabel("0")
+        self.bell_count_label.setStyleSheet("color: #6C757D; background: transparent;")
+        self.bell_container_layout.addWidget(self.bell_count_label)
+        
+        self.bell_container.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.bell_container.mousePressEvent = lambda e: self.show_history(e)
+        
+        self._update_bell()
 
-        self.bell_label = QLabel("🔔 0")
-        self.bell_label.setFont(QFont("Segoe UI Emoji", 12))
-        self.bell_label.setStyleSheet("color: #6C757D; background: transparent;")
-        self.bell_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.bell_label.mousePressEvent = lambda e: self.show_history(e)
-        container_layout.addWidget(self.bell_label)
-
-        # Compatibilità: accetta sia layout che widget
         if hasattr(parent_layout_or_widget, "addWidget"):
-            parent_layout_or_widget.addWidget(container)
+            parent_layout_or_widget.addWidget(self.bell_container)
         elif hasattr(parent_layout_or_widget, "layout") and parent_layout_or_widget.layout():
-            parent_layout_or_widget.layout().addWidget(container)
+            parent_layout_or_widget.layout().addWidget(self.bell_container)
 
     def notify(self, title, message, level="INFO"):
         """Crea una nuova notifica toast."""
@@ -181,10 +196,23 @@ class NotificationManager:
 
     def _update_bell(self):
         """Aggiorna il contatore sulla campanella."""
-        if self.bell_label:
+        if self.bell_container:
+            # Rimuove vecchio SVG
+            if self.bell_svg:
+                self.bell_svg.setParent(None)
+                self.bell_svg.deleteLater()
+            
+            # Crea nuovo SVG
             color = "#DC3545" if self.unread_count > 0 else "#6C757D"
-            self.bell_label.setText(f"🔔 {self.unread_count}")
-            self.bell_label.setStyleSheet(f"color: {color}; background: transparent;")
+            
+            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            path = os.path.join(base_path, "assets", "bell.svg")
+            self.bell_svg = QSvgWidget(path)
+            self.bell_svg.setFixedSize(20, 20)
+            self.bell_container_layout.insertWidget(0, self.bell_svg)
+            
+            self.bell_count_label.setText(str(self.unread_count))
+            self.bell_count_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
 
     def show_history(self, event=None):
         """Reset del contatore notifiche."""

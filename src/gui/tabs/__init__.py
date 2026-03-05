@@ -1,1 +1,3 @@
-# gui.tabs - Tab dell'applicazione principale
+"""
+Tab - Moduli per le singole sezioni del QTabWidget principale.
+"""

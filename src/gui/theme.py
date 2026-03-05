@@ -33,6 +33,7 @@ FONTS = {
     "body": QFont("Segoe UI", 10),
     "body_bold": QFont("Segoe UI", 10, QFont.Weight.Bold),
     "small": QFont("Segoe UI", 9),
+    "small_bold": QFont("Segoe UI", 9, QFont.Weight.Bold),
     "mono": QFont("Consolas", 10),
     "mono_bold": QFont("Consolas", 10, QFont.Weight.Bold),
 }

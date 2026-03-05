@@ -9,6 +9,7 @@ class RuleService:
     """Gestisce la logica di business per le regole di classificazione."""
 
     def __init__(self, config: Dict[str, Any]) -> None:
+        """Inizializza il servizio regole con l'oggetto configurazione fornito."""
         self.config = config
 
     def get_rules(self) -> List[Dict[str, Any]]:

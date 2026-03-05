@@ -1,1 +1,3 @@
-# gui - Layer di presentazione PySide6
+"""
+Pacchetto GUI - Interfacce utente, widget e temi.
+"""

@@ -42,6 +42,7 @@ class UnknownFilesReviewDialog(QDialog):
     """Dialog per la revisione manuale (Splitter) dei file sconosciuti."""
 
     def __init__(self, parent: Any, review_tasks: List[Dict[str, Any]], on_finish: Optional[Any] = None, odc: Optional[str] = None, on_close_callback: Optional[Any] = None) -> None:
+        """Inizializza il dialog per la revisione manuale dei documenti non classificati."""
         super().__init__(parent)
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
         self.showMaximized()
@@ -59,6 +60,7 @@ class UnknownFilesReviewDialog(QDialog):
         self.load_task(0)
 
     def _create_widgets(self) -> None:
+        """Configura layout e widget della finestra di revisione."""
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
@@ -102,6 +104,7 @@ class UnknownFilesReviewDialog(QDialog):
         layout.addWidget(self.preview, 1)
 
     def load_task(self, index: int) -> None:
+        """Carica il documento PDF corrispondente all'indice della lista dei task."""
         if index >= len(self.review_tasks):
             QMessageBox.information(self, "Completato", "Tutti i file sono stati revisionati con successo!")
             if os.path.exists(SESSION_FILE):
@@ -136,11 +139,13 @@ class UnknownFilesReviewDialog(QDialog):
             self.skip_task()
 
     def _refresh_pages_list(self) -> None:
+        """Aggiorna l'elenco grafico delle pagine disponibili per l'estrazione."""
         self.pages_listbox.clear()
         for real_idx in self.available_pages:
             self.pages_listbox.addItem(f"Pagina {real_idx + 1}")
 
     def _on_page_select(self) -> None:
+        """Callback eseguita al cambio della selezione nella lista pagine per aggiornare l'anteprima."""
         items = self.pages_listbox.selectedItems()
         if not items:
             return
@@ -150,6 +155,7 @@ class UnknownFilesReviewDialog(QDialog):
             self._render_preview()
 
     def _render_preview(self) -> None:
+        """Renderizza graficamente la pagina PDF selezionata nell'area di anteprima."""
         if not self.current_doc:
             return
         try:
@@ -161,6 +167,7 @@ class UnknownFilesReviewDialog(QDialog):
             logger.error(f"Render error: {e}")
 
     def extract_and_rename(self) -> None:
+        """Estrae le pagine selezionate in un nuovo file PDF rinominato dall'utente."""
         selected = self.pages_listbox.selectedItems()
         if not selected:
             QMessageBox.warning(self, "Attenzione", "Seleziona almeno una pagina.")
@@ -186,6 +193,7 @@ class UnknownFilesReviewDialog(QDialog):
         result = {}
 
         def on_ok() -> None:
+            """Valida l'input ODC/Suffisso e procede con la creazione del PDF."""
             result["odc"] = odc_entry.text().strip()
             result["suffix"] = suffix_entry.text().strip()
             if not result["odc"] or not result["suffix"]:

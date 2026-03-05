@@ -1,3 +1,6 @@
+"""
+Utility per la generazione dinamica dell'icona dell'applicazione.
+"""
 from PIL import Image, ImageDraw
 
 

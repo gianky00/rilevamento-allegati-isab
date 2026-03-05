@@ -28,6 +28,7 @@ class ROIController(QObject):
     roi_data_ready = Signal(list) # categories
 
     def __init__(self) -> None:
+        """Inizializza il controller e i gestori per le ROI e i PDF."""
         super().__init__()
         self.roi_manager = RoiManager()
         self.pdf_manager = PdfManager()
@@ -75,26 +76,32 @@ class ROIController(QObject):
         self.zoom_changed.emit(self.zoom_level)
 
     def next_page(self) -> None:
+        """Naviga alla pagina successiva del documento PDF."""
         if self.pdf_manager.doc and self.current_page_index < self.pdf_manager.get_page_count() - 1:
             self.current_page_index += 1
             self.render_current_page()
 
     def prev_page(self) -> None:
+        """Naviga alla pagina precedente del documento PDF."""
         if self.current_page_index > 0:
             self.current_page_index -= 1
             self.render_current_page()
 
     def set_zoom(self, level: float) -> None:
+        """Imposta il livello di zoom (limite tra 0.25 e 4.0) e aggiorna la vista."""
         self.zoom_level = max(0.25, min(4.0, level))
         self.render_current_page()
 
     def zoom_in(self) -> None:
+        """Incrementa lo zoom del 20%."""
         self.set_zoom(self.zoom_level * 1.2)
 
     def zoom_out(self) -> None:
+        """Decrementa lo zoom del 20%."""
         self.set_zoom(self.zoom_level / 1.2)
 
     def zoom_reset(self) -> None:
+        """Ripristina lo zoom al 100%."""
         self.set_zoom(1.0)
 
     def add_roi(self, category: str, coords: List[int]) -> bool:
@@ -124,7 +131,9 @@ class ROIController(QObject):
             self.status_message.emit(f"Errore salvataggio: {e}", "ERROR")
 
     def get_rules(self) -> List[Dict[str, Any]]:
+        """Restituisce l'elenco delle regole di classificazione correnti."""
         return self.roi_manager.get_rules()
 
     def get_categories(self) -> List[str]:
+        """Restituisce i nomi delle categorie disponibili."""
         return self.roi_manager.get_categories()

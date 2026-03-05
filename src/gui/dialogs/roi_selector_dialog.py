@@ -12,6 +12,7 @@ class RoiSelectorDialog(QDialog):
     """Dialog per associare una ROI a una categoria."""
 
     def __init__(self, parent: Any, categories: List[str], roi_coords: List[int], colors: dict) -> None:
+        """Inizializza il dialog per l'associazione di una ROI a una categoria specifica."""
         super().__init__(parent)
         self.categories = categories
         self.roi_coords = roi_coords
@@ -19,6 +20,7 @@ class RoiSelectorDialog(QDialog):
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Configura l'interfaccia utente del dialog di selezione categoria."""
         self.setWindowTitle("Salva Nuova ROI")
         self.setFixedSize(550, 250)
         self.setModal(True)
@@ -61,4 +63,5 @@ class RoiSelectorDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def get_selected_category(self) -> str:
+        """Restituisce il nome della categoria selezionata nel menu a tendina."""
         return self.category_combo.currentText()

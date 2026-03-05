@@ -17,6 +17,7 @@ class ROIGraphicsView(QGraphicsView):
     """Vista grafica con supporto a zoom, pan e disegno rettangoli ROI."""
 
     def __init__(self, app: Any, parent: Optional[Any] = None) -> None:
+        """Inizializza la vista grafica configurando la scena e lo stile di base."""
         super().__init__(parent)
         self.app = app
         self.scene_ref = QGraphicsScene(self)
@@ -32,6 +33,7 @@ class ROIGraphicsView(QGraphicsView):
         self._pan_start: Optional[QPointF] = None
 
     def wheelEvent(self, event: Any) -> None:
+        """Gestisce lo zoom con la rotellina del mouse quando Ctrl è premuto."""
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             if event.angleDelta().y() > 0:
                 self.app.zoom_in()
@@ -42,6 +44,7 @@ class ROIGraphicsView(QGraphicsView):
             super().wheelEvent(event)
 
     def mousePressEvent(self, event: Any) -> None:
+        """Gestisce l'inizio del disegno di una ROI, il pan o la cancellazione."""
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self._panning = True
             self._pan_start = event.position().toPoint()
@@ -64,6 +67,7 @@ class ROIGraphicsView(QGraphicsView):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: Any) -> None:
+        """Aggiorna la geometria del rettangolo durante il disegno o esegue il panning."""
         if self._panning and self._pan_start:
             delta = event.position().toPoint() - self._pan_start
             self._pan_start = event.position().toPoint()
@@ -90,6 +94,7 @@ class ROIGraphicsView(QGraphicsView):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: Any) -> None:
+        """Finalizza il disegno della ROI convertendo le coordinate in formato PDF."""
         if self._panning:
             self._panning = False
             self.setCursor(QCursor(Qt.CursorShape.CrossCursor if not self.app.delete_mode else Qt.CursorShape.ForbiddenCursor))

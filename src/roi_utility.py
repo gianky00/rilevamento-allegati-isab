@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from gui.widgets.pdf_graphics_view import ROIGraphicsView
 from gui.dialogs.roi_selector_dialog import RoiSelectorDialog
+from gui.widgets.roi_renderer import ROIRenderer
 from core.roi_controller import ROIController
 
 SIGNAL_FILE = ".update_signal"
@@ -52,6 +53,7 @@ class ROIDrawingApp(QMainWindow):
     """Applicazione per la gestione delle aree ROI."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
+        """Inizializza l'applicazione, il controller e configura la GUI."""
         super().__init__(parent)
         self.setWindowTitle("🎯 Intelleo - Utility Gestione ROI")
         self.resize(1300, 900)
@@ -263,14 +265,17 @@ class ROIDrawingApp(QMainWindow):
         self.controller.zoom_changed.connect(self._on_zoom_changed)
 
     def _on_status_message(self, message: str, level: str) -> None:
+        """Visualizza un messaggio di stato e mostra dialoghi di errore se necessario."""
         self.status_bar.setText(f"[{level}] {message}")
         if level == "ERROR":
             QMessageBox.critical(self, "Errore", message)
 
     def _on_zoom_changed(self, level: float) -> None:
+        """Aggiorna l'etichetta dello zoom nella UI."""
         self.zoom_label.setText(f"{int(level * 100)}%")
 
     def _on_page_rendered(self, pixmap: QPixmap, current: int, total: int) -> None:
+        """Visualizza il pixmap della pagina PDF e aggiorna i controlli di navigazione."""
         self.nav_widget.setVisible(True)
         self.page_label.setText(f"Pagina {current + 1} / {total}")
         self.prev_page_button.setEnabled(current > 0)
@@ -308,12 +313,15 @@ class ROIDrawingApp(QMainWindow):
             self.status_bar.setText("[OK] Modalità Disegno: Trascina per creare una nuova ROI")
 
     def zoom_in(self) -> None:
+        """Aumenta il livello di zoom della visualizzazione PDF."""
         self.controller.zoom_in()
 
     def zoom_out(self) -> None:
+        """Diminuisce il livello di zoom della visualizzazione PDF."""
         self.controller.zoom_out()
 
     def zoom_reset(self) -> None:
+        """Ripristina lo zoom al valore predefinito (100%)."""
         self.controller.zoom_reset()
 
     def open_pdf(self) -> None:
@@ -327,55 +335,28 @@ class ROIDrawingApp(QMainWindow):
         self.controller.render_current_page()
 
     def draw_existing_rois(self) -> None:
-        """Disegna le ROI esistenti recuperandole dal controller."""
+        """Disegna le ROI esistenti delegando al renderer."""
         scene = self.canvas.scene_ref
-        # Rimuovi solo le ROI, non il pixmap
+        
+        # Pulizia item ROI precedenti
         for item in list(self.roi_item_map.keys()):
             with contextlib.suppress(Exception):
                 scene.removeItem(item)
         self.roi_item_map.clear()
 
-        factor = (150 * self.controller.zoom_level) / 72
+        renderer = ROIRenderer(scene, self.controller.zoom_level)
+        
         for rule_index, rule in enumerate(self.controller.get_rules()):
             category_name = rule.get("category_name", "N/A")
             color_hex = rule.get("color", "#FF0000")
-            color = QColor(color_hex)
 
             for roi_index, roi in enumerate(rule.get("rois", [])):
-                if not all(isinstance(c, int) for c in roi) or len(roi) != 4:
-                    continue
-
-                x0, y0, x1, y1 = [c * factor for c in roi]
-
-                # Rettangolo ROI
-                pen = QPen(color, 3, Qt.PenStyle.DashLine)
-                brush = QBrush(QColor(color.red(), color.green(), color.blue(), 40))
-                rect_item = scene.addRect(QRectF(x0, y0, x1 - x0, y1 - y0), pen, brush)
-
-                # Etichetta categoria con sfondo
-                text_width = len(category_name) * 8 + 10
-                text_bg = scene.addRect(QRectF(x0, y0, text_width, 18), QPen(Qt.PenStyle.NoPen), QBrush(color))
-
-                # Calcola contrasto testo
-                h = color_hex.lstrip("#")
-                try:
-                    rgb = tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
-                    brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
-                    text_color = QColor("white") if brightness < 128 else QColor("black")
-                except Exception:
-                    text_color = QColor("white")
-
-                text_item = QGraphicsSimpleTextItem(category_name)
-                text_item.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-                text_item.setBrush(QBrush(text_color))
-                text_item.setPos(x0 + 5, y0 + 1)
-                scene.addItem(text_item)
-
-                # Mappa per cancellazione
+                items = renderer.draw_roi(rule_index, roi_index, category_name, color_hex, roi)
+                
+                # Registra item per interazione (cancellazione)
                 roi_info = {"rule_index": rule_index, "roi_index": roi_index}
-                self.roi_item_map[rect_item] = roi_info
-                self.roi_item_map[text_item] = roi_info
-                self.roi_item_map[text_bg] = roi_info
+                for item in items:
+                    self.roi_item_map[item] = roi_info
 
     def handle_delete_click(self, scene_pos: QPointF) -> None:
         """Gestisce il click in modalità cancellazione."""
@@ -427,9 +408,11 @@ class ROIDrawingApp(QMainWindow):
         self.controller.save_and_signal()
 
     def prev_page(self) -> None:
+        """Naviga alla pagina precedente del PDF caricato."""
         self.controller.prev_page()
 
     def next_page(self) -> None:
+        """Naviga alla pagina successiva del PDF caricato."""
         self.controller.next_page()
 
     def update_nav_controls(self) -> None:

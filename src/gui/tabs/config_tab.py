@@ -12,11 +12,13 @@ class ConfigTab(QWidget):
     """Gestisce la costruzione e i widget della tab Configurazione."""
 
     def __init__(self, parent: QWidget, main_app: Any) -> None:
+        """Inizializza la tab di configurazione collegandola all'applicazione principale."""
         super().__init__(parent)
         self.main_app = main_app
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Configura l'interfaccia utente, i gruppi e i widget della tab configurazione."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         

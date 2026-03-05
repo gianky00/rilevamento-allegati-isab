@@ -1,1 +1,3 @@
-# core - Logica di business (nessuna dipendenza GUI)
+"""
+Pacchetto Core - Logica di business e motori di elaborazione.
+"""

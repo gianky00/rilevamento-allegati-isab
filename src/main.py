@@ -1,3 +1,7 @@
+"""
+Intelleo PDF Splitter - Applicazione Principale (View)
+Gestisce l'interfaccia grafica e coordina l'interazione tra utente e controller.
+"""
 import logging
 logger = logging.getLogger("MAIN")
 
@@ -72,7 +76,14 @@ except Exception as e:
 
 
 class MainApp(QMainWindow):
+    """Finestra principale dell'applicazione Intelleo PDF Splitter."""
     def __init__(self, auto_file_path: Optional[str] = None) -> None:
+        """
+        Inizializza la finestra principale, carica i parametri e configura la GUI.
+        
+        Args:
+            auto_file_path: Percorso di un file PDF da elaborare all'avvio.
+        """
         super().__init__()
         logger.info("Inizializzazione MainApp...")
         self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
@@ -137,21 +148,21 @@ class MainApp(QMainWindow):
         self.notebook = QTabWidget()
         main_layout.addWidget(self.notebook)
         
-        self.dashboard_tab = QWidget()
-        self.processing_tab = QWidget()
-        self.config_tab = QWidget()
-        self.help_tab = QWidget()
-        
         # —————— Tab Initialization ——————
-        self.dashboard = DashboardTab(self.dashboard_tab, self)
-        self.processing = ProcessingTab(self.processing_tab, self)
-        self.config_panel = ConfigTab(self.config_tab, self)
-        self.help_panel = HelpTab(self.help_tab, self)
+        self.dashboard = DashboardTab(None, self)
+        self.processing = ProcessingTab(None, self)
+        self.config_panel = ConfigTab(None, self)
+        self.help_panel = HelpTab(None, self)
         
-        self.notebook.addTab(self.dashboard_tab, "Dashboard")
-        self.notebook.addTab(self.processing_tab, "Elaborazione")
-        self.notebook.addTab(self.config_tab, "Configurazione")
-        self.notebook.addTab(self.help_tab, "Guida")
+        self.dashboard_tab = self.dashboard
+        self.processing_tab = self.processing
+        self.config_tab = self.config_panel
+        self.help_tab = self.help_panel
+        
+        self.notebook.addTab(self.dashboard, "Dashboard")
+        self.notebook.addTab(self.processing, "Elaborazione")
+        self.notebook.addTab(self.config_panel, "Configurazione")
+        self.notebook.addTab(self.help_panel, "Guida")
         
         # —————— Final Initialization ——————
         self.load_settings()
@@ -194,6 +205,7 @@ class MainApp(QMainWindow):
         self.controller.unknown_files_found.connect(self._show_unknown_dialog)
 
     def _on_rules_updated(self) -> None:
+        """Aggiorna l'interfaccia utente quando le regole di classificazione cambiano."""
         rs = self.controller.rule_service
         if not rs:
             return
@@ -202,12 +214,14 @@ class MainApp(QMainWindow):
             self.rules_count_label.setText(str(len(rs.get_rules())))
 
     def _on_processing_state_changed(self, is_processing: bool) -> None:
+        """Aggiorna lo stato interno di elaborazione e finalizza se necessario."""
         self._is_processing = is_processing
         # UI updates if needed
         if not is_processing:
             self._finalize_processing()
 
     def _on_license_updated(self, info: Dict[str, Any]) -> None:
+        """Aggiorna i widget della licenza con le informazioni ricevute dal controller."""
         if info.get("is_valid"):
             self.license_status_label.setText("✓ SISTEMA ATTIVO")
             self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; border: none;")
@@ -221,6 +235,7 @@ class MainApp(QMainWindow):
         self.license_fields["last_access"].setText(info.get("last_access", "---"))
 
     def _on_progress_update(self, value: float, text: str, eta_seconds: Optional[int]) -> None:
+        """Aggiorna i widget di progresso durante l'elaborazione."""
         self._target_progress = value
         self.progress_label.setText(text)
         if eta_seconds is not None:
@@ -253,9 +268,54 @@ class MainApp(QMainWindow):
         QTimer.singleShot(100, self._select_pdf)
 
     # ======== COMMON UI HELPERS (STUBS) ========
-    def _on_help_topic_select(self, current: QListWidget, previous: Optional[QListWidget]=None) -> None:
-        """Stub mantenuto per compatibilità durante la transizione."""
-        pass
+    def _update_ui_file_selection(self) -> None:
+        """Aggiorna le label basandosi sullo stato del controller."""
+        count = len(self.controller.pdf_files)
+        if count == 0:
+            self.pdf_path_label.setText("Nessun file selezionato")
+        elif count == 1:
+            self.pdf_path_label.setText(os.path.basename(self.controller.pdf_files[0]))
+        else:
+            self.pdf_path_label.setText(f"{count} file selezionati")
+
+    def _select_pdf(self) -> None:
+        """Apre il selettore di file PDF."""
+        paths, _ = QFileDialog.getOpenFileNames(self, "Seleziona file PDF", "", "PDF Files (*.pdf)")
+        if paths:
+            self.controller.set_pdf_files(list(paths))
+            self._update_ui_file_selection()
+            self._start_processing()
+
+    def _select_folder(self) -> None:
+        """Apre il selettore di cartelle per trovare file PDF."""
+        folder = QFileDialog.getExistingDirectory(self, "Seleziona Cartella")
+        if folder:
+            self.controller.set_pdf_files([folder])
+            self._update_ui_file_selection()
+            self.notebook.setCurrentWidget(self.processing_tab)
+            self._start_processing()
+
+    def _on_drop(self, files: List[str]) -> None:
+        """Gestisce il drag-and-drop di file sulla GUI."""
+        if files:
+            self.controller.set_pdf_files(files)
+            self._update_ui_file_selection()
+            self.notebook.setCurrentWidget(self.processing_tab)
+            self._start_processing()
+
+    def _handle_cli_start(self, path: str) -> None:
+        """Inizializza l'elaborazione se un file viene passato come argomento CLI."""
+        self.controller.set_pdf_files([path])
+        if not self.controller.pdf_files:
+            QMessageBox.critical(self, "Errore", "Nessun file PDF trovato nel percorso indicato.")
+            return
+            
+        self._update_ui_file_selection()
+        odc, ok = QInputDialog.getText(self, "Input ODC", "Inserisci il codice ODC:")
+        if ok and odc:
+            self.odc_entry.setText(odc)
+            self.notebook.setCurrentWidget(self.processing_tab)
+            self._start_processing()
 
     # ======== BUSINESS LOGIC ========
     def _display_license_info(self) -> None:
@@ -276,19 +336,9 @@ class MainApp(QMainWindow):
         prefix = prefix_map.get(level, "")
         color = color_map.get(level, COLORS["text_primary"])
         self.log_area.append(f'<span style="color:{color}">[{timestamp}] {prefix}{message}</span>')
-        if level in ["SUCCESS", "ERROR"] and self.notifier:
-            if any(kw in message for kw in ["File completato", "ELABORAZIONE COMPLETATA", "Errore"]):
-                self.notifier.notify(level, message, level)
+        
         if level in ["SUCCESS", "ERROR", "WARNING"]:
             self.recent_log.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
-
-    def _add_recent_log(self, message: str, level: str = "INFO") -> None:
-        """Metodo legacy rimosso (ora integrato in _add_log_message)."""
-        pass
-
-    def _process_log_queue(self) -> None:
-        """Metodo rimosso: log gestiti da AppController segnali."""
-        pass
 
     def _smooth_progress_tick(self) -> None:
         """Aggiorna la barra di progresso con un'animazione fluida."""
@@ -299,23 +349,12 @@ class MainApp(QMainWindow):
         elif self._current_progress != self._target_progress:
             self._current_progress = self._target_progress
             self.progress_bar.setValue(int(self._current_progress * 10))
-            if self._current_progress >= 99.9 and self._pending_completion_data:
-                self._finalize_processing()
 
     def _finalize_processing(self) -> None:
         """Completa le operazioni post-elaborazione."""
-        if not self._pending_completion_data:
-            return
-        data = self._pending_completion_data
-        self._pending_completion_data = None
-        if data.get("action") == "show_unknown_dialog" and data.get("files"):
-            self._show_unknown_dialog(data["files"], data.get("odc", ""))
-        
-        elapsed = datetime.now() - self.processing_start_time if self.processing_start_time else None
-        elapsed_str = str(elapsed).split(".")[0] if elapsed else "N/A"
-        self._add_log_message("-" * 60, "INFO")
-        self._add_log_message(f"ELABORAZIONE COMPLETATA IN {elapsed_str}", "HEADER")
         self._is_processing = False
+        self._current_progress = 100.0
+        self.progress_bar.setValue(1000)
 
     def _spinner_tick(self) -> None:
         """Aggiorna lo spinner di caricamento."""
@@ -334,68 +373,8 @@ class MainApp(QMainWindow):
         """Delega l'aggiornamento dell'ultimo accesso al controller."""
         self.controller.update_last_access()
 
-    def _on_drop(self, files: List[str]) -> None:
-        """Gestisce il drag-and-drop di file sulla GUI."""
-        if files:
-            self.pdf_files = files
-            if len(self.pdf_files) == 1:
-                self.pdf_path_label.setText(os.path.basename(self.pdf_files[0]))
-            else:
-                self.pdf_path_label.setText(f"{len(self.pdf_files)} file selezionati")
-            self.notebook.setCurrentWidget(self.processing_tab)
-            self._start_processing()
-
-    def _handle_cli_start(self, path: str) -> None:
-        """Inizializza l'elaborazione se un file viene passato come argomento CLI."""
-        found_pdfs: List[str] = []
-        if os.path.isfile(path) and path.lower().endswith(".pdf"):
-            found_pdfs.append(path)
-        elif os.path.isdir(path):
-            for root_dir, _, files in os.walk(path):
-                for name in files:
-                    if name.lower().endswith(".pdf"):
-                        found_pdfs.append(os.path.join(root_dir, name))
-        
-        if not found_pdfs:
-            QMessageBox.critical(self, "Errore", "Nessun file PDF trovato.")
-            return
-            
-        self.pdf_files = found_pdfs
-        self.pdf_path_label.setText(f"{len(found_pdfs)} file trovati")
-        odc, ok = QInputDialog.getText(self, "Input ODC", "Inserisci il codice ODC:")
-        if ok and odc:
-            self.odc_entry.setText(odc)
-            self.notebook.setCurrentWidget(self.processing_tab)
-            self._start_processing()
-
-    def _select_pdf(self) -> None:
-        """Apre il selettore di file PDF."""
-        paths, _ = QFileDialog.getOpenFileNames(self, "Seleziona file PDF", "", "PDF Files (*.pdf)")
-        if paths:
-            self.pdf_files = list(paths)
-            self.pdf_path_label.setText(
-                f"{len(self.pdf_files)} file selezionati"
-                if len(self.pdf_files) > 1
-                else os.path.basename(self.pdf_files[0])
-            )
-            self._start_processing()
-
-    def _select_folder(self) -> None:
-        """Apre il selettore di cartelle per trovare file PDF."""
-        folder = QFileDialog.getExistingDirectory(self, "Seleziona Cartella")
-        if not folder:
-            return
-        found = [os.path.join(r, f) for r, d, fs in os.walk(folder) for f in fs if f.lower().endswith(".pdf")]
-        if found:
-            self.pdf_files = found
-            self.pdf_path_label.setText(f"{len(found)} file trovati")
-            self.notebook.setCurrentWidget(self.processing_tab)
-            self._start_processing()
-        else:
-            QMessageBox.information(self, "Info", "Nessun file PDF trovato.")
-
     def _update_restore_button_state(self, has_session: bool) -> None:
-        """Aggiorna lo stato del pulsante di ripristino sessione e propone il ripristino all'avvio."""
+        """Aggiorna lo stato del pulsante di ripristino sessione."""
         self.restore_btn.setEnabled(has_session)
         if self._is_initial_session_check and has_session:
             self._is_initial_session_check = False
@@ -424,13 +403,13 @@ class MainApp(QMainWindow):
     def _start_processing(self) -> None:
         """Avvia elaborazione tramite controller."""
         odc = self.odc_entry.text().strip()
-        if not odc or not self.pdf_files:
+        if not odc or not self.controller.pdf_files:
             QMessageBox.warning(self, "Errore", "Verificare ODC e file selezionati.")
             return
             
         self.log_area.clear()
         self.processing_start_time = datetime.now()
-        self.controller.start_processing(self.pdf_files, odc)
+        self.controller.start_processing(odc)
 
     def _show_unknown_dialog(self, files: List[Any], odc: str) -> None:
         """Visualizza il dialog di revisione per i file non classificati."""
@@ -438,10 +417,12 @@ class MainApp(QMainWindow):
             return
 
         def on_close() -> None:
+            """Callback eseguita alla chiusura positiva del dialog."""
             self._add_log_message("Revisione file sconosciuti completata", "SUCCESS")
             QTimer.singleShot(100, self._update_restore_button_state)
 
         def on_dialog_closed() -> None:
+            """Callback eseguita alla chiusura (anche annullamento) del dialog."""
             QTimer.singleShot(100, self._update_restore_button_state)
 
         dlg = UnknownFilesReviewDialog(self, files, on_finish=on_close, odc=odc, on_close_callback=on_dialog_closed)

@@ -11,6 +11,7 @@ class OcrEngine:
     """Gestisce le operazioni di OCR e trasformazione immagini."""
 
     def __init__(self, tesseract_path: Optional[str] = None) -> None:
+        """Inizializza il motore OCR e imposta il percorso dell'eseguibile Tesseract."""
         if tesseract_path:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
 

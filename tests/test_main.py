@@ -12,12 +12,15 @@ import main
 @pytest.fixture
 def mock_dependencies():
     patchers = [
-        patch("main.license_validator.get_license_info", return_value={}),
+        patch("core.app_controller.license_validator.get_license_info", return_value={}),
+        patch("core.app_controller.license_validator.get_hardware_id", return_value="HWID"),
+        patch("core.app_controller.license_validator.verify_license", return_value=(True, "OK")),
+        patch("core.app_controller.config_manager.load_config", return_value={"classification_rules": []}),
+        patch("core.app_controller.config_manager.save_config"),
+        patch("core.app_controller.app_updater"),
+        patch("core.app_controller.SessionManager.has_session", return_value=False),
+        patch("main.notification_manager.NotificationManager"),
         patch("os.path.exists", return_value=False),
-        patch("main.license_validator.verify_license", return_value=(True, "OK")),
-        patch("main.config_manager.load_config", return_value={"classification_rules": []}),
-        patch("main.app_updater"),
-        patch("main.notification_manager.NotificationManager", side_effect=Exception("Mocked out")),
     ]
     for p in patchers:
         p.start()
@@ -30,7 +33,8 @@ def mock_dependencies():
 def main_app(qtbot, mock_dependencies):
     app = main.MainApp()
     yield app
-    app._log_timer.stop()
+    if hasattr(app, "controller") and hasattr(app.controller, "_log_timer"):
+        app.controller._log_timer.stop()
     app._update_timer.stop()
     app._progress_timer.stop()
     app._spinner_timer.stop()
@@ -39,28 +43,28 @@ def main_app(qtbot, mock_dependencies):
 
 def test_odc_validation(main_app):
     main_app.odc_entry.setText("ABC1234")
-    with patch("main.QMessageBox.critical") as mock_error:
-        main_app.pdf_files = ["test.pdf"]
-        with patch("threading.Thread") as mock_thread:
+    with patch("main.QMessageBox.warning") as mock_warn:
+        main_app.controller.pdf_files = ["test.pdf"]
+        with patch.object(main_app.controller, "start_processing") as mock_start:
             main_app._start_processing()
-            mock_error.assert_not_called()
-            mock_thread.assert_called_once()
+            mock_warn.assert_not_called()
+            mock_start.assert_called_once()
 
 
 def test_odc_validation_empty(main_app):
     main_app.odc_entry.setText("")
-    with patch("main.QMessageBox.critical") as mock_error:
+    with patch("main.QMessageBox.warning") as mock_warn:
         main_app.pdf_files = ["test.pdf"]
         main_app._start_processing()
-        mock_error.assert_called_once()
+        mock_warn.assert_called_once()
 
 
 def test_no_pdf_selected(main_app):
     main_app.odc_entry.setText("5400")
     main_app.pdf_files = []
-    with patch("main.QMessageBox.critical") as mock_error:
+    with patch("main.QMessageBox.warning") as mock_warn:
         main_app._start_processing()
-        mock_error.assert_called_once()
+        mock_warn.assert_called_once()
 
 
 def test_add_log_message_progress(main_app):
@@ -79,23 +83,24 @@ def test_add_log_message_progress(main_app):
 
 def test_on_drop_single_file(main_app):
     with patch.object(main_app, "_start_processing") as mock_start:
-        main_app._on_drop(["path/to/file.pdf"])
-        assert len(main_app.pdf_files) == 1
-        mock_start.assert_called_once()
+        with patch("core.file_service.os.path.exists", return_value=True):
+            with patch("core.file_service.os.path.isfile", return_value=True):
+                main_app._on_drop(["path/to/file.pdf"])
+                assert len(main_app.controller.pdf_files) == 1
+                mock_start.assert_called_once()
 
 
 def test_check_for_updates_signal(main_app):
-    with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove, patch.object(main_app, 'load_settings') as mock_load:
+    with patch("os.path.exists", return_value=True), patch("os.remove") as mock_remove, patch.object(main_app.controller, 'load_settings') as mock_load:
          main_app._check_for_updates()
          mock_remove.assert_called_with(main.SIGNAL_FILE)
          mock_load.assert_called_once()
 
 
-def test_process_log_queue_dialog(main_app):
-    main_app.log_queue.put({"action": "show_unknown_dialog", "files": ["a.pdf"], "odc": "123"})
-    main_app._process_log_queue()
-    assert main_app._pending_completion_data is not None
-    assert main_app._pending_completion_data["action"] == "show_unknown_dialog"
+def test_unknown_files_signal(main_app):
+    with patch.object(main_app, "_show_unknown_dialog") as mock_dialog:
+        main_app.controller.unknown_files_found.emit(["a.pdf"], "123")
+        mock_dialog.assert_called_once_with(["a.pdf"], "123")
 
 
 def test_unknown_dialog_empty_files(main_app):

@@ -3,7 +3,7 @@ Modulo per la Tab Dashboard (SRP).
 """
 from typing import Any, Dict, List
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QGridLayout, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, 
     QPushButton, QTextEdit, QFrame
 )
 from PySide6.QtCore import Qt
@@ -14,11 +14,13 @@ class DashboardTab(QWidget):
     """Gestisce la costruzione e i widget della tab Dashboard."""
 
     def __init__(self, parent: QWidget, main_app: Any) -> None:
+        """Inizializza la tab dashboard collegandola all'applicazione principale."""
         super().__init__(parent)
         self.main_app = main_app
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Configura l'interfaccia utente, le card statistiche e il log rapido."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
         layout.setSpacing(15)
@@ -55,22 +57,31 @@ class DashboardTab(QWidget):
         # Middle: License + Actions
         middle = QHBoxLayout()
 
-        # License panel
-        license_group = QGroupBox(" PARAMETRI DI AUTENTICAZIONE E SICUREZZA ")
-        lic_layout = QGridLayout(license_group)
+        # License panel (Compact Version)
+        lic_container = QFrame()
+        lic_layout = QVBoxLayout(lic_container)
+        lic_layout.setContentsMargins(0, 5, 10, 5)
+        lic_layout.setSpacing(6)
+        
+        h_lic = QLabel("PARAMETRI DI AUTENTICAZIONE E SICUREZZA")
+        h_lic.setFont(FONTS["small_bold"])
+        h_lic.setStyleSheet(f"color: {COLORS['text_muted']}; border-bottom: 1px solid {COLORS['border']}; padding-bottom: 3px; margin-bottom: 5px;")
+        lic_layout.addWidget(h_lic)
+
         self.main_app.license_fields = {}
         fields = [
-            ("UTENTE REGISTRATO", "cliente", "👤"),
-            ("TERMINE VALIDITÀ", "scadenza", "📅"),
-            ("HARDWARE IDENTIFIER", "hwid", "🆔"),
-            ("ULTIMO ACCESSO RILEVATO", "last_access", "🕒"),
+            ("UTENTE", "cliente", "user.svg"),
+            ("SCADENZA", "scadenza", "calendar.svg"),
+            ("HWID", "hwid", "id.svg"),
+            ("ACCESSO", "last_access", "clock.svg"),
         ]
-        for i, (label, key, icon) in enumerate(fields):
-            row, col = divmod(i, 2)
-            card, v_lab = UIFactory.create_license_field(label, icon)
+        for label, key, icon in fields:
+            row, v_lab = UIFactory.create_compact_info_row(label, icon)
             self.main_app.license_fields[key] = v_lab
-            lic_layout.addWidget(card, row, col)
-        middle.addWidget(license_group, 3)
+            lic_layout.addWidget(row)
+        
+        lic_layout.addStretch()
+        middle.addWidget(lic_container, 2)
 
         # Actions
         actions_group = QGroupBox(" COMANDI RAPIDI ")

@@ -17,6 +17,7 @@ import app_updater
 from core.session_manager import SessionManager
 from core.processing_worker import PdfProcessingWorker
 from core.rule_service import RuleService
+from core.file_service import FileService
 from shared.constants import SIGNAL_FILE
 
 logger = logging.getLogger("CONTROLLER")
@@ -37,6 +38,7 @@ class AppController(QObject):
     unknown_files_found = Signal(list, str) # files, odc
 
     def __init__(self) -> None:
+        """Inizializza il controller e i servizi core associati."""
         super().__init__()
         self.config: Dict[str, Any] = {}
         self.rule_service: Optional[RuleService] = None
@@ -86,16 +88,29 @@ class AppController(QObject):
             logger.error(f"Errore check licenza: {e}")
             self.license_status_updated.emit({"is_valid": False, "error": str(e)})
 
-    def start_processing(self, pdf_files: List[str], odc: str) -> bool:
+    def set_pdf_files(self, paths: List[str]) -> None:
+        """Imposta la lista dei file da elaborare trovandoli nei percorsi forniti."""
+        all_pdfs = []
+        for p in paths:
+            all_pdfs.extend(FileService.find_pdfs_in_path(p))
+        
+        self.pdf_files = list(set(all_pdfs)) # Rimuove duplicati
+        if self.pdf_files:
+            msg = f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1 else os.path.basename(self.pdf_files[0])
+            self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO")
+        else:
+            self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING")
+
+    def start_processing(self, odc: str) -> bool:
         """Avvia il workflow di elaborazione threadata."""
-        if self._is_processing:
+        if self._is_processing or not self.pdf_files:
             return False
             
-        self.pdf_files = pdf_files
         self._is_processing = True
         self.processing_state_changed.emit(True)
         
         def on_worker_complete(processed_count: int, unknown_files: List[Any]) -> None:
+            """Callback invocata al termine del thread di elaborazione PDF."""
             self._is_processing = False
             self.processing_state_changed.emit(False)
             if unknown_files:

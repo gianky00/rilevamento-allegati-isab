@@ -13,6 +13,7 @@ class RuleEditorDialog(QDialog):
     """Dialogo specializzato per l'editing delle regole."""
 
     def __init__(self, parent: Any, rule_service: RuleService, rule: Optional[Dict[str, Any]] = None) -> None:
+        """Inizializza l'editor per una regola nuova o esistente."""
         super().__init__(parent)
         self.rule_service = rule_service
         self.rule = rule
@@ -20,6 +21,7 @@ class RuleEditorDialog(QDialog):
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Configura l'interfaccia utente del dialog di editing."""
         self.setWindowTitle("Modifica Regola" if self.rule else "Nuova Regola")
         self.setFixedSize(500, 400)
         self.setModal(True)
@@ -77,12 +79,14 @@ class RuleEditorDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _choose_color(self) -> None:
+        """Apre il selettore di colore e aggiorna l'anteprima."""
         c = QColorDialog.getColor(QColor(self.chosen_color), self, "Scegli Colore")
         if c.isValid():
             self.chosen_color = c.name()
             self.color_swatch.setStyleSheet(f"background-color: {self.chosen_color}; border: 1px solid black;")
 
     def _on_save(self) -> None:
+        """Valida i dati inseriti e salva la regola nel RuleService."""
         category = self.cat_entry.text().strip()
         suffix = self.suffix_entry.text().strip() or category
         keywords = [k.strip() for k in self.kw_entry.text().split(",") if k.strip()]

@@ -15,11 +15,13 @@ class HelpTab(QWidget):
     """Gestisce la costruzione e i widget della tab Guida."""
 
     def __init__(self, parent: QWidget, main_app: Any) -> None:
+        """Inizializza la tab della guida caricando i contenuti informativi."""
         super().__init__(parent)
         self.main_app = main_app
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Configura l'interfaccia utente della guida con il browser dei contenuti."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         

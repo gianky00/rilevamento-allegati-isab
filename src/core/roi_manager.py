@@ -12,6 +12,7 @@ class RoiManager:
     """Gestisce la logica di business e la persistenza delle ROI."""
 
     def __init__(self) -> None:
+        """Inizializza il gestore delle ROI caricando la configurazione."""
         self.config: Dict[str, Any] = {}
         self.load_config()
 

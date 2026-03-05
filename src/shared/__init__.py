@@ -1,1 +1,3 @@
-# shared - Utility cross-cutting
+"""
+Pacchetto Shared - Costanti e utility condivise.
+"""
