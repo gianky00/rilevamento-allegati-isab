@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, Signal, QTimer
 import config_manager
 import license_validator
 import license_updater
+import app_updater
 from core.session_manager import SessionManager
 from core.processing_worker import PdfProcessingWorker
 from core.rule_service import RuleService
@@ -155,3 +156,15 @@ class AppController(QObject):
             except OSError:
                 pass
         return False
+
+    def check_updates(self, silent: bool = True) -> None:
+        """Controlla se ci sono aggiornamenti disponibili."""
+        app_updater.check_for_updates(silent=silent, on_confirm=self.save_settings)
+
+    def update_last_access(self) -> None:
+        """Aggiorna il timestamp dell'ultimo accesso nel file di configurazione."""
+        try:
+            self.config["last_access"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            config_manager.save_config(self.config)
+        except Exception as e:
+            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")

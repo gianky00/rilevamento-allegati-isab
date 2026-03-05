@@ -39,11 +39,6 @@ try:
     import sys
     import threading
 
-    import app_updater
-    import config_manager
-    import license_updater
-    import license_validator
-    from core import pdf_processor
     import version
 
     logger.info("Importazione PyMuPDF...")
@@ -66,7 +61,6 @@ try:
     from shared.constants import APP_DATA_DIR, SESSION_FILE, SIGNAL_FILE
     
     # Core Managers (SRP)
-    from core.session_manager import SessionManager
     from core.processing_worker import PdfProcessingWorker
     from core.rule_service import RuleService
     from core.tesseract_manager import TesseractManager
@@ -97,6 +91,7 @@ class MainApp(QMainWindow):
         self._spinner_idx: int = 0
         self._is_processing: bool = False
         self._pending_completion_data: Optional[Dict[str, Any]] = None
+        self._is_initial_session_check: bool = True
 
         # Widget UI (Inizializzati dalle Tab)
         self.dashboard: Any = None
@@ -181,8 +176,8 @@ class MainApp(QMainWindow):
         self._clock_timer.timeout.connect(self._update_clock)
         self._clock_timer.start(1000)
 
-        QTimer.singleShot(500, self._check_for_restore)
-        QTimer.singleShot(3000, lambda: app_updater.check_for_updates(silent=True, on_confirm=self._auto_save_settings))
+        QTimer.singleShot(500, self.controller.check_for_restore)
+        QTimer.singleShot(3000, lambda: self.controller.check_updates(silent=True))
 
         if auto_file_path and os.path.exists(auto_file_path):
             QTimer.singleShot(500, lambda: self._handle_cli_start(auto_file_path))
@@ -336,13 +331,8 @@ class MainApp(QMainWindow):
             self._add_log_message("Configurazione sincronizzata", "SUCCESS")
 
     def update_last_access(self) -> None:
-        """Aggiorna il timestamp dell'ultimo accesso nel file di configurazione."""
-        try:
-            config = config_manager.load_config()
-            config["last_access"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            config_manager.save_config(config)
-        except Exception as e:
-            logger.error(f"Impossibile aggiornare l'ultimo accesso: {e}")
+        """Delega l'aggiornamento dell'ultimo accesso al controller."""
+        self.controller.update_last_access()
 
     def _on_drop(self, files: List[str]) -> None:
         """Gestisce il drag-and-drop di file sulla GUI."""
@@ -404,14 +394,11 @@ class MainApp(QMainWindow):
         else:
             QMessageBox.information(self, "Info", "Nessun file PDF trovato.")
 
-    def _update_restore_button_state(self) -> None:
-        """Aggiorna lo stato del pulsante di ripristino sessione."""
-        self.restore_btn.setEnabled(SessionManager.has_session())
-
-    def _check_for_restore(self) -> None:
-        """Verifica all'avvio se esiste una sessione da ripristinare."""
-        self._update_restore_button_state()
-        if SessionManager.has_session():
+    def _update_restore_button_state(self, has_session: bool) -> None:
+        """Aggiorna lo stato del pulsante di ripristino sessione e propone il ripristino all'avvio."""
+        self.restore_btn.setEnabled(has_session)
+        if self._is_initial_session_check and has_session:
+            self._is_initial_session_check = False
             reply = QMessageBox.question(
                 self,
                 "Ripristino Sessione",
@@ -419,6 +406,8 @@ class MainApp(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._restore_session()
+        elif self._is_initial_session_check:
+            self._is_initial_session_check = False
 
     def _clear_session(self) -> None:
         """Delega cancellazione sessione."""
@@ -466,7 +455,7 @@ class MainApp(QMainWindow):
         self._populate_rules_tree()
 
     def _auto_save_settings(self) -> None:
-        """Delega salvataggio al controller."""
+        """Salva tramite controller."""
         self.controller.save_settings()
 
     def _populate_rules_tree(self) -> None:
