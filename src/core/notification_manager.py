@@ -3,6 +3,7 @@ Intelleo PDF Splitter - Notification Manager (PySide6)
 Gestisce le notifiche toast a comparsa.
 """
 
+import logging
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -11,6 +12,20 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QCursor, QFont
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+logger = logging.getLogger("MAIN")
+
+# Importiamo COLORS dal tema globale se possibile, altrimenti usiamo fallback
+try:
+    from gui.theme import COLORS
+except ImportError:
+    COLORS = {
+        "bg_primary": "#FFFFFF",
+        "bg_secondary": "#F8F9FA",
+        "text_primary": "#111827",
+        "accent": "#2563EB",
+        "border": "#E5E7EB",
+    }
 
 
 class ToastNotification(QWidget):
@@ -27,7 +42,7 @@ class ToastNotification(QWidget):
         self.setFixedSize(300, 80)
 
         # Layout principale
-        self.setStyleSheet(f"background-color: {bg_color}; border-radius: 6px;")
+        self.setStyleSheet(f"background-color: {bg_color}; border: 1px solid {COLORS['border']}; border-radius: 6px;")
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 8, 10, 8)
@@ -39,14 +54,14 @@ class ToastNotification(QWidget):
 
         title_label = QLabel(title)
         title_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        title_label.setStyleSheet(f"color: {fg_color}; background: transparent;")
+        title_label.setStyleSheet(f"color: {fg_color}; background: transparent; border: none;")
         header_layout.addWidget(title_label)
 
         header_layout.addStretch()
 
         close_btn = QLabel("✕")
         close_btn.setFont(QFont("Segoe UI", 10))
-        close_btn.setStyleSheet(f"color: {fg_color}; background: transparent; padding: 2px 4px;")
+        close_btn.setStyleSheet(f"color: {fg_color}; background: transparent; padding: 2px 4px; border: none;")
         close_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         close_btn.mousePressEvent = lambda e: self.close_toast()
         header_layout.addWidget(close_btn)
@@ -56,7 +71,7 @@ class ToastNotification(QWidget):
         # Messaggio
         msg_label = QLabel(message)
         msg_label.setFont(QFont("Segoe UI", 9))
-        msg_label.setStyleSheet(f"color: {fg_color}; background: transparent;")
+        msg_label.setStyleSheet(f"color: {fg_color}; background: transparent; border: none;")
         msg_label.setWordWrap(True)
         main_layout.addWidget(msg_label)
 
@@ -110,14 +125,16 @@ class NotificationManager:
         Aggiunge l'icona della campanella alla dashboard.
         """
         self.bell_container = QFrame()
-        self.bell_container.setStyleSheet("background: transparent;")
+        self.bell_container.setStyleSheet("background: transparent; border: none;")
         self.bell_container_layout = QHBoxLayout(self.bell_container)
         self.bell_container_layout.setContentsMargins(10, 0, 10, 0)
         self.bell_container_layout.setSpacing(5)
 
         self.bell_svg = None
         self.bell_count_label = QLabel("0")
-        self.bell_count_label.setStyleSheet("color: #6C757D; background: transparent;")
+        self.bell_count_label.setStyleSheet(
+            f"color: {COLORS['text_secondary']}; background: transparent; border: none; font-weight: bold;"
+        )
         self.bell_container_layout.addWidget(self.bell_count_label)
 
         self.bell_container.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -200,27 +217,40 @@ class NotificationManager:
                 window.close_toast()
 
     def _update_bell(self):
-        """Aggiorna il contatore sulla campanella."""
+        """Aggiorna il contatore sulla campanella con percorso SVG robusto."""
         if self.bell_container:
             # Rimuove vecchio SVG
             if self.bell_svg:
                 self.bell_svg.setParent(None)
                 self.bell_svg.deleteLater()
 
-            # Crea nuovo SVG
-            color = "#DC3545" if self.unread_count > 0 else "#6C757D"
+            # Calcolo percorso SVG robusto (assets è nella ROOT del progetto)
+            # notification_manager.py è in src/core
+            # root è due livelli sopra src/core
+            root_path = Path(__file__).resolve().parents[2]
+            svg_path = root_path / "assets" / "bell.svg"
 
-            base_path = Path(__file__).resolve().parents[2]
-            path = base_path / "assets" / "bell.svg"
-            self.bell_svg = QSvgWidget(str(path))
-            self.bell_svg.setFixedSize(20, 20)
-            self.bell_container_layout.insertWidget(0, self.bell_svg)
+            if not svg_path.exists():
+                # Fallback se avviato da cartella diversa
+                svg_path = Path("assets/bell.svg")
 
+            if svg_path.exists():
+                self.bell_svg = QSvgWidget(str(svg_path))
+                self.bell_svg.setFixedSize(20, 20)
+                # Forza il colore tramite CSS se possibile (alcuni QSvgWidget lo permettono)
+                self.bell_svg.setStyleSheet("background-color: transparent; border: none;")
+                self.bell_container_layout.insertWidget(0, self.bell_svg)
+            else:
+                logger.warning(f"Icona notifiche non trovata al percorso: {svg_path}")
+
+            color = COLORS["danger"] if self.unread_count > 0 else COLORS["text_secondary"]
             self.bell_count_label.setText(str(self.unread_count))
-            self.bell_count_label.setStyleSheet(f"color: {color}; background: transparent; font-weight: bold;")
+            self.bell_count_label.setStyleSheet(
+                f"color: {color}; background: transparent; font-weight: bold; border: none;"
+            )
 
     def show_history(self, event=None):
-        """Reset del contatore notifiche e mostra la cronologia all'utente in un popup interno."""
+        """Reset del contatore notifiche e mostra la cronologia all'utente in un popup in LIGHT MODE."""
         self.unread_count = 0
         self._update_bell()
 
@@ -237,25 +267,28 @@ class NotificationManager:
             self._history_popup.setFixedWidth(350)
             self._history_popup.setMinimumHeight(200)
             self._history_popup.setMaximumHeight(400)
-            self._history_popup.setStyleSheet("""
-                QFrame {
-                    background-color: #2D2D30;
-                    border: 1px solid #444444;
-                    border-radius: 6px;
-                }
-                QListWidget {
-                    background-color: #2D2D30;
+
+            # STILE LIGHT MODE FORZATO
+            self._history_popup.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLORS["bg_primary"]};
+                    border: 1px solid {COLORS["border"]};
+                    border-radius: 8px;
+                }}
+                QListWidget {{
+                    background-color: {COLORS["bg_primary"]};
                     border: none;
-                    color: #E0E0E0;
+                    color: {COLORS["text_primary"]};
                     outline: none;
-                }
-                QListWidget::item {
-                    border-bottom: 1px solid #333333;
-                    padding: 8px;
-                }
-                QListWidget::item:hover {
-                    background-color: #3E3E42;
-                }
+                }}
+                QListWidget::item {{
+                    border-bottom: 1px solid {COLORS["bg_secondary"]};
+                    padding: 10px;
+                    color: {COLORS["text_primary"]};
+                }}
+                QListWidget::item:hover {{
+                    background-color: {COLORS["bg_secondary"]};
+                }}
             """)
 
             layout = QVBoxLayout(self._history_popup)
@@ -265,9 +298,11 @@ class NotificationManager:
             # Label intestazione
             from PySide6.QtWidgets import QLabel
 
-            header = QLabel(" Centro Notifiche ")
+            header = QLabel(" CENTRO NOTIFICHE ")
             header.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-            header.setStyleSheet("color: #0d6efd; padding: 5px; border-bottom: 1px solid #444444;")
+            header.setStyleSheet(
+                f"color: {COLORS['accent']}; padding: 8px; border-bottom: 1px solid {COLORS['border']};"
+            )
             layout.addWidget(header)
 
             self._history_list = QListWidget()
@@ -291,7 +326,6 @@ class NotificationManager:
             )
 
             item = QListWidgetItem(f"{time_str} - {level_emoji} {notif['msg']}")
-            # Wrappa il test per favorire la lettura multi-linea
             item.setToolTip(notif["msg"])
             self._history_list.addItem(item)
 

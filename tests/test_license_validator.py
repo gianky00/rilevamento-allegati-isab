@@ -1,7 +1,6 @@
 import datetime
 import subprocess
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import license_validator
@@ -19,6 +18,7 @@ class TestLicenseValidator(unittest.TestCase):
     @patch("license_validator.get_hardware_id")
     def test_verify_license_missing_files(self, mock_get_hw_id):
         mock_get_hw_id.return_value = "ACE4_2E00_951D_4DDA"
+
         def exists_side_effect(self):
             # Simula che la cartella esiste ma i file no
             return "Licenza" in str(self) and not str(self).endswith(".dat") and not str(self).endswith(".json")
@@ -106,13 +106,13 @@ class TestLicenseValidator(unittest.TestCase):
             "Scadenza Licenza": (datetime.date.today() + datetime.timedelta(days=1)).strftime("%d/%m/%Y"),
             "Cliente": "TestUser",
         }
-        
+
         # Mock open for manifest
         mock_f = MagicMock()
         mock_f.__enter__.return_value = mock_f
         mock_f.read.return_value = '{"config.dat": "valid_hash", "pyarmor.rkey": "valid_key_hash"}'
         mock_open.return_value = mock_f
-        
+
         is_valid, msg = license_validator.verify_license()
         self.assertTrue(is_valid)
         self.assertIn("Licenza valida per: TestUser", msg)

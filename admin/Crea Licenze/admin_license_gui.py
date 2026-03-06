@@ -1,17 +1,19 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import subprocess
-import sys
-from datetime import date, timedelta
+import hashlib
+import json
 import os
 import shutil
-import json
-import hashlib
+import subprocess
+import sys
+import tkinter as tk
+from datetime import date, timedelta
+from tkinter import messagebox, ttk
+
 from cryptography.fernet import Fernet
 
 # Import shared secret from the root validator if possible, or duplicate it.
 # To keep it simple and robust for the admin tool, we duplicate the key here.
-LICENSE_SECRET_KEY = b'8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek='
+LICENSE_SECRET_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
+
 
 def _calculate_sha256(filepath):
     """Calculates the SHA256 hash of a file."""
@@ -21,6 +23,7 @@ def _calculate_sha256(filepath):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
+
 class LicenseAdminApp:
     def __init__(self, root):
         self.root = root
@@ -29,7 +32,7 @@ class LicenseAdminApp:
         self.root.resizable(False, False)
 
         style = ttk.Style()
-        style.theme_use('clam')
+        style.theme_use("clam")
         style.configure("TLabel", font=("Segoe UI", 10))
         style.configure("TButton", font=("Segoe UI", 10, "bold"))
 
@@ -67,7 +70,8 @@ class LicenseAdminApp:
         try:
             self.ent_disk.delete(0, tk.END)
             self.ent_disk.insert(0, self.root.clipboard_get().strip())
-        except: pass
+        except Exception:
+            pass
 
     def generate(self):
         disk_serial = self.ent_disk.get().strip()
@@ -79,10 +83,10 @@ class LicenseAdminApp:
             return
 
         if not client_name:
-            client_name = disk_serial # Fallback se non c'è nome
+            client_name = disk_serial  # Fallback se non c'è nome
 
         # Pulisci il nome cliente per usarlo come cartella
-        folder_name = "".join([c for c in client_name if c.isalnum() or c in (' ', '_', '-')]).strip()
+        folder_name = "".join([c for c in client_name if c.isalnum() or c in (" ", "_", "-")]).strip()
 
         # Cartella di output organizzata
         base_output = os.path.dirname(os.path.abspath(__file__))
@@ -90,9 +94,7 @@ class LicenseAdminApp:
         target_dir = os.path.join(client_dir, "Licenza")
 
         # Comando PyArmor (genera in cartella temporanea 'dist' locale allo script)
-        cmd = [sys.executable, "-m", "pyarmor.cli", "gen", "key",
-               "-e", expiry,
-               "-b", disk_serial]
+        cmd = [sys.executable, "-m", "pyarmor.cli", "gen", "key", "-e", expiry, "-b", disk_serial]
 
         try:
             # Esegui comando
@@ -120,11 +122,11 @@ class LicenseAdminApp:
                     # Format dates to DD/MM/YYYY
                     try:
                         expiry_obj = date.fromisoformat(expiry)
-                        expiry_str = expiry_obj.strftime('%d/%m/%Y')
+                        expiry_str = expiry_obj.strftime("%d/%m/%Y")
                     except ValueError:
-                        expiry_str = expiry # Fallback if invalid format
+                        expiry_str = expiry  # Fallback if invalid format
 
-                    gen_date_str = date.today().strftime('%d/%m/%Y')
+                    gen_date_str = date.today().strftime("%d/%m/%Y")
 
                     # NOTE: admin tool logic previously stripped '.' but let's just keep what user entered but strip whitespace.
                     # Ideally the user should paste exactly what the main app showed them.
@@ -134,10 +136,10 @@ class LicenseAdminApp:
                         "Hardware ID": clean_disk_serial,
                         "Scadenza Licenza": expiry_str,
                         "Generato il": gen_date_str,
-                        "Cliente": client_name
+                        "Cliente": client_name,
                     }
 
-                    json_payload = json.dumps(payload).encode('utf-8')
+                    json_payload = json.dumps(payload).encode("utf-8")
                     cipher = Fernet(LICENSE_SECRET_KEY)
                     encrypted_data = cipher.encrypt(json_payload)
 
@@ -148,23 +150,25 @@ class LicenseAdminApp:
                     # 3. GENERAZIONE MANIFEST CON CHECKSUM
                     manifest = {
                         "pyarmor.rkey": _calculate_sha256(dst_lic),
-                        "config.dat": _calculate_sha256(config_path)
+                        "config.dat": _calculate_sha256(config_path),
                     }
                     manifest_path = os.path.join(target_dir, "manifest.json")
                     with open(manifest_path, "w") as f:
                         json.dump(manifest, f, indent=4)
 
                     # Istruzioni per l'utente
-                    msg = (f"Licenza GENERATA con successo!\n\n"
-                           f"Cliente: {client_name}\n"
-                           f"Hardware ID: {disk_serial}\n\n"
-                           f"FILE SALVATI IN:\n{target_dir}\n"
-                           f"(Troverai 'pyarmor.rkey', 'config.dat' e 'manifest.json')")
+                    msg = (
+                        f"Licenza GENERATA con successo!\n\n"
+                        f"Cliente: {client_name}\n"
+                        f"Hardware ID: {disk_serial}\n\n"
+                        f"FILE SALVATI IN:\n{target_dir}\n"
+                        f"(Troverai 'pyarmor.rkey', 'config.dat' e 'manifest.json')"
+                    )
 
                     messagebox.showinfo("Successo", msg)
 
                     # Apre la cartella automaticamente
-                    if os.name == 'nt':
+                    if os.name == "nt":
                         os.startfile(target_dir)
                 else:
                     messagebox.showerror("Errore", f"File generato non trovato in {src_default}")
@@ -173,6 +177,7 @@ class LicenseAdminApp:
 
         except Exception as e:
             messagebox.showerror("Eccezione", str(e))
+
 
 if __name__ == "__main__":
     root = tk.Tk()

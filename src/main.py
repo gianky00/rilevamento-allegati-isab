@@ -74,7 +74,8 @@ class MainApp(QMainWindow):
         super().__init__()
         logger.info("Inizializzazione MainApp...")
         self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
-        self.resize(1100, 800)
+        self.setMinimumSize(800, 600)  # Permette ridimensionamento a livelli più piccoli
+        self.resize(1000, 750)
         self.setStyleSheet(GLOBAL_QSS)
         self.setup_icon()
 
@@ -147,7 +148,7 @@ class MainApp(QMainWindow):
         self.config_panel = ConfigTab(self.notebook, self)
         self.help_panel = HelpTab(self.notebook, self)
 
-        self.dashboard_tab = self.processing_tab = self.dashboard # Puntiamo alla dashboard per compatibilità
+        self.dashboard_tab = self.processing_tab = self.dashboard  # Puntiamo alla dashboard per compatibilità
         self.config_tab = self.config_panel
         self.help_tab = self.help_panel
 
@@ -234,16 +235,21 @@ class MainApp(QMainWindow):
             self.rules_count_label.setText(str(len(rs.get_rules())))
 
     def _on_processing_state_changed(self, is_processing: bool) -> None:
-        """Aggiorna lo stato interno di elaborazione e la visibilità dei controlli con animazione."""
+        """Aggiorna lo stato interno di elaborazione e la visibilità dei controlli."""
         self._is_processing = is_processing
 
-        # Gestione visibilità con animazione
+        # Gestione visibilità immediata (senza animazione per evitare bug di rendering)
         if hasattr(self, "proc_group"):
-            UIAnimations.animate_visibility(self.proc_group, is_processing)
+            self.proc_group.setVisible(is_processing)
+            if is_processing:
+                self.proc_group.raise_()
+            self.update()  # Forza il refresh della finestra principale
 
         # Gestione visibilità/abilitazione bottoni
         if hasattr(self, "stop_btn"):
             self.stop_btn.setVisible(is_processing)
+            if is_processing:
+                self.stop_btn.raise_()
 
         if hasattr(self, "dashboard_start_btn"):
             self.dashboard_start_btn.setEnabled(not is_processing)
@@ -336,7 +342,9 @@ class MainApp(QMainWindow):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Nuova Analisi")
         msg_box.setText("Cosa desideri elaborare?")
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+        msg_box.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+        )
         msg_box.button(QMessageBox.StandardButton.Yes).setText("File PDF")
         msg_box.button(QMessageBox.StandardButton.No).setText("Intera Cartella")
         msg_box.button(QMessageBox.StandardButton.Cancel).setText("Annulla")
@@ -381,7 +389,7 @@ class MainApp(QMainWindow):
         if files:
             self.controller.set_pdf_files(files)
             self._update_ui_file_selection()
-            self.notebook.setCurrentWidget(self.processing_tab)
+            # Non serve cambiare tab se siamo già in dashboard
             self._start_processing()
 
     def _handle_cli_start(self, path: str) -> None:
@@ -404,7 +412,7 @@ class MainApp(QMainWindow):
         self.controller.check_license()
 
     def _add_log_message(self, message: str, level: str = "INFO", replace_last: bool = False) -> None:
-        """Aggiunge (o sostituisce) un messaggio al terminale e al log di elaborazione."""
+        """Aggiunge (o sostituisce) un messaggio al terminale evitando duplicati."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         color_map = {
             "ERROR": COLORS["danger"],
@@ -418,17 +426,22 @@ class MainApp(QMainWindow):
         color = color_map.get(level, COLORS["text_primary"])
         formatted_message = f'<span style="color:{color}">[{timestamp}] {prefix}{message}</span>'
 
+        # Gestione log principale (log_area)
         if replace_last:
-            # Sostituisce l'ultima riga (utile per PROGRESS continui)
             cursor = self.log_area.textCursor()
             cursor.movePosition(cursor.MoveOperation.End)
             cursor.select(cursor.SelectionType.BlockUnderCursor)
             cursor.removeSelectedText()
-            self.log_area.append(formatted_message)
+            # Se abbiamo rimosso un blocco, dobbiamo assicurarci di non lasciare righe vuote extra
+            if not self.log_area.toPlainText().endswith("\n") and self.log_area.toPlainText() != "":
+                self.log_area.insertHtml(formatted_message)
+            else:
+                self.log_area.append(formatted_message)
         else:
             self.log_area.append(formatted_message)
 
-        if level in ("SUCCESS", "ERROR", "WARNING"):
+        # Gestione log recente (solo se è un widget diverso, per evitare duplicati)
+        if level in ("SUCCESS", "ERROR", "WARNING") and self.recent_log != self.log_area:
             self.recent_log.append(f'<span style="color:{color}">[{timestamp}] {message}</span>')
 
     def _smooth_progress_tick(self) -> None:

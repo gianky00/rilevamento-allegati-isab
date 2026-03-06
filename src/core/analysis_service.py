@@ -110,7 +110,10 @@ class AnalysisService:
         self._page_cache: dict[int, Image.Image] = {}
 
     def analyze_pdf(
-        self, pdf_path: str, progress_callback: Callable | None = None, cancel_check: Callable[[], bool] | None = None,
+        self,
+        pdf_path: str,
+        progress_callback: Callable | None = None,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> dict[str, list[int]]:
         """
         Scansiona tutte le pagine e restituisce i gruppi di pagine per categoria.

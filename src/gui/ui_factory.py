@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushBut
 
 from core.path_manager import get_asset_path
 from gui.theme import COLORS, FONTS
-from gui.animations import UIAnimations
 
 
 class AnimatedButton(QPushButton):
@@ -33,6 +32,7 @@ class AnimatedButton(QPushButton):
                 border: none;
                 border-radius: 5px;
                 padding: 8px 15px;
+                font-weight: bold;
             }}
         """)
 
@@ -78,7 +78,7 @@ class UIFactory:
         card.setStyleSheet(f"""
             QFrame {{
                 background-color: {COLORS["bg_secondary"]};
-                border: none;
+                border: 1px solid {COLORS["border"]};
                 border-radius: 6px;
                 padding: 4px 8px;
             }}
@@ -94,7 +94,7 @@ class UIFactory:
         t_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         v_label = QLabel(initial_value)
-        v_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        v_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         v_label.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
         v_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -110,7 +110,7 @@ class UIFactory:
         card.setStyleSheet(f"""
             QFrame {{
                 background-color: {COLORS["bg_secondary"]};
-                border: none;
+                border: 1px solid {COLORS["border"]};
                 border-radius: 8px;
                 padding: 4px 8px;
             }}
@@ -133,22 +133,22 @@ class UIFactory:
             col.setSpacing(0)
 
             lbl = QLabel(label_text)
-            lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-            lbl.setStyleSheet("color: #6B7280; border: none;")
+            lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             col.addWidget(lbl)
 
             vals = QHBoxLayout()
             vals.setSpacing(2)
             s_val = QLabel("0")
-            s_val.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            s_val.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
             s_val.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
 
             sep = QLabel("/")
-            sep.setStyleSheet("color: #D1D5DB; border: none;")
+            sep.setStyleSheet(f"color: {COLORS['text_muted']}; border: none;")
 
             t_val = QLabel("0")
-            t_val.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            t_val.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
             t_val.setStyleSheet(f"color: {COLORS['text_primary']}; border: none;")
 
             vals.addStretch()
@@ -160,7 +160,7 @@ class UIFactory:
             return col, s_val, t_val
 
         # Doc a sinistra
-        col_doc, ds, dt = create_stat_sub_col("DOCUMENTI (SESSIONE / TOTALE)")
+        col_doc, ds, dt = create_stat_sub_col("DOCUMENTI (SESS / TOT)")
         content.addLayout(col_doc)
 
         # Divisore verticale
@@ -170,7 +170,7 @@ class UIFactory:
         content.addWidget(line)
 
         # Pagine a destra
-        col_pag, ps, pt = create_stat_sub_col("PAGINE (SESSIONE / TOTALE)")
+        col_pag, ps, pt = create_stat_sub_col("PAGINE (SESS / TOT)")
         content.addLayout(col_pag)
 
         layout.addLayout(content)
@@ -183,7 +183,7 @@ class UIFactory:
         card.setStyleSheet(f"""
             QFrame {{
                 background-color: {COLORS["bg_secondary"]};
-                border: none;
+                border: 1px solid {COLORS["border"]};
                 border-radius: 8px;
                 padding: 4px 8px;
             }}
@@ -212,45 +212,12 @@ class UIFactory:
         return card, status_label, grid
 
     @staticmethod
-    def create_license_field(label: str, icon: str) -> tuple[QFrame, QLabel]:
-        """Crea un campo informativo per il pannello licenza."""
-        card = QFrame()
-        card.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS["bg_secondary"]};
-                border: 1px solid {COLORS["border"]};
-                border-radius: 4px;
-                padding: 8px;
-            }}
-        """)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout = QVBoxLayout(card)
-
-        header = QHBoxLayout()
-        icon_lbl = QLabel(icon)
-        icon_lbl.setFont(QFont("Segoe UI Emoji", 11))
-        header.addWidget(icon_lbl)
-
-        text_lbl = QLabel(label)
-        text_lbl.setFont(FONTS["small"])
-        text_lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
-        header.addWidget(text_lbl)
-        header.addStretch()
-
-        v_label = QLabel("ATTESA DATI...")
-        v_label.setFont(FONTS["mono_bold"])
-        v_label.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
-
-        layout.addLayout(header)
-        layout.addWidget(v_label)
-
-        return card, v_label
-
-    @staticmethod
     def create_compact_info_row(label: str, icon_file: str) -> tuple[QFrame, QLabel]:
         """Crea una riga informativa compatta con icona SVG."""
         row = QFrame()
-        row.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border: none; border-radius: 4px; padding: 0px;")
+        row.setStyleSheet(
+            f"background-color: {COLORS['bg_secondary']}; border: none; border-radius: 4px; padding: 0px;"
+        )
         layout = QHBoxLayout(row)
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(6)
@@ -259,13 +226,13 @@ class UIFactory:
         layout.addWidget(svg_icon)
 
         text_lbl = QLabel(label + ":")
-        text_lbl.setFont(FONTS["body_bold"])
-        text_lbl.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        text_lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        text_lbl.setStyleSheet(f"color: {COLORS['text_secondary']}; border: none;")
         layout.addWidget(text_lbl)
 
         v_label = QLabel("...")
         v_label.setFont(FONTS["mono_bold"])
-        v_label.setStyleSheet(f"color: {COLORS['accent']};")
+        v_label.setStyleSheet(f"color: {COLORS['accent']}; border: none;")
         layout.addWidget(v_label)
         layout.addStretch()
 

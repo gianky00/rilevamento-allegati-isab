@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,7 +52,7 @@ def test_prev_next_page(roi_app):
 
         mock_render.reset_mock()
         roi_app.next_page()
-        assert roi_app.controller.current_page_index == 2 # 1+1
+        assert roi_app.controller.current_page_index == 2  # 1+1
         mock_render.assert_called_once()
 
 

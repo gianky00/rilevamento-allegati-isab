@@ -1,6 +1,5 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import license_updater
@@ -90,7 +89,7 @@ class TestLicenseUpdater(unittest.TestCase):
 
         self.mock_exists.return_value = True
         self.mock_read_bytes.return_value = encrypted
-        
+
         result = license_updater.check_grace_period()
         self.assertTrue(result)
 
@@ -106,7 +105,7 @@ class TestLicenseUpdater(unittest.TestCase):
 
         self.mock_exists.return_value = True
         self.mock_read_bytes.return_value = encrypted
-        
+
         with self.assertRaises(Exception) as cm:
             license_updater.check_grace_period()
         self.assertIn("SCADUTO", str(cm.exception))

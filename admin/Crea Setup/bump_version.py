@@ -1,16 +1,19 @@
 import os
-import sys
 import re
+import sys
 
-def bump_version(part='patch'):
+
+def bump_version(part="patch"):
     """
     Increments the version in version.py.
     part: 'major', 'minor', or 'patch'
     """
     # admin/Crea Setup/bump_version.py -> ../../src/version.py
-    version_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src", "version.py")
+    version_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src", "version.py"
+    )
 
-    with open(version_file, "r") as f:
+    with open(version_file) as f:
         content = f.read()
 
     # Extract version
@@ -21,11 +24,11 @@ def bump_version(part='patch'):
 
     major, minor, patch = map(int, match.groups())
 
-    if part == 'major':
+    if part == "major":
         major += 1
         minor = 0
         patch = 0
-    elif part == 'minor':
+    elif part == "minor":
         minor += 1
         patch = 0
     else:
@@ -39,9 +42,11 @@ def bump_version(part='patch'):
 
     print(f"Version bumped to {new_version}")
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('part', choices=['major', 'minor', 'patch'], default='patch', nargs='?')
+    parser.add_argument("part", choices=["major", "minor", "patch"], default="patch", nargs="?")
     args = parser.parse_args()
     bump_version(args.part)

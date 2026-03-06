@@ -42,52 +42,84 @@ FONTS = {
 # GLOBAL QSS STYLESHEET
 # ============================================================================
 GLOBAL_QSS = f"""
-QMainWindow, QDialog {{ background-color: {COLORS["bg_primary"]}; }}
-QTabWidget::pane {{ background-color: {COLORS["bg_primary"]}; border: none; }}
+* {{
+    color: {COLORS["text_primary"]};
+}}
+QMainWindow, QDialog {{
+    background-color: {COLORS["bg_primary"]};
+}}
+QTabWidget::pane {{
+    background-color: {COLORS["bg_primary"]};
+    border: none;
+}}
 QTabBar::tab {{
     font: bold 10pt "Segoe UI"; padding: 10px 20px;
     background-color: {COLORS["bg_secondary"]}; color: {COLORS["text_primary"]};
     border: none; margin-right: 2px;
 }}
-QTabBar::tab:selected {{ background-color: {COLORS["accent"]}; color: white; }}
+QTabBar::tab:selected {{
+    background-color: {COLORS["accent"]};
+    color: white;
+}}
 QPushButton {{
     font: 10pt "Segoe UI"; padding: 8px 15px;
     border: none; border-radius: 4px;
     background-color: {COLORS["bg_secondary"]}; color: {COLORS["text_primary"]};
 }}
-QPushButton:hover {{ background-color: {COLORS["accent"]}; color: white; }}
-QLineEdit, QComboBox {{
+QPushButton:hover {{
+    background-color: {COLORS["accent"]};
+    color: white;
+}}
+QLineEdit, QComboBox, QTextEdit {{
     font: 10pt "Segoe UI"; padding: 8px;
-    border: none; border-radius: 4px;
-    background-color: {COLORS["bg_secondary"]};
+    border: 1px solid {COLORS["border"]}; border-radius: 4px;
+    background-color: {COLORS["bg_primary"]};
+    color: {COLORS["text_primary"]};
+}}
+QLabel {{
+    color: {COLORS["text_primary"]};
 }}
 QGroupBox {{
-    font: bold 11pt "Segoe UI"; border: none;
-    border-radius: 8px; margin-top: 0px; padding-top: 15px;
+    font: bold 11pt "Segoe UI"; border: 1px solid {COLORS["border"]};
+    border-radius: 8px; margin-top: 10px; padding-top: 20px;
+    color: {COLORS["text_primary"]};
 }}
-QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 5px; }}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 10px; padding: 0 5px;
+    color: {COLORS["text_primary"]};
+}}
 QTreeWidget {{
     font: 10pt "Segoe UI"; background-color: {COLORS["bg_primary"]};
     border: none; alternate-background-color: {COLORS["bg_secondary"]};
+    color: {COLORS["text_primary"]};
 }}
-QTreeWidget::item:selected {{ background-color: {COLORS["accent"]}; color: white; }}
+QTreeWidget::item:selected {{
+    background-color: {COLORS["accent"]};
+    color: white;
+}}
 QTreeWidget QHeaderView::section {{
     font: bold 10pt "Segoe UI"; background-color: {COLORS["bg_secondary"]};
+    color: {COLORS["text_primary"]};
     border: none; padding: 5px;
 }}
 QProgressBar {{
-    border: none; border-radius: 4px; text-align: center;
-    background-color: {COLORS["bg_tertiary"]}; height: 18px;
+    border: 1px solid {COLORS["border"]}; border-radius: 4px; text-align: center;
+    background-color: {COLORS["bg_tertiary"]}; height: 20px;
+    color: {COLORS["text_primary"]};
+    font-weight: bold;
 }}
-QProgressBar::chunk {{ background-color: {COLORS["success"]}; border-radius: 4px; }}
+QProgressBar::chunk {{
+    background-color: {COLORS["success"]};
+    border-radius: 3px;
+}}
 QListWidget {{
-    font: 10pt "Segoe UI"; background-color: {COLORS["bg_secondary"]};
-    border: none; border-radius: 4px;
+    font: 10pt "Segoe UI"; background-color: {COLORS["bg_primary"]};
+    color: {COLORS["text_primary"]};
+    border: 1px solid {COLORS["border"]}; border-radius: 4px;
 }}
-QListWidget::item:selected {{ background-color: {COLORS["accent"]}; color: white; }}
-QTextEdit {{
-    font: 10pt "Consolas"; background-color: {COLORS["bg_secondary"]};
-    color: {COLORS["text_primary"]}; border: none;
-    border-radius: 4px;
+QListWidget::item:selected {{
+    background-color: {COLORS["accent"]};
+    color: white;
 }}
 """

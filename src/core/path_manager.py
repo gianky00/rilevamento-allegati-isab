@@ -13,7 +13,7 @@ def get_app_base_dir() -> str:
 
     current = Path(__file__).resolve().parent
     # Risale da src/core/ alla root del progetto
-    for _ in range(10): # Limite di sicurezza per evitare loop infiniti
+    for _ in range(10):  # Limite di sicurezza per evitare loop infiniti
         if (current / "config.json").exists() or (current / ".git").exists():
             return str(current)
         if current.parent == current:
@@ -26,6 +26,7 @@ def get_app_base_dir() -> str:
 def get_app_data_dir() -> str:
     """Restituisce il percorso della cartella dati in APPDATA."""
     import os
+
     app_data_root = Path(os.getenv("APPDATA") or Path.home())
     path = app_data_root / "Intelleo PDF Splitter"
     path.mkdir(parents=True, exist_ok=True)

@@ -65,6 +65,7 @@ def save_config(data: dict[str, Any]) -> None:
             f.flush()
             # os.fsync non è direttamente in Path, usiamo l'handle del file se necessario
             import os
+
             os.fsync(f.fileno())
         tmp_file.replace(config_path)
     except Exception:

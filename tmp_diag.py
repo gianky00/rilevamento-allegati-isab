@@ -1,23 +1,27 @@
 """Test reale: classificazione sul PDF dell'utente con il codice aggiornato."""
-import json, os, sys
+
+import json
+import os
+import sys
 
 # CRITICO: rimuovi TESSDATA_PREFIX se era stato impostato erroneamente
 os.environ.pop("TESSDATA_PREFIX", None)
 
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
-with open('config.json', 'r', encoding='utf-8') as f:
+with open("config.json", encoding="utf-8") as f:
     config = json.load(f)
 
-pdf_path = r'prova\ORIGINALI\5400190165_40.pdf'
+pdf_path = r"prova\ORIGINALI\5400190165_40.pdf"
 
-from core.ocr_engine import OcrEngine
-from core.analysis_service import AnalysisService
+from core.analysis_service import AnalysisService  # noqa: E402
+from core.ocr_engine import OcrEngine  # noqa: E402
 
-ocr = OcrEngine(config['tesseract_path'])
-analyzer = AnalysisService(config['classification_rules'], ocr)
+ocr = OcrEngine(config["tesseract_path"])
+analyzer = AnalysisService(config["classification_rules"], ocr)
 
-import time
+import time  # noqa: E402
+
 start = time.time()
 groups = analyzer.analyze_pdf(pdf_path)
 elapsed = time.time() - start

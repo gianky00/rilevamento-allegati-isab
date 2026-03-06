@@ -31,7 +31,7 @@ try:
 except ImportError:
     import fitz
 
-from gui.theme import FONTS
+from gui.theme import COLORS, FONTS
 from gui.ui_factory import AnimatedButton
 from gui.widgets.preview_view import PreviewGraphicsView
 from shared.constants import SESSION_FILE
@@ -59,6 +59,7 @@ class UnknownFilesReviewDialog(QDialog):
             | Qt.WindowType.WindowMinimizeButtonHint,
         )
         self.setWindowTitle("Revisione Manuale - Divisione Allegati")
+        self.setStyleSheet(f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']};")
 
         # Posticipa la massimizzazione al caricamento completato
         from PySide6 import QtCore
@@ -90,24 +91,40 @@ class UnknownFilesReviewDialog(QDialog):
         self.lbl_file_info = QLabel("Caricamento...")
         self.lbl_file_info.setFont(FONTS["subheading"])
         self.lbl_file_info.setWordWrap(True)
+        self.lbl_file_info.setStyleSheet(f"color: {COLORS['accent']}; font-weight: bold;")
         left_layout.addWidget(self.lbl_file_info)
 
         lbl_pages = QLabel("Seleziona le pagine da unire:")
         lbl_pages.setFont(FONTS["body_bold"])
+        lbl_pages.setStyleSheet(f"color: {COLORS['text_primary']}; margin-top: 10px;")
         left_layout.addWidget(lbl_pages)
 
         self.pages_listbox = QListWidget()
         self.pages_listbox.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.pages_listbox.itemSelectionChanged.connect(self._on_page_select)
+        self.pages_listbox.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {COLORS["bg_primary"]};
+                color: {COLORS["text_primary"]};
+                border: 1px solid {COLORS["border"]};
+            }}
+            QListWidget::item:selected {{ background-color: {COLORS["accent"]}; color: white; }}
+        """)
         left_layout.addWidget(self.pages_listbox, 1)
 
         action_group = QGroupBox(" Azione ")
+        action_group.setStyleSheet(
+            f"QGroupBox {{ font-weight: bold; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']}; margin-top: 15px; padding-top: 15px; }}"
+        )
         action_layout = QVBoxLayout(action_group)
         btn_rename = AnimatedButton("RINOMINA (Estrai Pagine)", is_primary=True)
         btn_rename.setFont(FONTS["body_bold"])
         btn_rename.clicked.connect(self.extract_and_rename)
         action_layout.addWidget(btn_rename)
-        action_layout.addWidget(QLabel("Crea un nuovo file con le pagine selezionate."))
+
+        lbl_hint = QLabel("Crea un nuovo file con le pagine selezionate.")
+        lbl_hint.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        action_layout.addWidget(lbl_hint)
         left_layout.addWidget(action_group)
 
         self.btn_skip = AnimatedButton("Salta File >>")
@@ -118,6 +135,7 @@ class UnknownFilesReviewDialog(QDialog):
 
         # Right panel - Preview
         self.preview = PreviewGraphicsView()
+        self.preview.setStyleSheet(f"border: 1px solid {COLORS['border']};")
         layout.addWidget(self.preview, 1)
 
     def load_task(self, index: int) -> None:
@@ -196,16 +214,30 @@ class UnknownFilesReviewDialog(QDialog):
         dialog.setWindowTitle("Definisci Nome File")
         dialog.setFixedSize(400, 200)
         dialog.setModal(True)
+        dialog.setStyleSheet(f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']};")
         dlayout = QVBoxLayout(dialog)
         dlayout.setContentsMargins(20, 20, 20, 20)
 
         grid = QGridLayout()
-        grid.addWidget(QLabel("Codice ODC:"), 0, 0)
+        lbl_odc = QLabel("Codice ODC:")
+        lbl_odc.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: bold;")
+        grid.addWidget(lbl_odc, 0, 0)
+
         odc_entry = QLineEdit(self.odc or "")
         odc_entry.setFocus()
+        odc_entry.setStyleSheet(
+            f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']}; padding: 5px;"
+        )
         grid.addWidget(odc_entry, 0, 1)
-        grid.addWidget(QLabel("Suffisso:"), 1, 0)
+
+        lbl_suffix = QLabel("Suffisso:")
+        lbl_suffix.setStyleSheet(f"color: {COLORS['text_primary']}; font-weight: bold;")
+        grid.addWidget(lbl_suffix, 1, 0)
+
         suffix_entry = QLineEdit()
+        suffix_entry.setStyleSheet(
+            f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']}; padding: 5px;"
+        )
         grid.addWidget(suffix_entry, 1, 1)
         dlayout.addLayout(grid)
 
@@ -222,9 +254,15 @@ class UnknownFilesReviewDialog(QDialog):
 
         btn_layout = QHBoxLayout()
         btn_ok = QPushButton("OK")
+        btn_ok.setStyleSheet(
+            f"background-color: {COLORS['accent']}; color: white; font-weight: bold; padding: 5px 15px;"
+        )
         btn_ok.clicked.connect(on_ok)
         btn_layout.addWidget(btn_ok)
         btn_cancel = QPushButton("Annulla")
+        btn_cancel.setStyleSheet(
+            f"background-color: {COLORS['bg_tertiary']}; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']}; padding: 5px 15px;"
+        )
         btn_cancel.clicked.connect(dialog.reject)
         btn_layout.addWidget(btn_cancel)
         dlayout.addLayout(btn_layout)

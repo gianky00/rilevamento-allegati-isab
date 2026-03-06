@@ -69,6 +69,7 @@ def get_license_dir():
     # Use APPDATA for license storage to ensure write permissions
     if sys.platform == "win32":
         import os
+
         appdata = os.environ.get("APPDATA")
         if not appdata:
             appdata = str(Path.home())

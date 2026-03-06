@@ -1,11 +1,12 @@
-import subprocess
+import json
+import logging
 import os
 import shutil
+import subprocess
 import sys
 import time
-import logging
-import json
 import zipfile
+
 import requests
 
 # --- CONFIGURAZIONE ---
@@ -17,7 +18,7 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Add src to path to import version
 sys.path.append(os.path.join(ROOT_DIR, "src"))
-import version
+import version  # noqa: E402
 
 ENTRY_SCRIPT = "src/app_launcher.py"
 APP_NAME = "Intelleo PDF Splitter"
@@ -30,13 +31,14 @@ BUILD_LOG = "build_log.txt"
 NETLIFY_SITE_NAME = "intelleo-pdf-splitter"
 
 # Setup Logging
-file_handler = logging.FileHandler(BUILD_LOG, mode='w', encoding='utf-8')
+file_handler = logging.FileHandler(BUILD_LOG, mode="w", encoding="utf-8")
 file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 
 # --- UTILITÀ DI SISTEMA ---
+
 
 def log_and_print(message, level="INFO"):
     """Logga su file e stampa a video."""
@@ -48,6 +50,7 @@ def log_and_print(message, level="INFO"):
         logger.error(message)
     elif level == "WARNING":
         logger.warning(message)
+
 
 def run_command(cmd, cwd=None, shell=False, env=None):
     """Esegue un comando shell stampandolo a video in tempo reale."""
@@ -61,12 +64,12 @@ def run_command(cmd, cwd=None, shell=False, env=None):
         cmd,
         cwd=cwd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, # Redirect stderr to stdout to see errors in stream
+        stderr=subprocess.STDOUT,  # Redirect stderr to stdout to see errors in stream
         text=True,
         bufsize=1,
         universal_newlines=True,
         shell=shell,
-        env=env
+        env=env,
     )
 
     while True:
@@ -84,17 +87,20 @@ def run_command(cmd, cwd=None, shell=False, env=None):
         log_and_print(f"Error running command: {cmd}", "ERROR")
         sys.exit(return_code)
 
+
 def kill_existing_process():
     """Uccide eventuali processi 'PDF-Splitter.exe' rimasti appesi."""
     log_and_print("--- Step 0/7: Cleaning active processes ---")
-    if os.name == 'nt':
+    if os.name == "nt":
         try:
-            subprocess.run(["taskkill", "/F", "/IM", f"{APP_NAME}.exe"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["taskkill", "/F", "/IM", f"{APP_NAME}.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             log_and_print(f"Killed active {APP_NAME}.exe instances (if any).")
             time.sleep(1)
         except Exception:
             pass
+
 
 def verify_environment():
     """Verifica lo stato dell'ambiente di build."""
@@ -104,6 +110,7 @@ def verify_environment():
     # Verify PyInstaller availability
     try:
         import PyInstaller
+
         log_and_print(f"PyInstaller verified: {PyInstaller.__version__}")
     except ImportError:
         log_and_print("CRITICAL: PyInstaller module not found!", "ERROR")
@@ -116,7 +123,7 @@ def verify_environment():
         r"C:\Program Files\Inno Setup 6\ISCC.exe",
     ]
 
-    if not iscc_path and os.name == 'nt':
+    if not iscc_path and os.name == "nt":
         for p in possible_paths:
             if os.path.exists(p):
                 iscc_path = p
@@ -128,6 +135,7 @@ def verify_environment():
         log_and_print("WARNING: Inno Setup Compiler (ISCC.exe) not found! Installer step will be skipped.", "WARNING")
 
     return iscc_path
+
 
 def build():
     try:
@@ -151,10 +159,14 @@ def build():
         # Obfuscate the entire src directory recursively
         # Run from 'src' to avoid 'src/' prefix in OBF_DIR
         cmd_pyarmor = [
-            sys.executable, "-m", "pyarmor.cli", "gen",
-            "-r",                  # RECURSIVE
-            "-O", OBF_DIR,         # OUTPUT DIR
-            "."                    # SOURCE
+            sys.executable,
+            "-m",
+            "pyarmor.cli",
+            "gen",
+            "-r",  # RECURSIVE
+            "-O",
+            OBF_DIR,  # OUTPUT DIR
+            ".",  # SOURCE
         ]
 
         run_command(cmd_pyarmor, cwd=os.path.join(ROOT_DIR, "src"))
@@ -167,7 +179,7 @@ def build():
 
         # Copy config.json (default config) if exists in root
         if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
-             shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
+            shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
 
         log_and_print("\n--- Step 5/7: Packaging with PyInstaller ---")
 
@@ -185,52 +197,80 @@ def build():
         # Check for Icon
         icon_path = os.path.join(ROOT_DIR, "src", "resources", "icon.ico")
         if os.path.exists(icon_path):
-             log_and_print(f"Using icon: {icon_path}")
+            log_and_print(f"Using icon: {icon_path}")
         else:
-             icon_path = None
-             log_and_print("WARNING: src/resources/icon.ico not found.", "WARNING")
+            icon_path = None
+            log_and_print("WARNING: src/resources/icon.ico not found.", "WARNING")
 
         # Construct PyInstaller Command
         cmd_pyinstaller = [
-            sys.executable, "-m", "PyInstaller",
+            sys.executable,
+            "-m",
+            "PyInstaller",
             "--noconfirm",
             "--clean",
             f"--name={APP_NAME}",
             f"--distpath={DIST_DIR}",
             f"--workpath={os.path.join(DIST_DIR, 'build')}",
-            f"--paths={OBF_DIR}", # Look for modules in OBF_DIR
+            f"--paths={OBF_DIR}",  # Look for modules in OBF_DIR
             "--onedir",
             "--collect-all=PySide6",
             "--collect-all=pymupdf",
             f"--additional-hooks-dir={os.path.abspath(os.path.join(os.path.dirname(__file__), 'hooks'))}",
-            "--uac-admin" # FORCE ADMIN PRIVILEGES (UAC)
+            "--uac-admin",  # FORCE ADMIN PRIVILEGES (UAC)
         ]
 
         # Add resources data
         if icon_path:
             # On Windows, use semicolon
-            sep = ";" if os.name == 'nt' else ":"
+            sep = ";" if os.name == "nt" else ":"
             cmd_pyinstaller.append(f"--add-data={icon_path}{sep}resources")
 
-        if os.name == 'nt':
-             cmd_pyinstaller.append("--windowed")
-             if icon_path:
-                 cmd_pyinstaller.append(f"--icon={icon_path}")
+        if os.name == "nt":
+            cmd_pyinstaller.append("--windowed")
+            if icon_path:
+                cmd_pyinstaller.append(f"--icon={icon_path}")
 
         # Hidden imports
         # We must explicitly import the pyarmor runtime and all local obfuscated modules
         # because PyInstaller cannot analyze imports inside obfuscated code.
         hidden_imports = [
-            "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet",
-            "numpy", "requests", "logging", "traceback", "uuid", "platform", "hashlib", "shutil", "json", "datetime", "queue", "threading", "subprocess",
-            
+            "fitz",
+            "PIL",
+            "pytesseract",
+            "cffi",
+            "cryptography",
+            "cryptography.fernet",
+            "numpy",
+            "requests",
+            "logging",
+            "traceback",
+            "uuid",
+            "platform",
+            "hashlib",
+            "shutil",
+            "json",
+            "datetime",
+            "queue",
+            "threading",
+            "subprocess",
             # PySide6
-            "PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtSvgWidgets",
+            "PySide6",
+            "PySide6.QtCore",
+            "PySide6.QtGui",
+            "PySide6.QtWidgets",
+            "PySide6.QtSvgWidgets",
             "pymupdf",
-
             # Top level modules
-            "main", "app_launcher", "app_logger", "config_manager", "roi_utility", "license_validator", "license_updater", "app_updater", "version",
-
+            "main",
+            "app_launcher",
+            "app_logger",
+            "config_manager",
+            "roi_utility",
+            "license_validator",
+            "license_updater",
+            "app_updater",
+            "version",
             # Core package
             "core",
             "core.analysis_service",
@@ -250,11 +290,11 @@ def build():
             "core.rule_service",
             "core.session_manager",
             "core.tesseract_manager",
-
             # GUI package
             "gui",
             "gui.theme",
             "gui.ui_factory",
+            "gui.animations",
             "gui.dialogs",
             "gui.dialogs.roi_selector_dialog",
             "gui.dialogs.rule_editor",
@@ -268,13 +308,12 @@ def build():
             "gui.widgets.pdf_graphics_view",
             "gui.widgets.preview_view",
             "gui.widgets.roi_renderer",
-
+            "gui.widgets.splash_screen",
             # Shared package
             "shared",
             "shared.constants",
-
             # PyArmor runtime
-            runtime_dir
+            runtime_dir,
         ]
 
         for mod in hidden_imports:
@@ -314,13 +353,13 @@ def build():
         # PyInstaller doesn't automatically copy data files unless specified, and we modified source.
         # We manually copy config.json to the dist folder if it's not there.
         if os.path.exists(os.path.join(OBF_DIR, "config.json")):
-             shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
+            shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
 
         # Copy Tesseract-OCR if exists locally (for portable builds)
         local_tesseract = os.path.join(ROOT_DIR, "Tesseract-OCR")
         if os.path.exists(local_tesseract):
-             log_and_print(f"Copying local Tesseract-OCR from {local_tesseract}...")
-             shutil.copytree(local_tesseract, os.path.join(final_dist_path, "Tesseract-OCR"), dirs_exist_ok=True)
+            log_and_print(f"Copying local Tesseract-OCR from {local_tesseract}...")
+            shutil.copytree(local_tesseract, os.path.join(final_dist_path, "Tesseract-OCR"), dirs_exist_ok=True)
 
         log_and_print("\n--- Step 7/7: Compiling Installer with Inno Setup ---")
 
@@ -344,19 +383,14 @@ def build():
                 sys.exit(1)
 
             # Inno Setup expects build dir passed as define
-            cmd_iscc = [
-                iscc_exe,
-                f"/DMyAppVersion={APP_VERSION}",
-                f"/DBuildDir={final_dist_path}",
-                iss_path
-            ]
+            cmd_iscc = [iscc_exe, f"/DMyAppVersion={APP_VERSION}", f"/DBuildDir={final_dist_path}", iss_path]
 
             run_command(cmd_iscc, env=env)
 
             # Locate the generated setup file
             if os.path.exists(setup_output_dir):
                 log_and_print(f"Installer generated in: {setup_output_dir}")
-                
+
                 # Find the latest setup file (Sort by modification time, newest first)
                 exe_files = [f for f in os.listdir(setup_output_dir) if f.endswith(".exe")]
                 if exe_files:
@@ -367,11 +401,11 @@ def build():
             if not setup_filename:
                 log_and_print(f"WARNING: No executable found in {setup_output_dir}", "WARNING")
         else:
-             log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
+            log_and_print("Skipping Installer compilation (ISCC not found).", "WARNING")
 
         # --- Step 8: Netlify Deployment Preparation & Upload ---
         skip_deploy = "--no-deploy" in sys.argv
-        
+
         if setup_filename and not skip_deploy:
             log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
             prepare_and_deploy_netlify(setup_output_dir, setup_filename)
@@ -380,13 +414,14 @@ def build():
         else:
             log_and_print("\n[WARNING] Skipping Netlify deployment because installer was not found.", "WARNING")
 
-        log_and_print("="*60)
+        log_and_print("=" * 60)
         log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
-        log_and_print("="*60)
+        log_and_print("=" * 60)
 
-    except Exception as e:
+    except Exception:
         logger.exception("FATAL ERROR DURING BUILD:")
         sys.exit(1)
+
 
 def get_netlify_token():
     """Returns the obfuscated Netlify API token."""
@@ -395,6 +430,7 @@ def get_netlify_token():
     p2 = "Xa8gdQkKKedPC6"
     p3 = "EnHQZL9687"
     return p1 + p2 + p3
+
 
 def get_netlify_site_id(site_name, token):
     """
@@ -417,6 +453,7 @@ def get_netlify_site_id(site_name, token):
     except Exception as e:
         log_and_print(f"Exception getting Site ID: {e}", "ERROR")
     return None
+
 
 def generate_index_html(deploy_dir, setup_filename, version_str):
     """Generates a professional index.html download page."""
@@ -499,7 +536,7 @@ def generate_index_html(deploy_dir, setup_filename, version_str):
                         Versione: <span class="fw-bold text-dark">v{version_str}</span>
                     </div>
                     <div class="col-6 text-end">
-                        Data: {time.strftime('%d/%m/%Y')}
+                        Data: {time.strftime("%d/%m/%Y")}
                     </div>
                 </div>
             </div>
@@ -511,6 +548,7 @@ def generate_index_html(deploy_dir, setup_filename, version_str):
     with open(os.path.join(deploy_dir, "index.html"), "w", encoding="utf-8") as f:
         f.write(html_content)
     log_and_print("Generated index.html")
+
 
 def prepare_and_deploy_netlify(setup_dir, setup_filename):
     """
@@ -529,13 +567,10 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     log_and_print(f"Copied setup to: {deploy_dir}")
 
     # 2. Generate version.json
-    base_url = version.UPDATE_URL.rsplit('/', 1)[0]
+    base_url = version.UPDATE_URL.rsplit("/", 1)[0]
     download_url = f"{base_url}/{setup_filename}"
 
-    version_data = {
-        "version": version.__version__,
-        "url": download_url
-    }
+    version_data = {"version": version.__version__, "url": download_url}
 
     with open(os.path.join(deploy_dir, "version.json"), "w") as f:
         json.dump(version_data, f, indent=4)
@@ -556,8 +591,8 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     log_and_print("Starting automatic upload to Netlify...")
 
     zip_path = os.path.join(ROOT_DIR, "dist", "deploy.zip")
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(deploy_dir):
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, _dirs, files in os.walk(deploy_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, deploy_dir)
@@ -570,14 +605,11 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
         log_and_print(f"Zip created successfully. Size: {size_mb:.2f} MB")
 
     try:
-        with open(zip_path, 'rb') as f:
+        with open(zip_path, "rb") as f:
             data = f.read()
 
         url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
-        headers = {
-            "Content-Type": "application/zip",
-            "Authorization": f"Bearer {auth_token}"
-        }
+        headers = {"Content-Type": "application/zip", "Authorization": f"Bearer {auth_token}"}
 
         response = requests.post(url, headers=headers, data=data, timeout=300)
 
@@ -595,6 +627,7 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     finally:
         if os.path.exists(zip_path):
             os.remove(zip_path)
+
 
 if __name__ == "__main__":
     build()

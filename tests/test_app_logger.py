@@ -176,9 +176,9 @@ class TestAppLogger(unittest.TestCase):
         finally:
             sys.stdout = original_stdout
 
-
     def test_exception_handler_logs_error(self):
         """Test che l'exception handler logghi l'errore correttamente."""
+
 
 class TestAppLoggerExceptionHandler(unittest.TestCase):
     def setUp(self):

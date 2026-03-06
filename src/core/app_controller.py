@@ -103,11 +103,7 @@ class AppController(QObject):
 
         self.pdf_files = list(set(all_pdfs))  # Rimuove duplicati
         if self.pdf_files:
-            msg = (
-                f"{len(self.pdf_files)} file selezionati"
-                if len(self.pdf_files) > 1
-                else Path(self.pdf_files[0]).name
-            )
+            msg = f"{len(self.pdf_files)} file selezionati" if len(self.pdf_files) > 1 else Path(self.pdf_files[0]).name
             self.log_received.emit(f"File pronti per elaborazione: {msg}", "INFO", False)
         else:
             self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING", False)
@@ -147,7 +143,11 @@ class AppController(QObject):
             self._log_timer.start(100)
 
         self._current_worker = PdfProcessingWorker(
-            self.log_queue, self.pdf_files.copy(), odc, self.config, on_worker_complete,
+            self.log_queue,
+            self.pdf_files.copy(),
+            odc,
+            self.config,
+            on_worker_complete,
         )
         self._current_worker.start()
         return True
@@ -183,7 +183,9 @@ class AppController(QObject):
                     action = item.get("action")
                     if action == "update_progress":
                         self.progress_updated.emit(
-                            float(item.get("value", 0)), str(item.get("text", "")), item.get("eta_seconds"),
+                            float(item.get("value", 0)),
+                            str(item.get("text", "")),
+                            item.get("eta_seconds"),
                         )
                     elif item.get("level") == "PROGRESS" and item.get("replace_last"):
                         self.log_received.emit(item.get("text", ""), "PROGRESS", True)

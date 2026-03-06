@@ -1,9 +1,7 @@
-import builtins
 import contextlib
-import json
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import config_manager
 
@@ -17,12 +15,12 @@ class TestConfigManager(unittest.TestCase):
         if p.exists():
             with contextlib.suppress(BaseException):
                 p.unlink()
-        
+
         pbak = p.with_suffix(p.suffix + ".bak")
         if pbak.exists():
             with contextlib.suppress(BaseException):
                 pbak.unlink()
-                
+
         ptmp = p.with_suffix(p.suffix + ".tmp")
         if ptmp.exists():
             with contextlib.suppress(Exception):
@@ -51,11 +49,12 @@ class TestConfigManager(unittest.TestCase):
     @patch("config_manager.CONFIG_FILE", "test_config_temp.json")
     def test_corrupted_config(self, mock_base):
         # Mock rename and open to trigger failure via OSError
-        with patch("pathlib.Path.rename") as mock_rename, \
-             patch("pathlib.Path.unlink"), \
-             patch("pathlib.Path.exists", return_value=True), \
-             patch("pathlib.Path.open", side_effect=OSError("Simulated IO Error")):
-            
+        with (
+            patch("pathlib.Path.rename") as mock_rename,
+            patch("pathlib.Path.unlink"),
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.open", side_effect=OSError("Simulated IO Error")),
+        ):
             config = config_manager.load_config()
             self.assertEqual(config, {})
             self.assertTrue(mock_rename.called)
@@ -66,10 +65,12 @@ class TestConfigManager(unittest.TestCase):
         Path(self.test_config_file).write_text("{ invalid", encoding="utf-8")
 
         # Mock Path.exists to raise OSError
-        with patch("pathlib.Path.rename", side_effect=OSError("Mock fail")):
-            with patch("pathlib.Path.exists", side_effect=lambda self: self.name == "test_config_temp.json", autospec=True):
-                config = config_manager.load_config()
-                self.assertEqual(config, {})
+        with (
+            patch("pathlib.Path.rename", side_effect=OSError("Mock fail")),
+            patch("pathlib.Path.exists", side_effect=lambda self: self.name == "test_config_temp.json", autospec=True),
+        ):
+            config = config_manager.load_config()
+            self.assertEqual(config, {})
 
     @patch("config_manager.CONFIG_FILE", "test_config_temp.json")
     def test_atomic_save_failure(self):

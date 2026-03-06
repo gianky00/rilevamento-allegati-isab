@@ -52,6 +52,7 @@ class PdfProcessingWorker:
 
     def _run(self) -> None:
         """Loop di elaborazione logico isolato dal front-end GUI."""
+        self.processing_start_time = datetime.now()
         unknown_files: list[dict[str, Any]] = []
         total_files = len(self.pdf_files)
 
@@ -61,7 +62,10 @@ class PdfProcessingWorker:
                 break
 
             def progress_callback(
-                message: str, level: str = "INFO", current_idx: int = i, total: int = total_files,
+                message: str,
+                level: str = "INFO",
+                current_idx: int = i,
+                total: int = total_files,
             ) -> None:
                 """Gestisce i messaggi di log standard durante l'elaborazione."""
                 self.log_queue.put((message, level))
@@ -85,7 +89,10 @@ class PdfProcessingWorker:
                                 break
 
             def advanced_progress_callback(
-                data: Any, level: str = "INFO", current_idx: int = i, total: int = total_files,
+                data: Any,
+                level: str = "INFO",
+                current_idx: int = i,
+                total: int = total_files,
             ) -> None:
                 """Gestisce messaggi di progresso strutturati (percentuali, ETA) per aggiornare la barra di progresso."""
                 if isinstance(data, dict) and data.get("type") == "page_progress":
@@ -117,7 +124,11 @@ class PdfProcessingWorker:
             pdf_path = Path(pdf_path_str)
             self.log_queue.put((f"=== FILE {i + 1}/{total_files}: {pdf_path.name} ===", "HEADER"))
             success, message, generated, moved = pdf_processor.process_pdf(
-                str(pdf_path), self.odc, self.config, advanced_progress_callback, self.is_cancelled,
+                str(pdf_path),
+                self.odc,
+                self.config,
+                advanced_progress_callback,
+                self.is_cancelled,
             )
 
             if not success:
@@ -139,7 +150,15 @@ class PdfProcessingWorker:
         self.log_queue.put({"action": "update_progress", "value": 100, "text": "Completato!"})
         if self.processing_start_time:
             elapsed = datetime.now() - self.processing_start_time
-            elapsed_str = str(elapsed).split(".")[0]
+            total_seconds = int(elapsed.total_seconds())
+
+            if total_seconds < 60:
+                elapsed_str = f"{total_seconds} secondi"
+            else:
+                minutes, seconds = divmod(total_seconds, 60)
+                m_str = "1 minuto" if minutes == 1 else f"{minutes} minuti"
+                s_str = f" {seconds} secondi" if seconds > 0 else ""
+                elapsed_str = f"{m_str}{s_str}"
         else:
             elapsed_str = "N/A"
 

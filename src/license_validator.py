@@ -110,6 +110,7 @@ def _get_license_paths():
     # Use APPDATA for license storage to ensure write permissions
     if sys.platform == "win32":
         import os
+
         appdata = os.environ.get("APPDATA")
         if not appdata:
             appdata = str(Path.home())
@@ -184,7 +185,11 @@ def verify_license():
 
         # Verifica hash pyarmor.rkey se presente
         rkey_path = Path(paths["rkey"])
-        if "pyarmor.rkey" in manifest and rkey_path.exists() and _calculate_sha256(str(rkey_path)) != manifest.get("pyarmor.rkey"):
+        if (
+            "pyarmor.rkey" in manifest
+            and rkey_path.exists()
+            and _calculate_sha256(str(rkey_path)) != manifest.get("pyarmor.rkey")
+        ):
             return False, "Integrità licenza compromessa (pyarmor.rkey)"
 
     except Exception as e:

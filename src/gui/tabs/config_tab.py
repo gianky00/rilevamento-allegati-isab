@@ -37,12 +37,19 @@ class ConfigTab(QWidget):
 
         # Tesseract
         tess_group = QGroupBox(" Tesseract OCR ")
-        tess_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}")
+        tess_group.setStyleSheet(
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; color: {COLORS['text_primary']}; }}"
+        )
         tess_layout = QHBoxLayout(tess_group)
         tess_layout.setContentsMargins(12, 15, 12, 12)
-        tess_layout.addWidget(QLabel("Percorso:"))
+        tess_label = QLabel("Percorso:")
+        tess_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        tess_layout.addWidget(tess_label)
 
         self.main_app.tesseract_path_entry = QLineEdit()
+        self.main_app.tesseract_path_entry.setStyleSheet(
+            f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']};"
+        )
         self.main_app.tesseract_path_entry.textChanged.connect(self.main_app._on_tesseract_path_change)
         tess_layout.addWidget(self.main_app.tesseract_path_entry, 1)
 
@@ -57,7 +64,9 @@ class ConfigTab(QWidget):
 
         # Rules
         rules_group = QGroupBox(" Regole di Classificazione ")
-        rules_group.setStyleSheet(f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; }}")
+        rules_group.setStyleSheet(
+            f"QGroupBox {{ font-weight: bold; border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; color: {COLORS['text_primary']}; }}"
+        )
         rlayout = QHBoxLayout(rules_group)
         rlayout.setContentsMargins(12, 15, 12, 12)
 
@@ -67,19 +76,32 @@ class ConfigTab(QWidget):
         self.main_app.rules_tree.setColumnWidth(0, 80)
         self.main_app.rules_tree.setColumnWidth(1, 150)
         self.main_app.rules_tree.setAlternatingRowColors(True)
+        self.main_app.rules_tree.setStyleSheet(
+            f"color: {COLORS['text_primary']}; background-color: {COLORS['bg_primary']};"
+        )
         self.main_app.rules_tree.itemSelectionChanged.connect(self.main_app._update_rule_details_panel)
         rlayout.addWidget(self.main_app.rules_tree, 2)
 
         # Details
         det_widget = QWidget()
         det_layout = QVBoxLayout(det_widget)
-        det_layout.addWidget(QLabel("Keywords:"))
+
+        kw_label = QLabel("Keywords:")
+        kw_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        det_layout.addWidget(kw_label)
+
         self.main_app.keywords_text = QTextEdit()
         self.main_app.keywords_text.setReadOnly(True)
         self.main_app.keywords_text.setFixedHeight(100)
+        self.main_app.keywords_text.setStyleSheet(
+            f"background-color: {COLORS['bg_primary']}; color: {COLORS['text_primary']}; border: 1px solid {COLORS['border']};"
+        )
         det_layout.addWidget(self.main_app.keywords_text)
 
-        det_layout.addWidget(QLabel("Aree ROI:"))
+        roi_label = QLabel("Aree ROI:")
+        roi_label.setStyleSheet(f"color: {COLORS['text_primary']};")
+        det_layout.addWidget(roi_label)
+
         self.main_app.roi_details_label = QLabel("")
         self.main_app.roi_details_label.setStyleSheet(f"color: {COLORS['text_muted']};")
         det_layout.addWidget(self.main_app.roi_details_label)

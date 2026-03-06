@@ -446,6 +446,31 @@ def run_utility() -> None:
     """Entry point programmatico per l'utility."""
 
     app = QApplication(sys.argv)
+
+    # FORZATURA STILE E PALETTE: Previene i bug di Windows Dark Mode o temi ad alto contrasto
+    app.setStyle("Fusion")
+
+    from PySide6.QtGui import QColor, QPalette
+
+    from gui.theme import GLOBAL_QSS
+
+    light_palette = QPalette()
+    light_palette.setColor(QPalette.ColorRole.Window, QColor("#FFFFFF"))
+    light_palette.setColor(QPalette.ColorRole.WindowText, QColor("#111827"))
+    light_palette.setColor(QPalette.ColorRole.Base, QColor("#FFFFFF"))
+    light_palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#F8F9FA"))
+    light_palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#FFFFFF"))
+    light_palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#111827"))
+    light_palette.setColor(QPalette.ColorRole.Text, QColor("#111827"))
+    light_palette.setColor(QPalette.ColorRole.Button, QColor("#F8F9FA"))
+    light_palette.setColor(QPalette.ColorRole.ButtonText, QColor("#111827"))
+    light_palette.setColor(QPalette.ColorRole.BrightText, QColor("#FFFFFF"))
+    light_palette.setColor(QPalette.ColorRole.Link, QColor("#2563EB"))
+    light_palette.setColor(QPalette.ColorRole.Highlight, QColor("#2563EB"))
+    light_palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
+    app.setPalette(light_palette)
+    app.setStyleSheet(GLOBAL_QSS)
+
     window = ROIDrawingApp()
     window.show()
     sys.exit(app.exec())

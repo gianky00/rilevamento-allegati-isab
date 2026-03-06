@@ -40,12 +40,16 @@ class HelpTab(QWidget):
         splitter.setStyleSheet(f"QSplitter::handle {{ background-color: {COLORS['border']}; }}")
 
         self.help_topics_list = QListWidget()
-        self.help_topics_list.setStyleSheet(f"QListWidget {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 10px; }}")
+        self.help_topics_list.setStyleSheet(
+            f"QListWidget {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 10px; }}"
+        )
 
         self.help_detail_text = QTextEdit()
         self.help_detail_text.setReadOnly(True)
         self.help_detail_text.setFont(FONTS["body"])
-        self.help_detail_text.setStyleSheet(f"QTextEdit {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 15px; }}")
+        self.help_detail_text.setStyleSheet(
+            f"QTextEdit {{ border: none; background-color: {COLORS['bg_secondary']}; border-radius: 8px; padding: 15px; }}"
+        )
 
         splitter.addWidget(self.help_topics_list)
         splitter.addWidget(self.help_detail_text)
