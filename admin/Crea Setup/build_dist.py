@@ -217,7 +217,7 @@ def build():
             "--collect-all=PySide6",
             "--collect-all=pymupdf",
             f"--additional-hooks-dir={os.path.abspath(os.path.join(os.path.dirname(__file__), 'hooks'))}",
-            "--uac-admin",  # FORCE ADMIN PRIVILEGES (UAC)
+            # "--uac-admin",  # RIMOSSO: Impedisce il drag&drop da Explorer (UIPI)
         ]
 
         # Add resources data
