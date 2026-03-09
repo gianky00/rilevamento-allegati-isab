@@ -124,7 +124,18 @@ def _get_license_paths():
         "config": str(license_dir / "config.dat"),
         "rkey": str(license_dir / "pyarmor.rkey"),
         "manifest": str(license_dir / "manifest.json"),
+        "token": str(license_dir / "validity.token"),
     }
+
+
+def destroy_license():
+    """Rimuove fisicamente tutti i file relativi alla licenza (Self-Destruct)."""
+    paths = _get_license_paths()
+    for key in ["config", "rkey", "manifest", "token"]:
+        with suppress(OSError):
+            p = Path(paths[key])
+            if p.exists():
+                p.unlink()
 
 
 def get_license_info():

@@ -4,6 +4,8 @@ Gestisce l'aggiornamento e la validazione della licenza.
 """
 
 import sys
+import json
+import hashlib
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +17,11 @@ import license_validator
 
 # Chiave per cifratura token grace period
 GRACE_PERIOD_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
+
+
+class LicenseRevokedError(Exception):
+    """Eccezione sollevata quando la licenza è stata revocata dal server."""
+    pass
 
 
 def get_github_token():
@@ -150,12 +157,13 @@ def check_grace_period():
 
 def run_update():
     """
-    Controlla e scarica aggiornamenti licenza da GitHub.
+    Controlla e scarica aggiornamenti licenza da GitHub con Zero-Corruption Policy.
 
-    - Usa l'API GitHub per scaricare i file di licenza
-    - Se tutti i file sono disponibili (200 OK), li scarica
-    - Se qualche file manca (404), mantiene i file locali
-    - In caso di errore di rete, verifica il periodo di grazia
+    Workflow:
+    1. Verifica esistenza HWID folder (404 = REVOCATA).
+    2. Download manifest.json per check hash.
+    3. Download config.dat e rkey solo se necessario.
+    4. Validazione in memoria (HWID e decifratura) prima di scrivere.
     """
 
     hw_id = license_validator.get_hardware_id().strip().rstrip(".")
@@ -165,46 +173,87 @@ def run_update():
         with suppress(OSError):
             license_dir.mkdir(parents=True, exist_ok=True)
 
+    # 1. Verifica REVOCA (Cartella HWID su GitHub)
     base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
     token = get_github_token()
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.raw"}
 
-    files_map = {"config.dat": "config.dat", "pyarmor.rkey": "pyarmor.rkey", "manifest.json": "manifest.json"}
+    try:
+        # Check folder existence/status
+        # Invece di iterare, scarichiamo prima il manifest per vedere se siamo autorizzati
+        manifest_url = f"{base_url}/manifest.json"
+        resp = requests.get(manifest_url, headers=headers, timeout=10)
 
-    downloaded_content = {}
-    incomplete_update = False
-    network_error_occurred = False
+        if resp.status_code == 404:
+            # SEGNALE 404: La cartella non esiste più -> Licenza REVOCATA
+            license_validator.destroy_license()
+            msg = "LICENZA REVOCATA DAL SERVER.\nContattare l'amministratore per il ripristino."
+            raise LicenseRevokedError(msg)
 
-    # Tentativo download
-    for remote_name, local_name in files_map.items():
-        url = f"{base_url}/{remote_name}"
+        if resp.status_code != 200:
+            # Altri errori (es. 401, 403, 500) -> Usa Grace Period
+            check_grace_period()
+            return
 
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-
-            if response.status_code == 200:
-                downloaded_content[local_name] = response.content
-            elif response.status_code in (404, 401):
-                incomplete_update = True
-                if response.status_code == 401:
-                    break
-            else:
-                incomplete_update = True
-
-        except requests.RequestException:
-            network_error_occurred = True
-            break
-
-    if network_error_occurred:
+        remote_manifest = resp.json() if isinstance(resp.content, dict) else json.loads(resp.content)
+    except (requests.RequestException, json.JSONDecodeError) as e:
+        if isinstance(e, LicenseRevokedError):
+            raise
         check_grace_period()
-    elif incomplete_update:
+        return
+
+    # 2. Ottimizzazione Traffico: Check hash manifest locale vs remoto
+    local_manifest_path = license_dir / "manifest.json"
+    if local_manifest_path.exists():
+        with suppress(Exception):
+            local_manifest = json.loads(local_manifest_path.read_text(encoding="utf-8"))
+            if local_manifest.get("config.dat") == remote_manifest.get("config.dat"):
+                # Licenza già aggiornata
+                update_grace_timestamp()
+                return
+
+    # 3. Download in RAM (Pre-Validazione)
+    files_to_download = ["config.dat", "pyarmor.rkey"]
+    downloaded_content = {"manifest.json": json.dumps(remote_manifest).encode("utf-8")}
+
+    try:
+        for filename in files_to_download:
+            if filename not in remote_manifest:
+                continue
+            url = f"{base_url}/{filename}"
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                downloaded_content[filename] = r.content
+            else:
+                raise Exception(f"Errore download {filename}: {r.status_code}")
+
+        # 4. Validazione in Memoria (Zero-Corruption)
+        config_data = downloaded_content.get("config.dat")
+        if not config_data:
+            raise Exception("Dati configurazione mancanti nel download")
+
+        # Verifica decifratura e HWID
+        cipher = Fernet(license_validator.LICENSE_SECRET_KEY)
+        decrypted_data = cipher.decrypt(config_data)
+        payload = json.loads(decrypted_data.decode("utf-8"))
+
+        license_hw_id = payload.get("Hardware ID", "").strip().rstrip(".")
+        if license_hw_id != hw_id:
+            raise Exception(f"Hardware ID mismatch nel nuovo file: {license_hw_id} vs {hw_id}")
+
+        # 5. Scrittura sicura su disco solo se tutto OK
+        for fname, content in downloaded_content.items():
+            (license_dir / fname).write_bytes(content)
+
         update_grace_timestamp()
-    else:
-        with suppress(OSError):
-            for local_name, content in downloaded_content.items():
-                full_path = license_dir / local_name
-                full_path.write_bytes(content)
-            update_grace_timestamp()
+
+    except Exception as e:
+        if isinstance(e, LicenseRevokedError):
+            raise
+        # Se l'aggiornamento fallisce, manteniamo la licenza precedente e usiamo il grace period
+        # se il timestamp è ancora valido
+        with suppress(Exception):
+            check_grace_period()
 
 
 if __name__ == "__main__":

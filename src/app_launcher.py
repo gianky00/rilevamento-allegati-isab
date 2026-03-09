@@ -78,11 +78,14 @@ def run_app() -> None:
     splash.set_progress(30, "Verifica licenza online...")
     try:
         license_updater.run_update()
-    except Exception as e:
+    except license_updater.LicenseRevokedError as e:
         splash.hide()
-        logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
-        QMessageBox.critical(None, "Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        logger.critical(f"Licenza REVOCATA: {e}")
+        QMessageBox.critical(splash, "ACCESSO NEGATO", str(e))
         sys.exit(1)
+    except Exception as e:
+        # Per altri errori (es. timeout senza grace period), verifichiamo comunque la licenza locale
+        logger.warning(f"Aggiornamento licenza saltato o fallito: {e}")
 
     splash.set_progress(60, "Convalida Hardware ID...")
     is_valid, msg = license_validator.verify_license()
@@ -93,7 +96,7 @@ def run_app() -> None:
         err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
         clipboard = qt_app.clipboard()
         clipboard.setText(hw_id)
-        QMessageBox.critical(None, "Licenza Non Valida", err_msg)
+        QMessageBox.critical(splash, "Licenza Non Valida", err_msg)
         sys.exit(1)
 
     # 3. Preparazione Ambiente

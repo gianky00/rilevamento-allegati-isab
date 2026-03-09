@@ -179,6 +179,11 @@ class MainApp(QMainWindow):
         self._clock_timer.timeout.connect(self._update_clock)
         self._clock_timer.start(1000)
 
+        # Heartbeat di Background (Controllo licenza ogni 4 ore)
+        self._license_heartbeat_timer = QTimer(self)
+        self._license_heartbeat_timer.timeout.connect(lambda: self.controller.check_license_online(silent=True))
+        self._license_heartbeat_timer.start(4 * 60 * 60 * 1000)
+
         QTimer.singleShot(500, self.controller.check_for_restore)
         QTimer.singleShot(3000, lambda: self.controller.check_updates(silent=True))
 
@@ -269,6 +274,10 @@ class MainApp(QMainWindow):
 
     def _on_license_updated(self, info: dict[str, Any]) -> None:
         """Aggiorna i widget della licenza con le informazioni ricevute dal controller."""
+        if info.get("revoked"):
+            QMessageBox.critical(self, "ACCESSO NEGATO", info.get("message", "Licenza revocata."))
+            sys.exit(1)
+
         if info.get("is_valid"):
             self.license_status_label.setText("✓ SISTEMA ATTIVO")
             self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; border: none;")

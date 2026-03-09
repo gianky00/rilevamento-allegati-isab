@@ -76,7 +76,7 @@ class AppController(QObject):
             logger.exception(f"Errore salvataggio settings: {e}")
 
     def check_license(self) -> None:
-        """Esegue la validazione della licenza e notifica i risultati."""
+        """Esegue la validazione della licenza locale e notifica i risultati."""
         try:
             payload = license_validator.get_license_info()
             hw_id = license_validator.get_hardware_id()
@@ -92,8 +92,26 @@ class AppController(QObject):
             }
             self.license_status_updated.emit(info)
         except Exception as e:
-            logger.exception(f"Errore check licenza: {e}")
+            logger.exception(f"Errore check licenza locale: {e}")
             self.license_status_updated.emit({"is_valid": False, "error": str(e)})
+
+    def check_license_online(self, silent: bool = True) -> bool:
+        """Esegue un controllo online (run_update) della licenza."""
+        try:
+            import license_updater
+            license_updater.run_update()
+            self.check_license()  # Aggiorna la view con i nuovi dati
+            return True
+        except Exception as e:
+            from license_updater import LicenseRevokedError
+            if isinstance(e, LicenseRevokedError):
+                logger.critical(f"CONTROLLO ONLINE: LICENZA REVOCATA: {e}")
+                self.log_received.emit(str(e), "ERROR", False)
+                self.license_status_updated.emit({"is_valid": False, "revoked": True, "message": str(e)})
+                return False
+            if not silent:
+                self.log_received.emit(f"Errore aggiornamento licenza: {e}", "WARNING", False)
+            return True # Continua comunque se è un errore di rete (Grace Period gestito internamente)
 
     def set_pdf_files(self, paths: list[str]) -> None:
         """Imposta la lista dei file da elaborare trovandoli nei percorsi forniti."""
@@ -109,8 +127,13 @@ class AppController(QObject):
             self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING", False)
 
     def start_processing(self, odc: str) -> bool:
-        """Avvia il workflow di elaborazione threadata."""
+        """Avvia il workflow di elaborazione threadata con controllo JIT della licenza."""
         if self._is_processing or not self.pdf_files:
+            return False
+
+        # JIT Enforcement: Controllo licenza prima di ogni operazione critica
+        self.log_received.emit("Verifica autorizzazioni in corso...", "INFO", False)
+        if not self.check_license_online(silent=True):
             return False
 
         self._is_processing = True

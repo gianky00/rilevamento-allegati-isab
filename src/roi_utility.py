@@ -443,7 +443,9 @@ class ROIDrawingApp(QMainWindow):
 
 
 def run_utility() -> None:
-    """Entry point programmatico per l'utility."""
+    """Entry point programmatico per l'utility con controllo licenza mandatorio."""
+    import license_updater
+    import license_validator
 
     app = QApplication(sys.argv)
 
@@ -470,6 +472,19 @@ def run_utility() -> None:
     light_palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
     app.setPalette(light_palette)
     app.setStyleSheet(GLOBAL_QSS)
+
+    # 1. JIT Enforcement: Controllo licenza prima di avviare l'utility
+    try:
+        license_updater.run_update()
+    except Exception as e:
+        QMessageBox.critical(None, "Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
+        sys.exit(1)
+
+    is_valid, msg = license_validator.verify_license()
+    if not is_valid:
+        hw_id = license_validator.get_hardware_id()
+        QMessageBox.critical(None, "Licenza Non Valida", f"{msg}\n\nHardware ID: {hw_id}")
+        sys.exit(1)
 
     window = ROIDrawingApp()
     window.show()
