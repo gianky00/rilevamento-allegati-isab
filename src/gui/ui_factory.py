@@ -6,10 +6,20 @@ Riduce il boilerplate in MainApp gestendo la creazione di layout complessi.
 from PySide6.QtCore import Property, QPropertyAnimation, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+)
 
 from core.path_manager import get_asset_path
 from gui.theme import COLORS, FONTS
+from shared.security_utils import sanitize_html
 
 
 class AnimatedButton(QPushButton):
@@ -237,3 +247,42 @@ class UIFactory:
         layout.addStretch()
 
         return row, v_label
+
+    @staticmethod
+    def show_message(
+        parent,
+        title: str,
+        text: str,
+        icon: QMessageBox.Icon = QMessageBox.Icon.Information,
+        is_rich_text: bool = False,
+    ) -> int:
+        """
+        Mostra un messaggio QMessageBox sanificato (Pillar 4).
+        Di default usa PlainText. Se abilitato RichText, sanifica l'input.
+        """
+        msg = QMessageBox(parent)
+        msg.setWindowTitle(title)
+        msg.setIcon(icon)
+
+        if is_rich_text:
+            sanitized_text = sanitize_html(text)
+            msg.setTextFormat(Qt.TextFormat.RichText)
+            msg.setText(sanitized_text)
+        else:
+            msg.setTextFormat(Qt.TextFormat.PlainText)
+            msg.setText(text)
+
+        return msg.exec()
+
+    @staticmethod
+    def set_secure_text(widget: QLabel, text: str, is_rich_text: bool = False) -> None:
+        """
+        Imposta il testo di una QLabel in modo sicuro (Pillar 4).
+        """
+        if is_rich_text:
+            sanitized_text = sanitize_html(text)
+            widget.setTextFormat(Qt.TextFormat.RichText)
+            widget.setText(sanitized_text)
+        else:
+            widget.setTextFormat(Qt.TextFormat.PlainText)
+            widget.setText(text)

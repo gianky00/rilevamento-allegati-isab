@@ -9,14 +9,36 @@ la cattura di errori anche in caso di crash immediato.
 
 import logging
 import os
+import re
 import sys
 import traceback
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
+from shared.security_utils import sanitize_html
+
 # Costante per il nome dell'applicazione
 APP_NAME = "Intelleo PDF Splitter"
+
+
+def save_bot_html(html_content: str, filename: str) -> str:
+    """
+    Salva il sorgente HTML di un bot dopo averlo sanificato (Pillar 4).
+    Previene l'esecuzione di script durante il debug dei log.
+    """
+    try:
+        log_dir = Path(get_log_directory()) / "bot_html"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        sanitized = sanitize_html(html_content)
+        file_path = log_dir / filename
+
+        file_path.write_text(sanitized, encoding="utf-8")
+        return str(file_path)
+    except Exception as e:
+        _write_immediate(f"Errore salvataggio HTML bot: {e}")
+        return ""
 
 # Variabile globale per tracciare lo stato
 _initialized = False

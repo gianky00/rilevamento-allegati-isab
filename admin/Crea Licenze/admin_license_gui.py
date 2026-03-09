@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -9,10 +10,31 @@ from datetime import date, timedelta
 from tkinter import messagebox, ttk
 
 from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# Import shared secret from the root validator if possible, or duplicate it.
-# To keep it simple and robust for the admin tool, we duplicate the key here.
-LICENSE_SECRET_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
+# SincroJob V9.0 - Costanti di blindatura (Allineamento SyncroJob 2026)
+LICENSE_SALT = b"SyncroJob_Grace_Salt_2026"
+
+
+def derive_license_key(hw_id: str) -> bytes:
+    """
+    Deriva una chiave Fernet da 32 byte partendo dall'HWID (Pillar 5).
+    Deve essere IDENTICA alla funzione nel client.
+    """
+    clean_id = hw_id.strip().rstrip(".")
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=LICENSE_SALT,
+        iterations=480000,
+        backend=default_backend(),
+    )
+
+    key_bytes = kdf.derive(clean_id.encode("utf-8"))
+    return base64.urlsafe_b64encode(key_bytes)
 
 
 def _calculate_sha256(filepath):
@@ -93,87 +115,65 @@ class LicenseAdminApp:
         client_dir = os.path.join(base_output, folder_name)
         target_dir = os.path.join(client_dir, "Licenza")
 
-        # Comando PyArmor (genera in cartella temporanea 'dist' locale allo script)
-        cmd = [sys.executable, "-m", "pyarmor.cli", "gen", "key", "-e", expiry, "-b", disk_serial]
-
         try:
-            # Esegui comando
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            # Crea cartella destinazione
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir)
+            os.makedirs(target_dir)
 
-            if res.returncode == 0:
-                # PyArmor di default mette l'output in "dist/pyarmor.rkey" relativo alla CWD
-                src_default = os.path.join("dist", "pyarmor.rkey")
+            # 1. GENERAZIONE FILE CRITTOGRAFATO (SyncroJob V9.0)
+            # Format dates to DD/MM/YYYY
+            try:
+                expiry_obj = date.fromisoformat(expiry)
+                expiry_str = expiry_obj.strftime("%d/%m/%Y")
+            except ValueError:
+                expiry_str = expiry  # Fallback if invalid format
 
-                if os.path.exists(src_default):
-                    # Crea cartella destinazione
-                    if os.path.exists(target_dir):
-                        shutil.rmtree(target_dir)
-                    os.makedirs(target_dir)
+            gen_date_str = date.today().strftime("%d/%m/%Y")
+            clean_disk_serial = disk_serial.strip().rstrip(".")
 
-                    # 1. Sposta il file di licenza
-                    dst_lic = os.path.join(target_dir, "pyarmor.rkey")
-                    shutil.move(src_default, dst_lic)
+            payload = {
+                "Hardware ID": clean_disk_serial,
+                "Scadenza Licenza": expiry_str,
+                "Generato il": gen_date_str,
+                "Cliente": client_name,
+            }
 
-                    # 1.1 Rimuovi cartella dist temporanea
-                    if os.path.exists("dist"):
-                        shutil.rmtree("dist", ignore_errors=True)
+            json_payload = json.dumps(payload).encode("utf-8")
 
-                    # 2. GENERAZIONE FILE CRITTOGRAFATO
-                    # Format dates to DD/MM/YYYY
-                    try:
-                        expiry_obj = date.fromisoformat(expiry)
-                        expiry_str = expiry_obj.strftime("%d/%m/%Y")
-                    except ValueError:
-                        expiry_str = expiry  # Fallback if invalid format
+            # Derivazione dinamica della chiave (Pillar 5)
+            dynamic_key = derive_license_key(clean_disk_serial)
+            cipher = Fernet(dynamic_key)
+            encrypted_data = cipher.encrypt(json_payload)
 
-                    gen_date_str = date.today().strftime("%d/%m/%Y")
+            config_path = os.path.join(target_dir, "config.dat")
+            with open(config_path, "wb") as f:
+                f.write(encrypted_data)
 
-                    # NOTE: admin tool logic previously stripped '.' but let's just keep what user entered but strip whitespace.
-                    # Ideally the user should paste exactly what the main app showed them.
-                    clean_disk_serial = disk_serial
+            # 2. GENERAZIONE MANIFEST CON CHECKSUM (Solo config.dat)
+            manifest = {
+                "config.dat": _calculate_sha256(config_path),
+                "generated": gen_date_str,
+                "client": client_name
+            }
+            manifest_path = os.path.join(target_dir, "manifest.json")
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=4)
 
-                    payload = {
-                        "Hardware ID": clean_disk_serial,
-                        "Scadenza Licenza": expiry_str,
-                        "Generato il": gen_date_str,
-                        "Cliente": client_name,
-                    }
+            # Istruzioni per l'utente
+            msg = (
+                f"Licenza blindata GENERATA con successo!\n\n"
+                f"Cliente: {client_name}\n"
+                f"Hardware ID: {clean_disk_serial}\n\n"
+                f"FILE SALVATI IN:\n{target_dir}\n"
+                f"(Troverai 'config.dat' e 'manifest.json')"
+            )
 
-                    json_payload = json.dumps(payload).encode("utf-8")
-                    cipher = Fernet(LICENSE_SECRET_KEY)
-                    encrypted_data = cipher.encrypt(json_payload)
+            messagebox.showinfo("Successo", msg)
 
-                    config_path = os.path.join(target_dir, "config.dat")
-                    with open(config_path, "wb") as f:
-                        f.write(encrypted_data)
-
-                    # 3. GENERAZIONE MANIFEST CON CHECKSUM
-                    manifest = {
-                        "pyarmor.rkey": _calculate_sha256(dst_lic),
-                        "config.dat": _calculate_sha256(config_path),
-                    }
-                    manifest_path = os.path.join(target_dir, "manifest.json")
-                    with open(manifest_path, "w") as f:
-                        json.dump(manifest, f, indent=4)
-
-                    # Istruzioni per l'utente
-                    msg = (
-                        f"Licenza GENERATA con successo!\n\n"
-                        f"Cliente: {client_name}\n"
-                        f"Hardware ID: {disk_serial}\n\n"
-                        f"FILE SALVATI IN:\n{target_dir}\n"
-                        f"(Troverai 'pyarmor.rkey', 'config.dat' e 'manifest.json')"
-                    )
-
-                    messagebox.showinfo("Successo", msg)
-
-                    # Apre la cartella automaticamente
-                    if os.name == "nt":
-                        os.startfile(target_dir)
-                else:
-                    messagebox.showerror("Errore", f"File generato non trovato in {src_default}")
-            else:
-                messagebox.showerror("Errore PyArmor", f"Output errore:\n{res.stderr}")
+            # Apre la cartella automaticamente
+            if os.name == "nt":
+                os.startfile(target_dir)
 
         except Exception as e:
             messagebox.showerror("Eccezione", str(e))

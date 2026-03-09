@@ -3,6 +3,7 @@ Intelleo PDF Splitter - License Validator
 Gestisce la validazione della licenza software.
 """
 
+import base64
 import hashlib
 import json
 import platform
@@ -14,9 +15,33 @@ from datetime import date
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# Chiave segreta per decifratura licenza
-LICENSE_SECRET_KEY = b"8kHs_rmwqaRUk1AQLGX65g4AEkWUDapWVsMFUQpN9Ek="
+# SincroJob V9.0 - Costanti di blindatura (Allineamento SyncroJob 2026)
+LICENSE_SALT = b"SyncroJob_Grace_Salt_2026"
+
+
+def derive_license_key(hw_id: str) -> bytes:
+    """
+    Deriva una chiave Fernet da 32 byte partendo dall'HWID dell'utente.
+    Utilizza PBKDF2HMAC con 480.000 iterazioni per massima sicurezza.
+    """
+    # Normalizzazione HWID (Pilastro 1)
+    # Rimuove spazi e punti finali, ma mantiene il case originale per consistenza
+    clean_id = hw_id.strip().rstrip(".")
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=LICENSE_SALT,
+        iterations=480000,
+        backend=default_backend(),
+    )
+
+    key_bytes = kdf.derive(clean_id.encode("utf-8"))
+    return base64.urlsafe_b64encode(key_bytes)
 
 
 def _calculate_sha256(filepath):
@@ -106,7 +131,7 @@ def get_hardware_id():
 
 
 def _get_license_paths():
-    """Restituisce i percorsi dei file di licenza."""
+    """Restituisce i percorsi dei file di licenza core."""
     # Use APPDATA for license storage to ensure write permissions
     if sys.platform == "win32":
         import os
@@ -122,7 +147,6 @@ def _get_license_paths():
     return {
         "dir": str(license_dir),
         "config": str(license_dir / "config.dat"),
-        "rkey": str(license_dir / "pyarmor.rkey"),
         "manifest": str(license_dir / "manifest.json"),
         "token": str(license_dir / "validity.token"),
     }
@@ -131,7 +155,7 @@ def _get_license_paths():
 def destroy_license():
     """Rimuove fisicamente tutti i file relativi alla licenza (Self-Destruct)."""
     paths = _get_license_paths()
-    for key in ["config", "rkey", "manifest", "token"]:
+    for key in ["config", "manifest", "token"]:
         with suppress(OSError):
             p = Path(paths[key])
             if p.exists():
@@ -140,7 +164,7 @@ def destroy_license():
 
 def get_license_info():
     """
-    Ottiene le informazioni della licenza decifrate.
+    Ottiene le informazioni della licenza decifrate utilizzando la chiave dinamica HWID.
 
     Returns:
         dict: Dati della licenza o None in caso di errore
@@ -154,22 +178,27 @@ def get_license_info():
     try:
         encrypted_data = config_path.read_bytes()
 
-        cipher = Fernet(LICENSE_SECRET_KEY)
+        # Derivazione dinamica della chiave (Pilastro 2)
+        hw_id = get_hardware_id()
+        dynamic_key = derive_license_key(hw_id)
+
+        cipher = Fernet(dynamic_key)
         decrypted_data = cipher.decrypt(encrypted_data)
         return json.loads(decrypted_data.decode("utf-8"))
     except Exception:
+        # Se la decifratura fallisce, la chiave HWID è cambiata o il file è corrotto
         return None
 
 
 def verify_license():
     """
-    Verifica la validità della licenza.
+    Verifica la validità della licenza con blindatura SyncroJob V9.0.
 
     Controlli effettuati:
     1. Esistenza cartella e file licenza
     2. Integrità file tramite hash (manifest)
-    3. Decifratura dati licenza
-    4. Validazione Hardware ID
+    3. Decifratura dati tramite HWID-Derived Key
+    4. Validazione Hardware ID incrociata
     5. Verifica data di scadenza
 
     Returns:
@@ -194,34 +223,25 @@ def verify_license():
         if _calculate_sha256(paths["config"]) != manifest.get("config.dat"):
             return False, "Integrità licenza compromessa (config.dat)"
 
-        # Verifica hash pyarmor.rkey se presente
-        rkey_path = Path(paths["rkey"])
-        if (
-            "pyarmor.rkey" in manifest
-            and rkey_path.exists()
-            and _calculate_sha256(str(rkey_path)) != manifest.get("pyarmor.rkey")
-        ):
-            return False, "Integrità licenza compromessa (pyarmor.rkey)"
-
     except Exception as e:
         return False, f"Errore lettura manifest: {e}"
 
-    # 2. Decifra e valida i dati
+    # 2. Decifra e valida i dati (Pilastro 2)
     try:
         payload = get_license_info()
         if not payload:
-            return False, "Impossibile leggere i dati della licenza"
+            return False, "Licenza non valida per questo Hardware (Decifratura fallita)"
 
-        # Validazione Hardware ID
+        # Validazione Hardware ID (Pilastro 1)
         current_hw_id = get_hardware_id()
         license_hw_id = payload.get("Hardware ID", "")
 
-        # Normalizzazione ID
+        # Normalizzazione rigorosa
         norm_current = current_hw_id.strip().rstrip(".")
         norm_license = license_hw_id.strip().rstrip(".")
 
-        if norm_current != norm_license and "UNKNOWN" not in current_hw_id:
-            return False, (f"Hardware ID non valido\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}")
+        if norm_current != norm_license:
+            return False, (f"Hardware ID mismatch\nAtteso: {license_hw_id}\nRilevato: {current_hw_id}")
 
         # Validazione scadenza
         expiry_str = payload.get("Scadenza Licenza", "")
