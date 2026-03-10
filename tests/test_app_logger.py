@@ -16,7 +16,7 @@ class TestAppLogger(unittest.TestCase):
     def setUp(self):
         """Setup prima di ogni test."""
         # Salva lo stato originale del logger
-        self.original_handlers = logging.root.handlers[:]
+        self.original_handlers = logging.root.handlers.copy()
         self.original_level = logging.root.level
         # Reset delle variabili globali di app_logger
         app_logger._log_path = None
@@ -183,7 +183,7 @@ class TestAppLogger(unittest.TestCase):
 class TestAppLoggerExceptionHandler(unittest.TestCase):
     def setUp(self):
         """Setup prima di ogni test."""
-        self.original_handlers = logging.root.handlers[:]
+        self.original_handlers = logging.root.handlers.copy()
         app_logger._log_path = None
         app_logger._immediate_log_file = None
 

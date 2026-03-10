@@ -81,8 +81,8 @@ def run_app() -> None:
     except license_updater.LicenseRevokedError as e:
         splash.hide()
         logger.critical(f"Licenza REVOCATA: {e}")
-        QMessageBox.critical(splash, "ACCESSO NEGATO", str(e))
-        sys.exit(1)
+        QMessageBox.critical(None, "ACCESSO NEGATO", str(e))
+        return
     except Exception as e:
         # Per altri errori (es. timeout senza grace period), verifichiamo comunque la licenza locale
         logger.warning(f"Aggiornamento licenza saltato o fallito: {e}")
@@ -96,8 +96,8 @@ def run_app() -> None:
         err_msg = f"{msg}\n\nHardware ID:\n{hw_id}\n\n(Copiato negli appunti)"
         clipboard = qt_app.clipboard()
         clipboard.setText(hw_id)
-        QMessageBox.critical(splash, "Licenza Non Valida", err_msg)
-        sys.exit(1)
+        QMessageBox.critical(None, "Licenza Non Valida", err_msg)
+        return
 
     # 3. Preparazione Ambiente
     splash.set_progress(80, "Configurazione interfaccia...")
@@ -121,8 +121,9 @@ def run_app() -> None:
 
     from PySide6.QtCore import QTimer
 
-    # Piccola pausa per mostrare il 100% e garantire che gli eventi grafici siano processati
+    # Piccola pausa per mostrare le 100% e garantire che gli eventi grafici siano processati
     def finalize_startup():
+        """Chiude lo splash screen e mostra la finestra principale massimizzata."""
         splash.close()
         # Una piccola pausa post-close previene i conflitti di pittura su alcuni driver
         QTimer.singleShot(100, window.showMaximized)

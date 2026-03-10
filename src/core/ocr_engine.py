@@ -30,7 +30,9 @@ class OcrEngine:
 
     @staticmethod
     def get_binary(img: Image.Image) -> Image.Image:
-        """Restituisce la versione binarizzata di un'immagine."""
+        """Restituisce la versione binarizzata di un'immagine (converte in L se necessario)."""
+        if img.mode != "L":
+            img = img.convert("L")
         return img.point(lambda x: 0 if x < 128 else 255, "1")
 
     @staticmethod

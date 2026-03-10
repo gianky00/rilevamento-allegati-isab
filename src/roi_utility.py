@@ -68,8 +68,32 @@ class ROIDrawingApp(QMainWindow):
         self.roi_item_map: dict[Any, dict[str, int]] = {}
         self._filter_category: str | None = None
 
-        self._setup_ui()
-        self._setup_shortcuts()
+        if not getattr(sys, "_testing", False):
+            self._setup_ui()
+            self._setup_shortcuts()
+        else:
+            # Minimal UI mocks for logic testing
+            class Dummy:
+                def __init__(self, val=""): self._v = val
+                def __getattr__(self, name): return lambda *args, **kwargs: Dummy()
+                def text(self): return self._v
+                def setText(self, t): self._v = t
+                def setVisible(self, b): pass
+                def setEnabled(self, b): pass
+                def clear(self): pass
+                def addItem(self, i): pass
+                def count(self): return 0
+
+            self.zoom_label = Dummy("100%")
+            self.mode_indicator = Dummy()
+            self.status_bar = Dummy()
+            self.nav_widget = Dummy()
+            self.page_label = Dummy()
+            self.prev_page_button = Dummy()
+            self.next_page_button = Dummy()
+            self.canvas = Dummy()
+            self.canvas.scene_ref = Dummy()
+            self.rules_listbox = Dummy()
 
     def _setup_ui(self) -> None:
         """Crea l'interfaccia utente."""

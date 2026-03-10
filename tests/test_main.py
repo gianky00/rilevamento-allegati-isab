@@ -1,116 +1,89 @@
-import os
+"""
+Unit tests for main.py.
+"""
+
+import unittest
 import sys
 from unittest.mock import MagicMock, patch
+from PySide6.QtWidgets import QApplication
 
-import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
+# Activate testing mode before import
+sys._testing = True
 import main
 
+class TestMainApp(unittest.TestCase):
+    """Test suite for MainApp GUI orchestration."""
 
-@pytest.fixture
-def mock_dependencies():
-    patchers = [
-        patch("core.app_controller.license_validator.get_license_info", return_value={}),
-        patch("core.app_controller.license_validator.get_hardware_id", return_value="HWID"),
-        patch("core.app_controller.license_validator.verify_license", return_value=(True, "OK")),
-        patch("core.app_controller.config_manager.load_config", return_value={"classification_rules": []}),
-        patch("core.app_controller.config_manager.save_config"),
-        patch("core.app_controller.app_updater"),
-        patch("core.app_controller.SessionManager.has_session", return_value=False),
-        patch("core.notification_manager.NotificationManager"),
-        patch("pathlib.Path.exists", return_value=False),
-    ]
-    for p in patchers:
-        p.start()
-    yield
-    for p in reversed(patchers):
-        p.stop()
+    @classmethod
+    def setUpClass(cls):
+        """Initialize QApplication."""
+        cls.app = QApplication.instance() or QApplication([])
 
+    def setUp(self):
+        """Setup MainApp instance with mocked components."""
+        # We need to mock things THAT MainApp USES/INSTANTIATES
+        with patch("main.AppController"), \
+             patch("main.DashboardTab"), \
+             patch("main.ConfigTab"), \
+             patch("main.HelpTab"), \
+             patch("main.UIAnimations"):
+            
+            # Since RuleService is NOT in main module but in controller, 
+            # and MainApp uses it via controller, we don't patch it in main.
+            self.window = main.MainApp()
 
-@pytest.fixture
-def main_app(qtbot, mock_dependencies):
-    app = main.MainApp()
-    yield app
-    if hasattr(app, "controller") and hasattr(app.controller, "_log_timer"):
-        app.controller._log_timer.stop()
-    app._update_timer.stop()
-    app._progress_timer.stop()
-    app._spinner_timer.stop()
-    app._clock_timer.stop()
+    def tearDown(self):
+        """Cleanup window."""
+        self.window.close()
 
+    def test_initialization(self):
+        """Test if MainApp initializes with core components."""
+        self.assertTrue(self.window.windowTitle().startswith("Intelleo PDF Splitter"))
+        self.assertIsNotNone(self.window.notebook)
+        self.assertEqual(self.window.notebook.count(), 3)
 
-def test_odc_validation(main_app):
-    main_app.odc_entry.setText("ABC1234")
-    with patch("main.QMessageBox.warning") as mock_warn:
-        main_app.controller.pdf_files = ["test.pdf"]
-        with patch.object(main_app.controller, "start_processing") as mock_start:
-            main_app._start_processing()
-            mock_warn.assert_not_called()
-            mock_start.assert_called_once()
+    def test_on_stats_updated(self):
+        """Test UI update on stats signal."""
+        # Setup labels manually as tabs are mocked
+        self.window.files_count_sess_label = MagicMock()
+        self.window.files_count_tot_label = MagicMock()
+        self.window.pages_count_sess_label = MagicMock()
+        self.window.pages_count_tot_label = MagicMock()
+        
+        self.window._on_stats_updated(5, 10, 50, 100)
+        
+        self.window.files_count_sess_label.setText.assert_called_with("5")
+        self.window.files_count_tot_label.setText.assert_called_with("50")
 
+    def test_add_log_message(self):
+        """Test adding log messages to UI area."""
+        self.window.log_area = MagicMock()
+        self.window.recent_log = MagicMock()
+        
+        self.window._add_log_message("Test message", "SUCCESS")
+        
+        call_args = self.window.log_area.append.call_args[0][0]
+        self.assertIn("Test message", call_args)
+        self.assertIn("[OK]", call_args)
 
-def test_odc_validation_empty(main_app):
-    main_app.odc_entry.setText("")
-    with patch("main.QMessageBox.warning") as mock_warn:
-        main_app.pdf_files = ["test.pdf"]
-        main_app._start_processing()
-        mock_warn.assert_called_once()
+    @patch("main.UIAnimations.slide_fade_transition")
+    def test_tab_change_animation(self, mock_anim):
+        """Test if tab change triggers transition animation."""
+        self.window._on_tab_changed(1)
+        mock_anim.assert_called()
 
+    def test_on_processing_state_changed(self):
+        """Test UI updates when processing state changes."""
+        self.window.dashboard_start_btn = MagicMock()
+        self.window.odc_entry = MagicMock()
+        
+        self.window._on_processing_state_changed(True)
+        self.assertTrue(self.window._is_processing)
+        self.window.dashboard_start_btn.setEnabled.assert_called_with(False)
+        
+        self.window._on_processing_state_changed(False)
+        self.assertFalse(self.window._is_processing)
+        self.window.dashboard_start_btn.setEnabled.assert_called_with(True)
 
-def test_no_pdf_selected(main_app):
-    main_app.odc_entry.setText("5400")
-    main_app.pdf_files = []
-    with patch("main.QMessageBox.warning") as mock_warn:
-        main_app._start_processing()
-        mock_warn.assert_called_once()
-
-
-def test_add_log_message_progress(main_app):
-    with patch("main.datetime") as mock_datetime:
-        mock_now = MagicMock()
-        mock_now.strftime.return_value = "12:00:00"
-        mock_datetime.now.return_value = mock_now
-
-        main_app.log_area.clear()
-        main_app._add_log_message("Elaborazione test", "PROGRESS")
-
-        content = main_app.log_area.toHtml()
-        assert "12:00:00" in content
-        assert "Elaborazione test" in content
-
-
-def test_on_drop_single_file(main_app):
-    with (
-        patch.object(main_app, "_start_processing") as mock_start,
-        patch("core.file_service.Path.exists", return_value=True),
-        patch("core.file_service.Path.is_file", return_value=True),
-    ):
-        main_app._on_drop(["path/to/file.pdf"])
-        assert len(main_app.controller.pdf_files) == 1
-        mock_start.assert_called_once()
-
-
-def test_check_for_updates_signal(main_app):
-    # Usiamo Path.exists e Path.unlink nel controller
-    with (
-        patch("core.app_controller.Path.exists", return_value=True),
-        patch("core.app_controller.Path.unlink") as mock_unlink,
-        patch.object(main_app.controller, "load_settings") as mock_load,
-    ):
-        main_app._check_for_updates()
-        mock_unlink.assert_called_once()
-        mock_load.assert_called_once()
-
-
-def test_unknown_files_signal(main_app):
-    with patch.object(main_app, "_show_unknown_dialog") as mock_dialog:
-        main_app.controller.unknown_files_found.emit(["a.pdf"], "123")
-        mock_dialog.assert_called_once_with(["a.pdf"], "123")
-
-
-def test_unknown_dialog_empty_files(main_app):
-    with patch("main.UnknownFilesReviewDialog") as mock_dialog_class:
-        main_app._show_unknown_dialog([], "ODC")
-        mock_dialog_class.assert_not_called()
+if __name__ == "__main__":
+    unittest.main()

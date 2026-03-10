@@ -1,12 +1,20 @@
+"""
+Applicazione GUI per l'amministrazione delle licenze del progetto Intelleo PDF Splitter.
+Consente la generazione di file di licenza cifrati basati sull'Hardware ID del cliente.
+"""
+
 import base64
 import hashlib
 import json
+import logging
 import os
 import shutil
 import subprocess
 import sys
 import tkinter as tk
+from contextlib import suppress
 from datetime import date, timedelta
+from pathlib import Path
 from tkinter import messagebox, ttk
 
 from cryptography.fernet import Fernet
@@ -37,17 +45,36 @@ def derive_license_key(hw_id: str) -> bytes:
     return base64.urlsafe_b64encode(key_bytes)
 
 
-def _calculate_sha256(filepath):
-    """Calculates the SHA256 hash of a file."""
+def _calculate_sha256(filepath: Path) -> str:
+    """
+    Calcola l'hash SHA256 di un file.
+
+    Args:
+        filepath (Path): Percorso del file da analizzare.
+
+    Returns:
+        str: Hash esadecimale SHA256.
+    """
     sha256_hash = hashlib.sha256()
-    with open(filepath, "rb") as f:
+    with filepath.open("rb") as f:
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
 
 class LicenseAdminApp:
-    def __init__(self, root):
+    """
+    Classe principale per l'interfaccia di amministrazione delle licenze.
+    Gestisce la raccolta dei dati del cliente e la generazione della licenza blindata.
+    """
+
+    def __init__(self, root: tk.Tk) -> None:
+        """
+        Inizializza la GUI e i componenti dell'applicazione.
+
+        Args:
+            root (tk.Tk): Finestra principale di Tkinter.
+        """
         self.root = root
         self.root.title("Gestore Licenze (Admin)")
         self.root.geometry("600x480")
@@ -88,14 +115,17 @@ class LicenseAdminApp:
         self.btn_gen = ttk.Button(root, text="GENERA FILE LICENZA", command=self.generate)
         self.btn_gen.pack(fill="x", padx=20, pady=20, ipady=10)
 
-    def paste_disk(self):
-        try:
+    def paste_disk(self) -> None:
+        """Incolla il contenuto degli appunti nel campo del seriale disco."""
+        with suppress(Exception):
             self.ent_disk.delete(0, tk.END)
             self.ent_disk.insert(0, self.root.clipboard_get().strip())
-        except Exception:
-            pass
 
-    def generate(self):
+    def generate(self) -> None:
+        """
+        Esegue la logica di generazione della licenza.
+        Cifra i metadati del cliente e genera il manifest con checksum.
+        """
         disk_serial = self.ent_disk.get().strip()
         client_name = self.ent_name.get().strip()
         expiry = self.ent_date.get().strip()
@@ -111,18 +141,17 @@ class LicenseAdminApp:
         folder_name = "".join([c for c in client_name if c.isalnum() or c in (" ", "_", "-")]).strip()
 
         # Cartella di output organizzata
-        base_output = os.path.dirname(os.path.abspath(__file__))
-        client_dir = os.path.join(base_output, folder_name)
-        target_dir = os.path.join(client_dir, "Licenza")
+        base_output = Path(__file__).resolve().parent
+        client_dir = base_output / folder_name
+        target_dir = client_dir / "Licenza"
 
         try:
             # Crea cartella destinazione
-            if os.path.exists(target_dir):
+            if target_dir.exists():
                 shutil.rmtree(target_dir)
-            os.makedirs(target_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
 
             # 1. GENERAZIONE FILE CRITTOGRAFATO (SyncroJob V9.0)
-            # Format dates to DD/MM/YYYY
             try:
                 expiry_obj = date.fromisoformat(expiry)
                 expiry_str = expiry_obj.strftime("%d/%m/%Y")
@@ -146,19 +175,17 @@ class LicenseAdminApp:
             cipher = Fernet(dynamic_key)
             encrypted_data = cipher.encrypt(json_payload)
 
-            config_path = os.path.join(target_dir, "config.dat")
-            with open(config_path, "wb") as f:
-                f.write(encrypted_data)
+            config_path = target_dir / "config.dat"
+            config_path.write_bytes(encrypted_data)
 
-            # 2. GENERAZIONE MANIFEST CON CHECKSUM (Solo config.dat)
+            # 2. GENERAZIONE MANIFEST CON CHECKSUM
             manifest = {
                 "config.dat": _calculate_sha256(config_path),
                 "generated": gen_date_str,
                 "client": client_name
             }
-            manifest_path = os.path.join(target_dir, "manifest.json")
-            with open(manifest_path, "w") as f:
-                json.dump(manifest, f, indent=4)
+            manifest_path = target_dir / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest, indent=4), encoding="utf-8")
 
             # Istruzioni per l'utente
             msg = (

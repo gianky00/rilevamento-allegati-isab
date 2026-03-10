@@ -1,5 +1,7 @@
-# hook-tkinterdnd2.py
-# Hook per PyInstaller per includere correttamente i file necessari per tkinterdnd2.
+"""
+Hook per PyInstaller per includere correttamente i file necessari per la libreria tkinterdnd2.
+Garantisce che i file Tcl/Tk necessari per il drag & drop siano presenti nel pacchetto distribuito.
+"""
 
 from PyInstaller.utils.hooks import collect_data_files
 
