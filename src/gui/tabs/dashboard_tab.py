@@ -1,5 +1,6 @@
 """
 Modulo per la Tab Dashboard (SRP).
+Gestisce la visualizzazione principale, le statistiche e l'area di elaborazione.
 """
 
 from typing import Any
@@ -29,7 +30,13 @@ class DashboardTab(QWidget):
     """Gestisce la costruzione e i widget della tab Dashboard unificata."""
 
     def __init__(self, parent: QWidget, main_app: Any) -> None:
-        """Inizializza la tab dashboard collegandola all'applicazione principale."""
+        """
+        Inizializza la tab dashboard collegandola all'applicazione principale.
+
+        Args:
+            parent (QWidget): Widget genitore.
+            main_app (Any): Riferimento all'istanza dell'applicazione principale.
+        """
         super().__init__(parent)
         self.main_app = main_app
         self._init_ui()
@@ -49,6 +56,7 @@ class DashboardTab(QWidget):
         left_stats.setSpacing(15)
 
         def create_header_stat(label_text: str):
+            """Crea un micro-layout per le statistiche nell'header."""
             container = QHBoxLayout()
             container.setSpacing(5)
             lbl = QLabel(label_text + ":")
@@ -140,6 +148,7 @@ class DashboardTab(QWidget):
         act_layout.setSpacing(8)
 
         def setup_btn(btn):
+            """Configura la policy di dimensione e aggiunge il bottone al layout."""
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
             act_layout.addWidget(btn)
 
@@ -268,6 +277,7 @@ class DashboardTab(QWidget):
         footer_layout.addWidget(self.main_app.license_status_label)
 
         def add_sep():
+            """Aggiunge un divisore verticale nel footer."""
             line = QFrame()
             line.setFrameShape(QFrame.Shape.VLine)
             line.setStyleSheet(f"background-color: {COLORS['text_muted']}; max-height: 15px;")
@@ -305,7 +315,7 @@ class DashboardTab(QWidget):
 
         v_lbl = QLabel(f"v{version.__version__}")
         v_lbl.setFont(FONTS["small_bold"])
-        v_lbl.setStyleSheet(f"color: {COLORS['text_muted']};")
+        v_lbl.setStyleSheet(f"color: {COLORS['text_muted']}")
         footer_layout.addWidget(v_lbl)
 
         layout.addWidget(footer)

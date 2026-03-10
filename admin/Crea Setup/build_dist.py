@@ -1,3 +1,9 @@
+"""
+Script per automatizzare il processo di build, offuscamento e packaging.
+Gestisce l'offuscamento con PyArmor, il packaging con PyInstaller,
+la creazione del setup con Inno Setup e il deploy su Netlify.
+"""
+
 import json
 import logging
 import os
@@ -6,25 +12,27 @@ import subprocess
 import sys
 import time
 import zipfile
+from contextlib import suppress
+from pathlib import Path
 
 import requests
 
 # --- CONFIGURAZIONE ---
 # 1. FIX PORTABILITÀ: Directory corrente = cartella dello script
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(Path(__file__).resolve().parent)
 
 # Calcola la ROOT del progetto (tre livelli sopra admin/Crea Setup/build_dist.py -> root)
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 # Add src to path to import version
-sys.path.append(os.path.join(ROOT_DIR, "src"))
+sys.path.append(str(ROOT_DIR / "src"))
 import version  # noqa: E402
 
 ENTRY_SCRIPT = "src/app_launcher.py"
 APP_NAME = "Intelleo PDF Splitter"
 APP_VERSION = version.__version__
-DIST_DIR = os.path.join(ROOT_DIR, "dist")
-OBF_DIR = os.path.join(DIST_DIR, "obfuscated")
+DIST_DIR = ROOT_DIR / "dist"
+OBF_DIR = DIST_DIR / "obfuscated"
 BUILD_LOG = "build_log.txt"
 
 # Netlify Configuration
@@ -92,14 +100,12 @@ def kill_existing_process():
     """Uccide eventuali processi 'PDF-Splitter.exe' rimasti appesi."""
     log_and_print("--- Step 0/7: Cleaning active processes ---")
     if os.name == "nt":
-        try:
+        with suppress(Exception):
             subprocess.run(
                 ["taskkill", "/F", "/IM", f"{APP_NAME}.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             log_and_print(f"Killed active {APP_NAME}.exe instances (if any).")
             time.sleep(1)
-        except Exception:
-            pass
 
 
 def verify_environment():
@@ -125,7 +131,7 @@ def verify_environment():
 
     if not iscc_path and os.name == "nt":
         for p in possible_paths:
-            if os.path.exists(p):
+            if Path(p).exists():
                 iscc_path = p
                 break
 
@@ -138,6 +144,17 @@ def verify_environment():
 
 
 def build():
+    """
+    Esegue l'intero workflow di build:
+    1. Pulizia processi attivi
+    2. Diagnostica ambiente
+    3. Offuscamento codice sorgente
+    4. Preparazione asset
+    5. Packaging in eseguibile
+    6. Cleanup post-build
+    7. Compilazione Installer
+    8. Deploy (opzionale)
+    """
     try:
         log_and_print("Starting Build Process with PyInstaller...")
 
@@ -145,14 +162,14 @@ def build():
 
         iscc_exe = verify_environment()
 
-        if os.path.exists(DIST_DIR):
+        if DIST_DIR.exists():
             try:
                 shutil.rmtree(DIST_DIR)
             except PermissionError:
                 log_and_print("ERROR: File locked. Close the app or the dist folder.", "ERROR")
                 sys.exit(1)
 
-        os.makedirs(OBF_DIR, exist_ok=True)
+        OBF_DIR.mkdir(parents=True, exist_ok=True)
 
         log_and_print("\n--- Step 3/7: Obfuscating Entire SRC recursively with PyArmor ---")
 
@@ -165,29 +182,31 @@ def build():
             "gen",
             "-r",  # RECURSIVE
             "-O",
-            OBF_DIR,  # OUTPUT DIR
+            str(OBF_DIR),  # OUTPUT DIR
             ".",  # SOURCE
         ]
 
-        run_command(cmd_pyarmor, cwd=os.path.join(ROOT_DIR, "src"))
+        run_command(cmd_pyarmor, cwd=str(ROOT_DIR / "src"))
 
         log_and_print("\n--- Step 4/7: Preparing Assets for Packaging ---")
 
         # Copy requirements.txt
-        if os.path.exists(os.path.join(ROOT_DIR, "src", "requirements.txt")):
-            shutil.copy(os.path.join(ROOT_DIR, "src", "requirements.txt"), os.path.join(OBF_DIR, "requirements.txt"))
+        req_file = ROOT_DIR / "src" / "requirements.txt"
+        if req_file.exists():
+            shutil.copy(str(req_file), str(OBF_DIR / "requirements.txt"))
 
         # Copy config.json (default config) if exists in root
-        if os.path.exists(os.path.join(ROOT_DIR, "config.json")):
-            shutil.copy(os.path.join(ROOT_DIR, "config.json"), os.path.join(OBF_DIR, "config.json"))
+        config_json = ROOT_DIR / "config.json"
+        if config_json.exists():
+            shutil.copy(str(config_json), str(OBF_DIR / "config.json"))
 
         log_and_print("\n--- Step 5/7: Packaging with PyInstaller ---")
 
         # Identify PyArmor runtime
         runtime_dir = None
-        for name in os.listdir(OBF_DIR):
-            if name.startswith("pyarmor_runtime_") and os.path.isdir(os.path.join(OBF_DIR, name)):
-                runtime_dir = name
+        for path in OBF_DIR.iterdir():
+            if path.is_dir() and path.name.startswith("pyarmor_runtime_"):
+                runtime_dir = path.name
                 break
 
         if not runtime_dir:
@@ -195,8 +214,9 @@ def build():
             sys.exit(1)
 
         # Check for Icon
-        icon_path = os.path.join(ROOT_DIR, "src", "resources", "icon.ico")
-        if os.path.exists(icon_path):
+        icon_path_obj = ROOT_DIR / "src" / "resources" / "icon.ico"
+        if icon_path_obj.exists():
+            icon_path = str(icon_path_obj)
             log_and_print(f"Using icon: {icon_path}")
         else:
             icon_path = None
@@ -211,12 +231,12 @@ def build():
             "--clean",
             f"--name={APP_NAME}",
             f"--distpath={DIST_DIR}",
-            f"--workpath={os.path.join(DIST_DIR, 'build')}",
+            f"--workpath={DIST_DIR / 'build'}",
             f"--paths={OBF_DIR}",  # Look for modules in OBF_DIR
             "--onedir",
             "--collect-all=PySide6",
             "--collect-all=pymupdf",
-            f"--additional-hooks-dir={os.path.abspath(os.path.join(os.path.dirname(__file__), 'hooks'))}",
+            f"--additional-hooks-dir={Path(__file__).resolve().parent / 'hooks'}",
             # "--uac-admin",  # RIMOSSO: Impedisce il drag&drop da Explorer (UIPI)
         ]
 
@@ -321,29 +341,30 @@ def build():
 
         # Entry point: use the obfuscated app_launcher.py
         # Check if it's in OBF_DIR/app_launcher.py or OBF_DIR/src/app_launcher.py
-        entry_point = os.path.join(OBF_DIR, "app_launcher.py")
-        if not os.path.exists(entry_point):
-            entry_point = os.path.join(OBF_DIR, "src", "app_launcher.py")
+        entry_point_obj = OBF_DIR / "app_launcher.py"
+        if not entry_point_obj.exists():
+            entry_point_obj = OBF_DIR / "src" / "app_launcher.py"
             # If it's in src/, we need to add OBF_DIR/src to paths
-            if os.path.exists(entry_point):
-                cmd_pyinstaller.append(f"--paths={os.path.join(OBF_DIR, 'src')}")
+            if entry_point_obj.exists():
+                cmd_pyinstaller.append(f"--paths={OBF_DIR / 'src'}")
             else:
                 log_and_print(f"ERROR: Could not find obfuscated entry point app_launcher.py in {OBF_DIR}", "ERROR")
                 sys.exit(1)
 
+        entry_point = str(entry_point_obj)
         cmd_pyinstaller.append(entry_point)
 
         # Add PYTHONPATH to include OBF_DIR
         env = os.environ.copy()
-        env["PYTHONPATH"] = OBF_DIR + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
+        env["PYTHONPATH"] = str(OBF_DIR) + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
 
         # Run PyInstaller
         # We run it from OBF_DIR to help it resolve relative paths if any, though --paths handles modules
-        run_command(cmd_pyinstaller, cwd=OBF_DIR, env=env)
+        run_command(cmd_pyinstaller, cwd=str(OBF_DIR), env=env)
 
         # Check Output
-        final_dist_path = os.path.join(DIST_DIR, APP_NAME)
-        if not os.path.exists(final_dist_path):
+        final_dist_path = DIST_DIR / APP_NAME
+        if not final_dist_path.exists():
             log_and_print(f"ERROR: Expected output directory '{final_dist_path}' not found.", "ERROR")
             sys.exit(1)
 
@@ -352,49 +373,48 @@ def build():
         # Also copy config.json to output root if needed
         # PyInstaller doesn't automatically copy data files unless specified, and we modified source.
         # We manually copy config.json to the dist folder if it's not there.
-        if os.path.exists(os.path.join(OBF_DIR, "config.json")):
-            shutil.copy(os.path.join(OBF_DIR, "config.json"), os.path.join(final_dist_path, "config.json"))
+        obf_config = OBF_DIR / "config.json"
+        if obf_config.exists():
+            shutil.copy(str(obf_config), str(final_dist_path / "config.json"))
 
         # Copy Tesseract-OCR if exists locally (for portable builds)
-        local_tesseract = os.path.join(ROOT_DIR, "Tesseract-OCR")
-        if os.path.exists(local_tesseract):
+        local_tesseract = ROOT_DIR / "Tesseract-OCR"
+        if local_tesseract.exists():
             log_and_print(f"Copying local Tesseract-OCR from {local_tesseract}...")
-            shutil.copytree(local_tesseract, os.path.join(final_dist_path, "Tesseract-OCR"), dirs_exist_ok=True)
+            shutil.copytree(str(local_tesseract), str(final_dist_path / "Tesseract-OCR"), dirs_exist_ok=True)
 
         log_and_print("\n--- Step 7/7: Compiling Installer with Inno Setup ---")
 
         setup_filename = None
         if iscc_exe:
-            iss_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "setup_script.iss"))
-            setup_output_dir = os.path.join(os.path.dirname(__file__), "Setup")
+            iss_path = Path(__file__).resolve().parent / "setup_script.iss"
+            setup_output_dir = Path(__file__).resolve().parent / "Setup"
 
             # Clean previous setup files to avoid version mix-up
-            if os.path.exists(setup_output_dir):
-                for f in os.listdir(setup_output_dir):
-                    if f.endswith(".exe"):
-                        try:
-                            os.remove(os.path.join(setup_output_dir, f))
-                            log_and_print(f"Cleaned old setup: {f}")
-                        except Exception as e:
-                            log_and_print(f"Warning: Could not delete old setup {f}: {e}", "WARNING")
+            if setup_output_dir.exists():
+                for f_path in setup_output_dir.iterdir():
+                    if f_path.suffix == ".exe":
+                        with suppress(Exception):
+                            f_path.unlink()
+                            log_and_print(f"Cleaned old setup: {f_path.name}")
 
-            if not os.path.exists(iss_path):
+            if not iss_path.exists():
                 log_and_print(f"Setup script not found at: {iss_path}", "ERROR")
                 sys.exit(1)
 
             # Inno Setup expects build dir passed as define
-            cmd_iscc = [iscc_exe, f"/DMyAppVersion={APP_VERSION}", f"/DBuildDir={final_dist_path}", iss_path]
+            cmd_iscc = [iscc_exe, f"/DMyAppVersion={APP_VERSION}", f"/DBuildDir={final_dist_path}", str(iss_path)]
 
             run_command(cmd_iscc, env=env)
 
             # Locate the generated setup file
-            if os.path.exists(setup_output_dir):
+            if setup_output_dir.exists():
                 log_and_print(f"Installer generated in: {setup_output_dir}")
 
                 # Find the latest setup file (Sort by modification time, newest first)
-                exe_files = [f for f in os.listdir(setup_output_dir) if f.endswith(".exe")]
+                exe_files = [f.name for f in setup_output_dir.iterdir() if f.suffix == ".exe"]
                 if exe_files:
-                    exe_files.sort(key=lambda x: os.path.getmtime(os.path.join(setup_output_dir, x)), reverse=True)
+                    exe_files.sort(key=lambda x: (setup_output_dir / x).stat().st_mtime, reverse=True)
                     setup_filename = exe_files[0]
                     log_and_print(f" - Found newest setup: {setup_filename}")
 
@@ -545,7 +565,7 @@ def generate_index_html(deploy_dir, setup_filename, version_str):
 </body>
 </html>"""
 
-    with open(os.path.join(deploy_dir, "index.html"), "w", encoding="utf-8") as f:
+    with (Path(deploy_dir) / "index.html").open("w", encoding="utf-8") as f:
         f.write(html_content)
     log_and_print("Generated index.html")
 
@@ -555,15 +575,15 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     Creates a deploy folder with version.json, index.html, and the setup file,
     then uploads to Netlify.
     """
-    deploy_dir = os.path.join(ROOT_DIR, "dist", "deploy")
-    if os.path.exists(deploy_dir):
+    deploy_dir = DIST_DIR / "deploy"
+    if deploy_dir.exists():
         shutil.rmtree(deploy_dir)
-    os.makedirs(deploy_dir)
+    deploy_dir.mkdir(parents=True)
 
     # 1. Copy Setup File
-    src_setup = os.path.join(setup_dir, setup_filename)
-    dst_setup = os.path.join(deploy_dir, setup_filename)
-    shutil.copy(src_setup, dst_setup)
+    src_setup = Path(setup_dir) / setup_filename
+    dst_setup = deploy_dir / setup_filename
+    shutil.copy(str(src_setup), str(dst_setup))
     log_and_print(f"Copied setup to: {deploy_dir}")
 
     # 2. Generate version.json
@@ -572,8 +592,7 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
 
     version_data = {"version": version.__version__, "url": download_url}
 
-    with open(os.path.join(deploy_dir, "version.json"), "w") as f:
-        json.dump(version_data, f, indent=4)
+    (deploy_dir / "version.json").write_text(json.dumps(version_data, indent=4), encoding="utf-8")
     log_and_print(f"Generated version.json (v{version.__version__})")
 
     # 3. Generate Landing Page
@@ -590,23 +609,22 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     log_and_print(f"Ready to deploy to Site ID: {site_id}")
     log_and_print("Starting automatic upload to Netlify...")
 
-    zip_path = os.path.join(ROOT_DIR, "dist", "deploy.zip")
+    zip_path = DIST_DIR / "deploy.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, _dirs, files in os.walk(deploy_dir):
             for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, deploy_dir)
-                zipf.write(file_path, arcname)
+                file_path = Path(root) / file
+                arcname = file_path.relative_to(deploy_dir)
+                zipf.write(str(file_path), str(arcname))
                 log_and_print(f"  + Added to zip: {arcname}")
 
     # Check zip size
-    if os.path.exists(zip_path):
-        size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    if zip_path.exists():
+        size_mb = zip_path.stat().st_size / (1024 * 1024)
         log_and_print(f"Zip created successfully. Size: {size_mb:.2f} MB")
 
     try:
-        with open(zip_path, "rb") as f:
-            data = f.read()
+        data = zip_path.read_bytes()
 
         url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
         headers = {"Content-Type": "application/zip", "Authorization": f"Bearer {auth_token}"}
@@ -625,8 +643,8 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     except Exception as e:
         log_and_print(f"Error during Netlify upload: {e}", "ERROR")
     finally:
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
+        if zip_path.exists():
+            zip_path.unlink()
 
 
 if __name__ == "__main__":

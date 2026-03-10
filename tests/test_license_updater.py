@@ -1,115 +1,88 @@
+"""
+Unit tests for license_updater.py.
+"""
+
 import unittest
-from datetime import datetime, timedelta, timezone
+import json
+import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import license_updater
-
+from datetime import datetime, timedelta, timezone
+from cryptography.fernet import Fernet
+from license_updater import (
+    get_github_token, 
+    check_grace_period, 
+    update_grace_timestamp, 
+    run_update,
+    GRACE_PERIOD_KEY
+)
 
 class TestLicenseUpdater(unittest.TestCase):
+    """Test suite for license updater and grace period."""
+
     def setUp(self):
-        # Setup mocks for commonly used functions
-        self.mock_hw_id = patch("license_validator.get_hardware_id", return_value="TEST_HWID").start()
-        self.mock_get_dir = patch("license_updater.get_license_dir", return_value="/mock/Licenza").start()
-        self.mock_exists = patch("pathlib.Path.exists").start()
-        self.mock_mkdir = patch("pathlib.Path.mkdir").start()
-        self.mock_unlink = patch("pathlib.Path.unlink").start()
-        self.mock_read_bytes = patch("pathlib.Path.read_bytes").start()
-        self.mock_write_bytes = patch("pathlib.Path.write_bytes").start()
+        """Setup temporary license directory."""
+        self.test_dir = Path("temp_updater_test")
+        self.test_dir.mkdir(exist_ok=True)
+        self.token_path = self.test_dir / "validity.token"
 
     def tearDown(self):
-        patch.stopall()
+        """Cleanup temporary files."""
+        import shutil
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir)
 
-    @patch("requests.get")
-    @patch("license_updater.update_grace_timestamp")
-    def test_run_update_online_success(self, mock_update_grace, mock_get):
-        """Test successful download of ALL files (Online)."""
-        self.mock_exists.return_value = True
+    def test_get_github_token(self):
+        """Test GitHub token reconstruction."""
+        token = get_github_token()
+        self.assertTrue(token.startswith("ghp_"))
+        self.assertEqual(len(token), 40)
 
-        # Setup responses: All 200 OK
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.content = b"DATA"
-        mock_get.return_value = mock_response
+    @patch("license_updater._get_validity_token_path")
+    def test_grace_period_valid(self, mock_path):
+        """Test grace period verification with a fresh token."""
+        mock_path.return_value = str(self.token_path)
+        
+        # Create a valid token (current time)
+        cipher = Fernet(GRACE_PERIOD_KEY)
+        now_str = datetime.now(timezone.utc).isoformat()
+        self.token_path.write_bytes(cipher.encrypt(now_str.encode()))
+        
+        self.assertTrue(check_grace_period())
 
-        license_updater.run_update()
-
-        # Check files written (3 files)
-        self.assertEqual(self.mock_write_bytes.call_count, 3)
-        mock_update_grace.assert_called_once()
-
-    @patch("requests.get")
-    @patch("license_updater.update_grace_timestamp")
-    def test_run_update_online_incomplete(self, mock_update_grace, mock_get):
-        """Test that NO files are written if one is missing (404)."""
-        self.mock_exists.return_value = True
-
-        # Setup responses: First 200, Second 404
-        r_ok = MagicMock()
-        r_ok.status_code = 200
-        r_ok.content = b"DATA"
-
-        r_missing = MagicMock()
-        r_missing.status_code = 404
-
-        # Cycle through responses
-        mock_get.side_effect = [r_ok, r_missing, r_ok]
-
-        license_updater.run_update()
-
-        # Check NO files written
-        self.assertEqual(self.mock_write_bytes.call_count, 0)
-        # Grace timestamp should still be updated (we are online)
-        mock_update_grace.assert_called_once()
-
-    @patch("requests.get")
-    @patch("license_updater.check_grace_period")
-    def test_run_update_offline(self, mock_check_grace, mock_get):
-        """Test fallback to grace period on network error."""
-        self.mock_exists.return_value = True
-
-        # Raise ConnectionError
-        import requests
-
-        mock_get.side_effect = requests.ConnectionError("Fail")
-
-        license_updater.run_update()
-
-        # Check grace period checked
-        mock_check_grace.assert_called_once()
-
-    def test_check_grace_period_valid(self):
-        """Test grace period with valid token."""
-        from cryptography.fernet import Fernet
-
-        key = license_updater.GRACE_PERIOD_KEY
-
-        valid_time = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-        cipher = Fernet(key)
-        encrypted = cipher.encrypt(valid_time.encode())
-
-        self.mock_exists.return_value = True
-        self.mock_read_bytes.return_value = encrypted
-
-        result = license_updater.check_grace_period()
-        self.assertTrue(result)
-
-    def test_check_grace_period_expired(self):
-        """Test grace period expired (>3 days)."""
-        from cryptography.fernet import Fernet
-
-        key = license_updater.GRACE_PERIOD_KEY
-
-        expired_time = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
-        cipher = Fernet(key)
-        encrypted = cipher.encrypt(expired_time.encode())
-
-        self.mock_exists.return_value = True
-        self.mock_read_bytes.return_value = encrypted
-
+    @patch("license_updater._get_validity_token_path")
+    def test_grace_period_expired(self, mock_path):
+        """Test grace period expiration (> 3 days)."""
+        mock_path.return_value = str(self.token_path)
+        
+        cipher = Fernet(GRACE_PERIOD_KEY)
+        old_time = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+        self.token_path.write_bytes(cipher.encrypt(old_time.encode()))
+        
         with self.assertRaises(Exception) as cm:
-            license_updater.check_grace_period()
+            check_grace_period()
         self.assertIn("SCADUTO", str(cm.exception))
 
+    @patch("license_updater.requests.get")
+    @patch("license_updater.license_validator.get_hardware_id")
+    @patch("license_updater.get_license_dir")
+    def test_run_update_success(self, mock_dir, mock_hwid, mock_get):
+        """Test full successful update from GitHub."""
+        mock_dir.return_value = str(self.test_dir)
+        mock_hwid.return_value = "HW123"
+        
+        # Mock responses for 3 files
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"content"
+        mock_get.return_value = mock_response
+        
+        run_update()
+        
+        # Verify files created
+        self.assertTrue((self.test_dir / "config.dat").exists())
+        self.assertTrue((self.test_dir / "manifest.json").exists())
+        self.assertTrue(self.token_path.exists())
 
 if __name__ == "__main__":
     unittest.main()

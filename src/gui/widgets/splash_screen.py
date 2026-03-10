@@ -25,6 +25,7 @@ class SplashScreen(QWidget):
     """Finestra di caricamento iniziale stilizzata senza effetti grafici pesanti per evitare crash QPainter."""
 
     def __init__(self):
+        """Inizializza lo splash screen configurando layout e widget grafici."""
         super().__init__()
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)

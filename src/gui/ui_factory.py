@@ -16,6 +16,14 @@ class AnimatedButton(QPushButton):
     """Pulsante con animazioni fluide per hover e pressione."""
 
     def __init__(self, text: str, parent=None, is_primary=False):
+        """
+        Inizializza il pulsante animato.
+
+        Args:
+            text (str): Testo del pulsante.
+            parent (QWidget, optional): Widget genitore. Defaults to None.
+            is_primary (bool, optional): Se True, usa lo stile primario (accento). Defaults to False.
+        """
         super().__init__(text, parent)
         self.is_primary = is_primary
         self._bg_color = QColor(COLORS["accent"] if is_primary else COLORS["bg_secondary"])
@@ -23,6 +31,7 @@ class AnimatedButton(QPushButton):
         self._update_style()
 
     def _update_style(self):
+        """Aggiorna lo stile CSS del pulsante in base al colore corrente."""
         color = self._bg_color.name()
         text_color = "white" if self.is_primary else COLORS["text_primary"]
         self.setStyleSheet(f"""
@@ -37,23 +46,33 @@ class AnimatedButton(QPushButton):
         """)
 
     def enterEvent(self, event):
+        """Gestisce l'evento di entrata del mouse per l'hover."""
         self.animate_color(COLORS["accent_hover"] if self.is_primary else COLORS["bg_tertiary"])
         super().enterEvent(event)
 
     def leaveEvent(self, event):
+        """Gestisce l'evento di uscita del mouse."""
         self.animate_color(COLORS["accent"] if self.is_primary else COLORS["bg_secondary"])
         super().leaveEvent(event)
 
     def animate_color(self, target_color_hex):
+        """
+        Avvia l'animazione del colore di sfondo.
+
+        Args:
+            target_color_hex (str): Colore esadecimale di destinazione.
+        """
         self._anim = QPropertyAnimation(self, b"background_color")
         self._anim.setDuration(200)
         self._anim.setEndValue(QColor(target_color_hex))
         self._anim.start()
 
     def get_bg_color(self):
+        """Getter per la property background_color."""
         return self._bg_color
 
     def set_bg_color(self, color):
+        """Setter per la property background_color."""
         self._bg_color = color
         self._update_style()
 
@@ -65,7 +84,16 @@ class UIFactory:
 
     @staticmethod
     def create_svg_icon(filename: str, size: int = 20) -> QSvgWidget:
-        """Crea un widget SVG caricando il file specificato."""
+        """
+        Crea un widget SVG caricando il file specificato.
+
+        Args:
+            filename (str): Nome del file icona negli asset.
+            size (int, optional): Dimensione fissa (quadrata). Defaults to 20.
+
+        Returns:
+            QSvgWidget: Il widget icona pronto per l'uso.
+        """
         path = get_asset_path(filename)
         svg = QSvgWidget(path)
         svg.setFixedSize(size, size)
@@ -73,7 +101,16 @@ class UIFactory:
 
     @staticmethod
     def create_stat_card(title: str, initial_value: str) -> tuple[QFrame, QLabel]:
-        """Crea una scheda statistica stilizzata con font uniforme."""
+        """
+        Crea una scheda statistica stilizzata con font uniforme.
+
+        Args:
+            title (str): Titolo della scheda.
+            initial_value (str): Valore iniziale da mostrare.
+
+        Returns:
+            tuple[QFrame, QLabel]: La riga/cornice della scheda e la label del valore.
+        """
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -105,7 +142,15 @@ class UIFactory:
 
     @staticmethod
     def create_combined_stat_card(title: str) -> tuple[QFrame, QLabel, QLabel, QLabel, QLabel]:
-        """Crea una scheda statistica che raggruppa Doc e Pagine fianco a fianco per massima compattezza."""
+        """
+        Crea una scheda statistica che raggruppa Doc e Pagine fianco a fianco per massima compattezza.
+
+        Args:
+            title (str): Titolo superiore del gruppo.
+
+        Returns:
+            tuple[QFrame, QLabel, QLabel, QLabel, QLabel]: Card e le 4 label (DocSess, DocTot, PagSess, PagTot).
+        """
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -127,8 +172,10 @@ class UIFactory:
 
         content = QHBoxLayout()
         content.setSpacing(10)
+        content.setContentsMargins(0, 0, 0, 0)
 
         def create_stat_sub_col(label_text: str):
+            """Crea una sotto-colonna per i valori di sessione e totali."""
             col = QVBoxLayout()
             col.setSpacing(0)
 
@@ -178,7 +225,15 @@ class UIFactory:
 
     @staticmethod
     def create_license_card(title: str) -> tuple[QFrame, QLabel, QGridLayout]:
-        """Crea una scheda dedicata alla licenza con layout a due colonne."""
+        """
+        Crea una scheda dedicata alla licenza con layout a due colonne.
+
+        Args:
+            title (str): Titolo della sezione licenza.
+
+        Returns:
+            tuple[QFrame, QLabel, QGridLayout]: Card, label di stato e grid per i dettagli.
+        """
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -213,7 +268,16 @@ class UIFactory:
 
     @staticmethod
     def create_compact_info_row(label: str, icon_file: str) -> tuple[QFrame, QLabel]:
-        """Crea una riga informativa compatta con icona SVG."""
+        """
+        Crea una riga informativa compatta con icona SVG.
+
+        Args:
+            label (str): Etichetta informativa.
+            icon_file (str): File icona SVG da caricare.
+
+        Returns:
+            tuple[QFrame, QLabel]: Riga/cornice e la label del valore dinamico.
+        """
         row = QFrame()
         row.setStyleSheet(
             f"background-color: {COLORS['bg_secondary']}; border: none; border-radius: 4px; padding: 0px;"

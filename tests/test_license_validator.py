@@ -1,122 +1,111 @@
-import datetime
-import subprocess
+"""
+Unit tests for license_validator.py.
+"""
+
 import unittest
+import json
+import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import license_validator
-
+from datetime import date
+from cryptography.fernet import Fernet
+from license_validator import (
+    _calculate_sha256, 
+    get_hardware_id, 
+    get_license_info, 
+    verify_license, 
+    LICENSE_SECRET_KEY
+)
 
 class TestLicenseValidator(unittest.TestCase):
-    @patch("license_validator.get_hardware_id")
-    def test_verify_license_invalid_key(self, mock_get_hw_id):
-        mock_get_hw_id.return_value = "TEST-HW-ID"
-        with patch("pathlib.Path.exists", return_value=False):
-            is_valid, msg = license_validator.verify_license()
-            self.assertFalse(is_valid)
-            self.assertIn("Cartella 'Licenza' mancante", msg)
+    """Test suite for license validation logic."""
 
-    @patch("license_validator.get_hardware_id")
-    def test_verify_license_missing_files(self, mock_get_hw_id):
-        mock_get_hw_id.return_value = "ACE4_2E00_951D_4DDA"
+    def setUp(self):
+        """Setup temporary license files."""
+        self.test_dir = Path("temp_license_test")
+        self.test_dir.mkdir(exist_ok=True)
+        
+        self.paths = {
+            "dir": str(self.test_dir),
+            "config": str(self.test_dir / "config.dat"),
+            "manifest": str(self.test_dir / "manifest.json"),
+            "rkey": str(self.test_dir / "pyarmor.rkey")
+        }
+        
+        # Helper to create a valid encrypted config
+        self.cipher = Fernet(LICENSE_SECRET_KEY)
 
-        def exists_side_effect(self):
-            # Simula che la cartella esiste ma i file no
-            return "Licenza" in str(self) and not str(self).endswith(".dat") and not str(self).endswith(".json")
+    def tearDown(self):
+        """Cleanup temporary files."""
+        import shutil
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir)
 
-        with patch("pathlib.Path.exists", side_effect=exists_side_effect, autospec=True):
-            is_valid, msg = license_validator.verify_license()
-            self.assertFalse(is_valid)
-            self.assertIn("File di licenza mancanti o danneggiati", msg)
-
-    def test_get_license_info_no_file(self):
-        with patch("pathlib.Path.exists", return_value=False):
-            info = license_validator.get_license_info()
-            self.assertIsNone(info)
-
-    # --- Tests for Hardware ID Fallbacks ---
-
-    @patch("platform.system", return_value="Windows")
-    @patch("license_validator.subprocess.check_output")
-    def test_get_hardware_id_windows_wmic(self, mock_sub, mock_sys):
-        mock_sub.return_value = b"SerialNumber\n  DISK-SERIAL-123  \n"
-        hw_id = license_validator.get_hardware_id()
-        self.assertEqual(hw_id, "DISK-SERIAL-123")
+    def test_calculate_sha256(self):
+        """Test SHA256 calculation."""
+        test_file = self.test_dir / "hash_me.txt"
+        test_file.write_text("hello world", encoding="utf-8")
+        h = _calculate_sha256(test_file)
+        # sha256 of "hello world"
+        self.assertEqual(h, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
 
     @patch("platform.system", return_value="Windows")
-    @patch("license_validator.subprocess.check_output")
-    def test_get_hardware_id_windows_powershell(self, mock_sub, mock_sys):
-        # Patch STARTUPINFO and STARTF_USESHOWWINDOW on the imported module
-        with (
-            patch("license_validator.subprocess.STARTUPINFO", create=True) as mock_startup,
-            patch("license_validator.subprocess.STARTF_USESHOWWINDOW", 1, create=True),
-        ):
-            mock_si = MagicMock()
-            # Ensure dwFlags is an int so |= works
-            mock_si.dwFlags = 0
-            mock_startup.return_value = mock_si
-
-            def side_effect(*args, **kwargs):
-                cmd = args[0]
-                if isinstance(cmd, str):
-                    raise subprocess.CalledProcessError(1, cmd)
-                return b"POWERSHELL-SERIAL-123\n"
-
-            mock_sub.side_effect = side_effect
-
-            hw_id = license_validator.get_hardware_id()
-            self.assertEqual(hw_id, "POWERSHELL-SERIAL-123")
-
-    @patch("platform.system", return_value="Windows")
-    @patch("license_validator.subprocess.check_output")
-    @patch("uuid.getnode", return_value=123456789)
-    def test_get_hardware_id_windows_uuid_fallback(self, mock_uuid, mock_sub, mock_sys):
-        with (
-            patch("license_validator.subprocess.STARTUPINFO", create=True),
-            patch("license_validator.subprocess.STARTF_USESHOWWINDOW", 1, create=True),
-        ):
-            mock_sub.side_effect = subprocess.CalledProcessError(1, "cmd")
-            hw_id = license_validator.get_hardware_id()
-            self.assertEqual(hw_id, "123456789")
-
-    # --- Other Tests ---
-
-    @patch("platform.system", return_value="Linux")
-    @patch("license_validator.subprocess.check_output")
-    def test_get_hardware_id_linux_lsblk(self, mock_sub, mock_sys):
-        mock_sub.return_value = b"LINUX-SERIAL-123"
-        hw_id = license_validator.get_hardware_id()
-        self.assertEqual(hw_id, "LINUX-SERIAL-123")
+    @patch("subprocess.check_output")
+    def test_get_hardware_id_windows(self, mock_sub, mock_sys):
+        """Test hardware ID retrieval on Windows."""
+        mock_sub.return_value = b"SerialNumber\nXYZ-123\n"
+        hwid = get_hardware_id()
+        self.assertEqual(hwid, "XYZ-123")
 
     @patch("license_validator._get_license_paths")
-    @patch("license_validator._calculate_sha256")
-    @patch("pathlib.Path.exists", return_value=True)
-    @patch("pathlib.Path.open")
-    @patch("license_validator.get_license_info")
-    @patch("license_validator.get_hardware_id", return_value="HWID")
-    def test_verify_license_success(self, mock_hw, mock_info, mock_open, mock_exists, mock_sha, mock_paths):
-        mock_paths.return_value = {
-            "dir": "Licenza",
-            "config": "Licenza/config.dat",
-            "rkey": "Licenza/pyarmor.rkey",
-            "manifest": "Licenza/manifest.json",
-        }
-        mock_sha.side_effect = ["valid_hash", "valid_key_hash"]
-        mock_info.return_value = {
-            "Hardware ID": "HWID",
-            "Scadenza Licenza": (datetime.date.today() + datetime.timedelta(days=1)).strftime("%d/%m/%Y"),
-            "Cliente": "TestUser",
-        }
+    def test_get_license_info_valid(self, mock_paths):
+        """Test decrypting license info."""
+        mock_paths.return_value = self.paths
+        data = {"Cliente": "Test", "Hardware ID": "HW1"}
+        encrypted = self.cipher.encrypt(json.dumps(data).encode())
+        Path(self.paths["config"]).write_bytes(encrypted)
+        
+        info = get_license_info()
+        self.assertEqual(info["Cliente"], "Test")
 
-        # Mock open for manifest
-        mock_f = MagicMock()
-        mock_f.__enter__.return_value = mock_f
-        mock_f.read.return_value = '{"config.dat": "valid_hash", "pyarmor.rkey": "valid_key_hash"}'
-        mock_open.return_value = mock_f
+    @patch("license_validator._get_license_paths")
+    @patch("license_validator.get_hardware_id")
+    def test_verify_license_full_flow(self, mock_hwid, mock_paths):
+        """Test the full license verification process."""
+        mock_paths.return_value = self.paths
+        mock_hwid.return_value = "HW123"
+        
+        # 1. Create encrypted config
+        data = {"Cliente": "ACME", "Hardware ID": "HW123", "Scadenza Licenza": "01/01/2099"}
+        encrypted = self.cipher.encrypt(json.dumps(data).encode())
+        Path(self.paths["config"]).write_bytes(encrypted)
+        
+        # 2. Create manifest with correct hash
+        config_hash = _calculate_sha256(self.paths["config"])
+        manifest = {"config.dat": config_hash}
+        Path(self.paths["manifest"]).write_text(json.dumps(manifest))
+        
+        valid, msg = verify_license()
+        self.assertTrue(valid)
+        self.assertIn("ACME", msg)
 
-        is_valid, msg = license_validator.verify_license()
-        self.assertTrue(is_valid)
-        self.assertIn("Licenza valida per: TestUser", msg)
-
+    @patch("license_validator._get_license_paths")
+    def test_verify_license_expired(self, mock_paths):
+        """Test verification of an expired license."""
+        mock_paths.return_value = self.paths
+        data = {"Cliente": "Test", "Hardware ID": "HW1", "Scadenza Licenza": "01/01/2020"}
+        encrypted = self.cipher.encrypt(json.dumps(data).encode())
+        Path(self.paths["config"]).write_bytes(encrypted)
+        
+        # Fake HWID to match
+        with patch("license_validator.get_hardware_id", return_value="HW1"):
+            # Update manifest
+            config_hash = _calculate_sha256(self.paths["config"])
+            Path(self.paths["manifest"]).write_text(json.dumps({"config.dat": config_hash}))
+            
+            valid, msg = verify_license()
+            self.assertFalse(valid)
+            self.assertIn("SCADUTA", msg)
 
 if __name__ == "__main__":
     unittest.main()

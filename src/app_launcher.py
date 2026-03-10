@@ -82,7 +82,7 @@ def run_app() -> None:
         splash.hide()
         logger.critical(f"Verifica licenza fallita: {e}", exc_info=True)
         QMessageBox.critical(None, "Errore Licenza", f"Impossibile verificare la licenza:\n{e}")
-        sys.exit(1)
+        return  # Usa return invece di sys.exit(1) per facilitare i test e la pulizia
 
     splash.set_progress(60, "Convalida Hardware ID...")
     is_valid, msg = license_validator.verify_license()
@@ -94,7 +94,7 @@ def run_app() -> None:
         clipboard = qt_app.clipboard()
         clipboard.setText(hw_id)
         QMessageBox.critical(None, "Licenza Non Valida", err_msg)
-        sys.exit(1)
+        return  # Usa return invece di sys.exit(1)
 
     # 3. Preparazione Ambiente
     splash.set_progress(80, "Configurazione interfaccia...")
@@ -120,6 +120,7 @@ def run_app() -> None:
 
     # Piccola pausa per mostrare il 100% e garantire che gli eventi grafici siano processati
     def finalize_startup():
+        """Chiude lo splash screen e mostra la finestra principale massimizzata."""
         splash.close()
         # Una piccola pausa post-close previene i conflitti di pittura su alcuni driver
         QTimer.singleShot(100, window.showMaximized)

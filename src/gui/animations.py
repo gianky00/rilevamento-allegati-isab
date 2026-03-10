@@ -69,6 +69,7 @@ class UIAnimations:
 
         # Pulizia effetti al termine
         def cleanup():
+            """Rimuove gli effetti grafici dai widget al termine dell'animazione."""
             new_widget.setGraphicsEffect(None)  # type: ignore
             old_widget.setGraphicsEffect(None)  # type: ignore
 

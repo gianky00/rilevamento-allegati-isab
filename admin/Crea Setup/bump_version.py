@@ -1,20 +1,24 @@
-import os
+"""
+Script di utilità per incrementare la versione dell'applicazione in version.py.
+Supporta l'incremento di major, minor e patch version.
+"""
+
 import re
 import sys
+from pathlib import Path
 
 
 def bump_version(part="patch"):
     """
-    Increments the version in version.py.
-    part: 'major', 'minor', or 'patch'
+    Incrementa la versione nel file src/version.py.
+
+    Args:
+        part (str): La parte della versione da incrementare ('major', 'minor', o 'patch').
     """
     # admin/Crea Setup/bump_version.py -> ../../src/version.py
-    version_file = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src", "version.py"
-    )
+    version_file = Path(__file__).resolve().parents[2] / "src" / "version.py"
 
-    with open(version_file) as f:
-        content = f.read()
+    content = version_file.read_text(encoding="utf-8")
 
     # Extract version
     match = re.search(r'__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
@@ -37,8 +41,7 @@ def bump_version(part="patch"):
     new_version = f"{major}.{minor}.{patch}"
     new_content = re.sub(r'__version__\s*=\s*".*"', f'__version__ = "{new_version}"', content)
 
-    with open(version_file, "w") as f:
-        f.write(new_content)
+    version_file.write_text(new_content, encoding="utf-8")
 
     print(f"Version bumped to {new_version}")
 
