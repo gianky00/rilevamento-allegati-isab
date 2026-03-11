@@ -13,7 +13,7 @@ logger = logging.getLogger("MAIN")
 try:
     logger.info("Importazione moduli PySide6...")
     from PySide6.QtCore import QTimer
-    from PySide6.QtGui import QBrush, QColor, QIcon
+    from PySide6.QtGui import QBrush, QCloseEvent, QColor, QIcon
     from PySide6.QtWidgets import (
         QFileDialog,
         QInputDialog,
@@ -35,6 +35,7 @@ try:
     import queue
     import sys
 
+    import app_updater
     import version
 
     logger.info("Importazione PyMuPDF...")
@@ -353,7 +354,7 @@ class MainApp(QMainWindow):
     def _update_clock(self) -> None:
         """Aggiorna l'orologio della dashboard e decrementa l'ETA se attivo."""
         now = datetime.now()
-        if hasattr(self, "dashboard"):
+        if hasattr(self, "dashboard") and hasattr(self.dashboard, "clock_label"):
             self.dashboard.clock_label.setText(now.strftime("%d %b %Y | %H:%M:%S"))
 
         # Gestione decremento ETA ogni secondo
@@ -726,3 +727,8 @@ class MainApp(QMainWindow):
         except Exception as e:
             logger.exception(f"Errore durante l'avvio dell'utility ROI: {e}")
             QMessageBox.critical(self, "Errore", f"Impossibile avviare l'utility ROI:\n{e}")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Gestisce la chiusura dell'app, avviando eventuali aggiornamenti in sospeso."""
+        app_updater.run_pending_installer()
+        super().closeEvent(event)
