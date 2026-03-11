@@ -425,18 +425,25 @@ def build():
 
         # --- Step 8: Netlify Deployment Preparation & Upload ---
         skip_deploy = "--no-deploy" in sys.argv
+        deploy_success = True
 
         if setup_filename and not skip_deploy:
             log_and_print("\n--- Step 8/8: Preparing & Uploading to Netlify ---")
-            prepare_and_deploy_netlify(setup_output_dir, setup_filename)
+            deploy_success = prepare_and_deploy_netlify(setup_output_dir, setup_filename)
         elif skip_deploy:
             log_and_print("\n[INFO] Skipping Netlify deployment (--no-deploy flag detected).", "INFO")
         else:
             log_and_print("\n[WARNING] Skipping Netlify deployment because installer was not found.", "WARNING")
 
-        log_and_print("=" * 60)
-        log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
-        log_and_print("=" * 60)
+        if deploy_success:
+            log_and_print("=" * 60)
+            log_and_print("BUILD AND PACKAGING COMPLETE SUCCESS!")
+            log_and_print("=" * 60)
+        else:
+            log_and_print("=" * 60)
+            log_and_print("BUILD SUCCESSFUL BUT DEPLOY FAILED!")
+            log_and_print("=" * 60)
+            sys.exit(1)
 
     except Exception:
         logger.exception("FATAL ERROR DURING BUILD:")
@@ -598,7 +605,31 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
     # 3. Generate Landing Page
     generate_index_html(deploy_dir, setup_filename, version.__version__)
 
-    # 4. Netlify Credentials & Upload
+    # 4. Generate netlify.toml to skip post-processing (essential for large EXE files)
+    netlify_toml = """[build]
+  publish = "."
+
+[build.processing]
+  skip_processing = true
+
+[build.processing.html]
+  pretty_urls = false
+
+[build.processing.images]
+  compress = false
+
+[build.processing.js]
+  bundle = false
+  minify = false
+
+[build.processing.css]
+  bundle = false
+  minify = false
+"""
+    (deploy_dir / "netlify.toml").write_text(netlify_toml, encoding="utf-8")
+    log_and_print("Generated netlify.toml (skip processing enabled)")
+
+    # 5. Netlify Credentials & Upload
     auth_token = get_netlify_token()
     site_id = get_netlify_site_id(NETLIFY_SITE_NAME, auth_token)
 
@@ -629,7 +660,8 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
         url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
         headers = {"Content-Type": "application/zip", "Authorization": f"Bearer {auth_token}"}
 
-        response = requests.post(url, headers=headers, data=data, timeout=300)
+        # Aumentato timeout a 600s per file grandi (es. 180MB+)
+        response = requests.post(url, headers=headers, data=data, timeout=600)
 
         if response.status_code == 200:
             log_and_print("-" * 40)
@@ -637,11 +669,14 @@ def prepare_and_deploy_netlify(setup_dir, setup_filename):
             log_and_print(f"Live URL: {response.json().get('url')}")
             log_and_print(f"Admin Console: {response.json().get('admin_url')}")
             log_and_print("-" * 40)
+            return True
         else:
             log_and_print(f"Upload Failed: {response.status_code} - {response.text}", "ERROR")
+            return False
 
     except Exception as e:
         log_and_print(f"Error during Netlify upload: {e}", "ERROR")
+        return False
     finally:
         if zip_path.exists():
             zip_path.unlink()

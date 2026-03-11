@@ -21,10 +21,17 @@ class TestConfigManager(unittest.TestCase):
         # Patch the global constant in config_manager
         self.patcher = patch("config_manager.CONFIG_FILE", str(self.config_file))
         self.patcher.start()
+        
+        # Patch get_app_base_dir to an empty temp dir by default
+        self.base_dir = self.test_dir / "mock_app_base"
+        self.base_dir.mkdir(exist_ok=True)
+        self.base_patcher = patch("config_manager.get_app_base_dir", return_value=str(self.base_dir))
+        self.base_patcher.start()
 
     def tearDown(self):
         """Cleanup temporary files."""
         self.patcher.stop()
+        self.base_patcher.stop()
         import shutil
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)

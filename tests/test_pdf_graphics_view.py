@@ -30,9 +30,10 @@ class TestPdfGraphicsView(unittest.TestCase):
 
     def test_mouse_press_drawing_start(self):
         """Test starting a ROI drawing with real event."""
+        pos = QPointF(10, 10)
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonPress, 
-            QPointF(10, 10), 
+            pos, pos, pos,
             Qt.MouseButton.LeftButton, 
             Qt.MouseButton.LeftButton, 
             Qt.KeyboardModifier.NoModifier
@@ -42,9 +43,10 @@ class TestPdfGraphicsView(unittest.TestCase):
 
     def test_mouse_release_minimal(self):
         """Test release without drawing doesn't crash."""
+        pos = QPointF(10, 10)
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonRelease, 
-            QPointF(10, 10), 
+            pos, pos, pos,
             Qt.MouseButton.LeftButton, 
             Qt.MouseButton.NoButton, 
             Qt.KeyboardModifier.NoModifier
