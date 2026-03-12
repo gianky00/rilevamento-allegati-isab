@@ -30,25 +30,33 @@ class SessionManager:
                 session_path.unlink()
 
     @staticmethod
+    def save_session(tasks: list[dict[str, Any]], odc: str = "Unknown") -> None:
+        """Salva i task correnti in un file di sessione per ripristino futuro."""
+        if not tasks:
+            SessionManager.clear_session()
+            return
+            
+        data = {"tasks": tasks, "odc": odc}
+        session_path = Path(SESSION_FILE)
+        with session_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+
+    @staticmethod
     def load_session() -> tuple[list[dict[str, Any]], str]:
         """Carica i task salvati dal file di sessione."""
         session_path = Path(SESSION_FILE)
         if not session_path.exists():
             return [], "Unknown"
+            
         try:
             with session_path.open(encoding="utf-8") as f:
                 data = json.load(f)
 
-            if data:
-                tasks: list[dict[str, Any]] = []
-                odc = "Unknown"
-                if isinstance(data, list):
-                    tasks = data
-                elif isinstance(data, dict):
-                    tasks = data.get("tasks", [])
-                    odc = data.get("odc", "Unknown")
-                return tasks, odc
+            if isinstance(data, list):
+                return data, "Unknown"
+            elif isinstance(data, dict):
+                return data.get("tasks", []), data.get("odc", "Unknown")
             return [], "Unknown"
         except Exception as e:
-            logger.exception(f"Errore ripristino sessione: {e}")
-            raise
+            logger.exception(f"Errore caricamento sessione: {e}")
+            raise # Risolve test_load_session_corrupted (logga + raise)

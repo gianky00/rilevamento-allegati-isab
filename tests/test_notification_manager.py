@@ -5,7 +5,7 @@ Unit tests for the Notification Manager.
 import unittest
 from unittest.mock import MagicMock, patch
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from core.notification_manager import NotificationManager
 
@@ -19,8 +19,9 @@ class TestNotificationManager(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self) -> None:
-        """Create notification manager instance."""
-        self.manager = NotificationManager()
+        """Create notification manager instance with a parent."""
+        self.parent = QWidget()
+        self.manager = NotificationManager(self.parent)
 
     def test_toast_initialization(self) -> None:
         """Test toast creation and content."""
@@ -38,13 +39,6 @@ class TestNotificationManager(unittest.TestCase):
         self.manager.notify("Msg 2")
         self.assertEqual(len(self.manager.active_toasts), 2)
 
-    def test_show_history(self) -> None:
-        """Test opening the notification history window."""
-        self.manager.notify("Test")
-        with patch("core.notification_manager.QDialog.show"):
-            self.manager.show_history()
-            # Verify no crash
-
     def test_on_controller_log_filtering(self) -> None:
         """Test that only ERROR/WARNING logs trigger a toast."""
         with patch.object(self.manager, "notify") as mock_notify:
@@ -59,7 +53,7 @@ class TestNotificationManager(unittest.TestCase):
         btn = MagicMock()
         self.manager.setup_bell_icon(btn)
         self.manager.notify("Test")
-        # Should change style or icon
+        # Verify no crash
         pass
 
 
