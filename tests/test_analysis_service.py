@@ -3,10 +3,13 @@ Unit tests for core/analysis_service.py.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pymupdf as fitz
+
 from core.analysis_service import AnalysisService, _analyze_single_page_standalone
+
 
 class TestAnalysisService(unittest.TestCase):
     """Test suite for AnalysisService."""
@@ -50,9 +53,9 @@ class TestAnalysisService(unittest.TestCase):
         """Test detection via OCR (Stage 2)."""
         rules = [{"category_name": "OCR_Cat", "keywords": ["OCR_KW"], "rois": [[0, 0, 100, 100]]}]
         self.mock_ocr.scan_image.return_value = "ocr_kw found"
-        
+
         with fitz.open(self.test_pdf) as doc:
-            page = doc[1] 
+            page = doc[1]
             category = _analyze_single_page_standalone(page, rules, self.mock_ocr)
             self.assertEqual(category, "OCR_Cat")
             self.mock_ocr.scan_image.assert_called()
@@ -61,7 +64,7 @@ class TestAnalysisService(unittest.TestCase):
         """Test full PDF analysis in sequential mode."""
         # Force sequential by patching os.cpu_count or total_pages
         with patch("os.cpu_count", return_value=1):
-            self.mock_ocr.scan_image.return_value = "" 
+            self.mock_ocr.scan_image.return_value = ""
             results = self.service.analyze_pdf(str(self.test_pdf))
             self.assertIn("Category1", results)
             self.assertEqual(results["Category1"], [0])
@@ -72,9 +75,9 @@ class TestAnalysisService(unittest.TestCase):
             # Ensure parallel path is taken by having total_pages > 1 and cpu_count > 1
             with patch.object(self.service, "_analyze_page_task") as mock_task:
                 mock_task.side_effect = lambda path, p: (p, "Category1" if p==0 else "sconosciuto")
-                
+
                 results = self.service.analyze_pdf(str(self.test_pdf))
-                
+
                 self.assertEqual(mock_task.call_count, 2)
                 self.assertEqual(results["Category1"], [0])
                 self.assertEqual(results["sconosciuto"], [1])

@@ -3,9 +3,11 @@ Unit tests for splash_screen.py.
 """
 
 import unittest
+
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+
 from gui.widgets.splash_screen import SplashScreen
+
 
 class TestSplashScreen(unittest.TestCase):
     """Test suite for the SplashScreen widget."""

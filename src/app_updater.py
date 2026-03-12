@@ -1,14 +1,17 @@
 """
 Intelleo PDF Splitter - App Updater (PySide6)
-Gestisce il controllo e la notifica di aggiornamenti dell'applicazione in modo asincrono e resiliente.
+Gestisce il controllo e la notifica di aggiornamenti dell'applicazione.
+Confronta le versioni tra Rete Locale e Web, scegliendo la più recente o privilegiando la LAN.
 """
 
-import contextlib
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
+from contextlib import suppress
+from pathlib import Path
 
 import requests
 from packaging import version as pkg_version
@@ -22,72 +25,81 @@ import version
 _pending_installer_path = None
 
 
-def get_local_setup_path(url: str) -> str:
-    """
-    Determina il percorso locale dove salvare o cercare il setup scaricato.
-    
-    Args:
-        url (str): L'URL di download del setup.
-        
-    Returns:
-        str: Il percorso assoluto del file nel sistema temporaneo.
-    """
-    local_filename = url.split("/")[-1]
-    if not local_filename.endswith(".exe"):
+def get_local_setup_path(url_or_path: str) -> str:
+    """Determina il percorso locale dove salvare o cercare il setup scaricato."""
+    local_filename = url_or_path.replace("\\", "/").split("/")[-1]
+    if not local_filename.lower().endswith(".exe"):
         local_filename = "update_setup.exe"
     return os.path.join(tempfile.gettempdir(), local_filename)
 
 
 class DownloadWorker(QThread):
-    """Worker per il download dell'aggiornamento con supporto per la ripresa (resume) infinita."""
+    """Worker per il download/copia dell'aggiornamento."""
     progress = Signal(int, int, float)  # downloaded, total, speed
     finished = Signal(str)              # path del file scaricato
     error = Signal(str)
     retrying = Signal(int)              # numero del tentativo di riconnessione
 
-    def __init__(self, url):
-        """Inizializza il worker con l'URL di download."""
+    def __init__(self, source_path):
         super().__init__()
-        self.url = url
+        self.source = source_path
         self._is_cancelled = False
-        self.max_retries = 999
 
     def stop(self):
-        """Richiede l'interruzione del download."""
         self._is_cancelled = True
 
     def run(self):
-        """Esegue il download con logica di resume che riprova finché non completa."""
-        setup_path = get_local_setup_path(self.url)
+        """Esegue il download via HTTP o copia via FileSystem."""
+        target_path = Path(get_local_setup_path(self.source))
         
-        downloaded = 0
+        # Caso 1: Percorso di RETE Locale (UNC o Path locale)
+        source_path = Path(self.source)
+        if source_path.exists() and not self.source.lower().startswith("http"):
+            try:
+                total_size = source_path.stat().st_size
+                chunk_size = 1024 * 1024 # 1MB
+                downloaded = 0
+                start_time = time.time()
+                
+                with source_path.open("rb") as fsrc, target_path.open("wb") as fdst:
+                    while not self._is_cancelled:
+                        buf = fsrc.read(chunk_size)
+                        if not buf:
+                            break
+                        fdst.write(buf)
+                        downloaded += len(buf)
+                        elapsed = time.time() - start_time
+                        speed = downloaded / elapsed if elapsed > 0 else 0
+                        self.progress.emit(downloaded, total_size, speed)
+                
+                if not self._is_cancelled:
+                    self.finished.emit(str(target_path))
+                return
+            except Exception as e:
+                self.error.emit(f"Errore copia rete: {e}")
+                return
+
+        # Caso 2: URL WEB (Netlify)
+        downloaded = target_path.stat().st_size if target_path.exists() else 0
         total_size = 0
         retries = 0
         start_time = time.time()
 
-        # Rimuovi file vecchio solo se è molto vecchio (più di 24 ore)
-        if os.path.exists(setup_path):
-            if time.time() - os.path.getmtime(setup_path) > 86400:
-                with contextlib.suppress(Exception):
-                    os.remove(setup_path)
-
         while not self._is_cancelled:
             try:
-                downloaded = os.path.getsize(setup_path) if os.path.exists(setup_path) else 0
                 headers = {'Range': f'bytes={downloaded}-'} if downloaded > 0 else {}
-                
                 session = requests.Session()
-                response = session.get(self.url, headers=headers, stream=True, timeout=(10, 30))
+                response = session.get(self.source, headers=headers, stream=True, timeout=(10, 30))
                 
                 if downloaded > 0 and response.status_code != 206:
                     downloaded = 0
-                    with open(setup_path, "wb") as f: pass
+                    with target_path.open("wb") as f:
+                        pass
                 
-                if response.status_code not in [200, 206]:
-                    if response.status_code == 416:
-                        if total_size > 0 and downloaded >= total_size:
-                            self.finished.emit(setup_path)
-                            return
+                if response.status_code not in (200, 206):
+                    if response.status_code == 416 and total_size > 0 and downloaded >= total_size:
+                        self.finished.emit(str(target_path))
+                        return
                     raise Exception(f"Server error: {response.status_code}")
 
                 if downloaded == 0:
@@ -96,10 +108,11 @@ class DownloadWorker(QThread):
                     total_size = int(response.headers['Content-Range'].split('/')[-1])
                 
                 mode = "ab" if downloaded > 0 else "wb"
-                with open(setup_path, mode) as f:
+                with target_path.open(mode) as f:
                     content_iterator = response.iter_content(chunk_size=131072)
                     while True:
-                        if self._is_cancelled: return
+                        if self._is_cancelled:
+                            return
                         try:
                             chunk = next(content_iterator)
                             if chunk:
@@ -113,44 +126,40 @@ class DownloadWorker(QThread):
                             break
                 
                 if total_size > 0 and downloaded >= total_size:
-                    self.finished.emit(setup_path)
+                    self.finished.emit(str(target_path))
                     return
-                else:
-                    raise requests.exceptions.ConnectionError("Stream interrotto")
+                raise requests.exceptions.ConnectionError("Stream interrotto")
 
-            except Exception as e:
-                if self._is_cancelled: return
+            except Exception:
+                if self._is_cancelled:
+                    return
                 retries += 1
                 self.retrying.emit(retries)
                 time.sleep(min(retries * 2, 10))
 
 
 class UpdateProgressDialog(QDialog):
-    """Dialogo di progresso per il download dell'aggiornamento."""
-    def __init__(self, url, parent=None):
-        """Inizializza il dialogo e connette i segnali al worker."""
+    def __init__(self, source, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Aggiornamento Resiliente")
+        self.setWindowTitle("Aggiornamento Intelligente")
         self.setFixedSize(450, 200)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
         self.setup_ui()
-        self.worker = DownloadWorker(url)
+        self.worker = DownloadWorker(source)
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_finished)
         self.worker.error.connect(self.on_error)
         self.worker.retrying.connect(self.on_retrying)
         
     def setup_ui(self):
-        """Configura l'interfaccia grafica del dialogo."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
-        self.lbl_status = QLabel("Avvio download...")
+        self.lbl_status = QLabel("Avvio scaricamento...")
         self.lbl_status.setFont(QFont("Segoe UI", 10))
         layout.addWidget(self.lbl_status)
         self.pb = QProgressBar()
         self.pb.setFixedHeight(24)
-        self.pb.setStyleSheet("QProgressBar { border: 1px solid #CCCCCC; border-radius: 6px; text-align: center; background-color: #F0F0F0; } QProgressBar::chunk { background-color: #0D6EFD; border-radius: 5px; }")
+        self.pb.setStyleSheet("QProgressBar { border: 1px solid #CCC; border-radius: 6px; text-align: center; background: #F0F0F0; } QProgressBar::chunk { background: #0D6EFD; border-radius: 5px; }")
         layout.addWidget(self.pb)
         self.lbl_details = QLabel("Preparazione...")
         self.lbl_details.setFont(QFont("Segoe UI", 9))
@@ -161,13 +170,11 @@ class UpdateProgressDialog(QDialog):
         layout.addWidget(self.lbl_retry)
 
     def start(self):
-        """Mostra il dialogo e avvia il thread del worker."""
         self.show()
         self.worker.start()
 
     @Slot(int, int, float)
     def update_progress(self, downloaded, total, speed):
-        """Aggiorna la barra di progresso."""
         self.lbl_retry.setText("")
         if total > 0:
             self.pb.setMaximum(total)
@@ -176,119 +183,123 @@ class UpdateProgressDialog(QDialog):
             mb_down = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
             speed_mb = speed / (1024 * 1024)
-            self.lbl_status.setText(f"Scaricamento: {int(percent)}% completato")
+            self.lbl_status.setText(f"Avanzamento: {int(percent)}% completato")
             self.lbl_details.setText(f"{mb_down:.1f} MB di {mb_total:.1f} MB ({speed_mb:.2f} MB/s)")
         else:
             self.pb.setMaximum(0)
-            self.lbl_status.setText("Scaricamento in corso...")
 
     @Slot(int)
-    def on_retrying(self, retry_count):
-        """Segnala all'utente la riconnessione."""
-        self.lbl_retry.setText(f"⚠️ Connessione persa. Tentativo di ripresa #{retry_count}...")
+    def on_retrying(self, count):
+        self.lbl_retry.setText(f"⚠️ Tentativo di ripresa #{count}...")
 
     @Slot(str)
-    def on_finished(self, setup_path):
-        """Chiede all'utente quando installare l'aggiornamento."""
+    def on_finished(self, path):
         self.close()
-        show_install_prompt(setup_path, self.parent())
+        show_install_prompt(path, self.parent())
 
     @Slot(str)
-    def on_error(self, err_msg):
-        """Gestisce errori fatali."""
+    def on_error(self, err):
         self.close()
-        QMessageBox.critical(self.parent() or None, "Errore", f"Download interrotto: {err_msg}")
+        QMessageBox.critical(self.parent(), "Errore", f"Aggiornamento fallito: {err}")
 
 
-def show_install_prompt(setup_path, parent=None):
-    """Mostra la scelta tra installazione immediata o ritardata."""
+def show_install_prompt(path, parent=None):
     global _pending_installer_path
-    msg_box = QMessageBox(parent or None)
-    msg_box.setWindowTitle("🔄 Aggiornamento Pronto")
-    msg_box.setText("L'aggiornamento è stato scaricato ed è pronto per l'installazione.\n\nCosa desideri fare?")
-    msg_box.setIcon(QMessageBox.Icon.Question)
-    btn_now = msg_box.addButton("Installa Ora", QMessageBox.ButtonRole.AcceptRole)
-    btn_later = msg_box.addButton("Alla Chiusura", QMessageBox.ButtonRole.ActionRole)
-    msg_box.addButton("Annulla", QMessageBox.ButtonRole.RejectRole)
-    msg_box.exec()
-    if msg_box.clickedButton() == btn_now:
-        _run_installer_and_exit(setup_path)
-    elif msg_box.clickedButton() == btn_later:
-        _pending_installer_path = setup_path
-        QMessageBox.information(parent or None, "ℹ️ Info", "L'aggiornamento partirà automaticamente alla chiusura dell'app.")
+    msg = QMessageBox(parent)
+    msg.setWindowTitle("🔄 Aggiornamento Pronto")
+    msg.setText("L'aggiornamento è stato scaricato correttamente.\n\nCosa desideri fare?")
+    msg.setIcon(QMessageBox.Icon.Question)
+    btn_now = msg.addButton("Installa Ora", QMessageBox.ButtonRole.AcceptRole)
+    btn_later = msg.addButton("Alla Chiusura", QMessageBox.ButtonRole.ActionRole)
+    msg.addButton("Annulla", QMessageBox.ButtonRole.RejectRole)
+    msg.exec()
+    if msg.clickedButton() == btn_now:
+        _run_installer_and_exit(path)
+    elif msg.clickedButton() == btn_later:
+        _pending_installer_path = path
+        QMessageBox.information(parent, "Info", "L'aggiornamento verrà eseguito alla chiusura dell'applicazione.")
 
 
-def _run_installer_and_exit(setup_path):
-    """Esegue l'installer e termina il processo."""
-    if os.path.exists(setup_path):
-        subprocess.Popen([setup_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
+def _run_installer_and_exit(path):
+    if Path(path).exists():
+        subprocess.Popen([path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
         sys.exit(0)
 
 
 def run_pending_installer():
     """Esegue l'installer memorizzato alla chiusura dell'app."""
     global _pending_installer_path
-    if _pending_installer_path and os.path.exists(_pending_installer_path):
+    if _pending_installer_path and Path(_pending_installer_path).exists():
         subprocess.Popen([_pending_installer_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
 
 
+def get_metadata_from_network():
+    """Recupera metadati dalla rete locale."""
+    net_json = Path(version.NETWORK_UPDATE_PATH) / "version.json"
+    if net_json.exists():
+        with suppress(Exception):
+            data = json.loads(net_json.read_text(encoding="utf-8"))
+            data["url"] = str(Path(version.NETWORK_UPDATE_PATH) / data["url"])
+            data["source"] = "Rete Locale"
+            return data
+    return None
+
+
+def get_metadata_from_web():
+    """Recupera metadati dal web (Netlify)."""
+    with suppress(Exception):
+        resp = requests.get(version.UPDATE_URL, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            data["source"] = "Web (Netlify)"
+            return data
+    return None
+
+
 def check_for_updates(silent=True, on_confirm=None):
-    """Controlla aggiornamenti, gestendo anche file parziali o già scaricati."""
-    url = version.UPDATE_URL
-    if not url or "example.com" in url: return
+    """Controlla aggiornamenti confrontando Rete e Web, privilegiando la più recente o la LAN."""
+    net_data = get_metadata_from_network()
+    web_data = get_metadata_from_web()
 
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            remote_ver_str = data.get("version")
-            download_url = data.get("url")
-            if not remote_ver_str or not download_url: return
+    best_update = None
 
-            if pkg_version.parse(remote_ver_str) > pkg_version.parse(version.__version__):
-                setup_path = get_local_setup_path(download_url)
-                
-                # Ottieni dimensione remota per confronto
-                remote_size = 0
-                with contextlib.suppress(Exception):
-                    head_resp = requests.head(download_url, timeout=5)
-                    remote_size = int(head_resp.headers.get("content-length", 0))
+    if net_data and web_data:
+        v_net = pkg_version.parse(net_data["version"])
+        v_web = pkg_version.parse(web_data["version"])
+        
+        if v_net >= v_web:
+            best_update = net_data
+        else:
+            best_update = web_data
+    elif net_data:
+        best_update = net_data
+    elif web_data:
+        best_update = web_data
 
-                is_complete = False
-                local_size = os.path.getsize(setup_path) if os.path.exists(setup_path) else 0
-                
-                if remote_size > 0 and local_size >= remote_size:
-                    is_complete = True
+    if not best_update:
+        if not silent:
+            QMessageBox.information(None, "Info", "Nessuna sorgente di aggiornamento raggiungibile.")
+        return
 
-                if is_complete:
-                    show_install_prompt(setup_path)
-                else:
-                    if local_size > 0 and remote_size > 0:
-                        percent = (local_size / remote_size) * 100
-                        msg = f"Rilevato download parziale ({int(percent)}%) della versione {remote_ver_str}.\n\nVuoi completare lo scaricamento ora?"
-                    else:
-                        msg = f"Nuova versione {remote_ver_str} disponibile!\n\nVuoi scaricarla ora?"
-                    
-                    reply = QMessageBox.question(None, "🔄 Aggiornamento", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                    if reply == QMessageBox.StandardButton.Yes:
-                        if on_confirm: on_confirm()
-                        perform_auto_update(download_url)
-            elif not silent:
-                QMessageBox.information(None, "✅ OK", f"L'app è aggiornata (v{version.__version__})")
-    except Exception as e:
-        if not silent: QMessageBox.warning(None, "Errore", str(e))
+    remote_v_str = best_update.get("version")
+    download_source = best_update.get("url")
+    source_name = best_update.get("source")
+
+    if remote_v_str and pkg_version.parse(remote_v_str) > pkg_version.parse(version.__version__):
+        msg = f"Disponibile versione {remote_v_str} ({source_name}).\n\nVuoi scaricare l'aggiornamento?"
+        reply = QMessageBox.question(None, "🔄 Aggiornamento", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            if on_confirm:
+                on_confirm()
+            perform_auto_update(download_source)
+    elif not silent:
+        QMessageBox.information(None, "✅ OK", f"L'app è aggiornata (v{version.__version__})")
 
 
-def perform_auto_update(download_url):
-    """Inizia il download asincrono."""
-    parent = None
-    for widget in QApplication.topLevelWidgets():
-        if widget.isWindow() and not widget.parent():
-            parent = widget
-            break
-    global _active_update_dialog
-    _active_update_dialog = UpdateProgressDialog(download_url, parent)
-    _active_update_dialog.start()
+def perform_auto_update(source):
+    parent = next((w for w in QApplication.topLevelWidgets() if w.isWindow() and not w.parent()), None)
+    dialog = UpdateProgressDialog(source, parent)
+    dialog.start()
 
 
 if __name__ == "__main__":

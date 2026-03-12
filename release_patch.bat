@@ -1,6 +1,6 @@
 @echo off
 echo ========================================================
-echo      INTELLEO PDF SPLITTER - AUTOMATED RELEASE
+echo      INTELLEO PDF SPLITTER - FULL AUTOMATED RELEASE
 echo ========================================================
 set VENV_DIR=.venv
 
@@ -23,7 +23,7 @@ if not exist "%VENV_DIR%\Scripts\activate.bat" (
 call "%VENV_DIR%\Scripts\activate.bat"
 
 echo Updating dependencies...
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r src/requirements.txt
 if %errorlevel% neq 0 (
     echo Error installing dependencies!
@@ -58,13 +58,13 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-:: 4. Build & Deploy
+:: 4. Build & Full Deploy (Network + Web)
 echo.
-echo [4/5] Building Application and Installer...
+echo [4/5] Building and Uploading to NETWORK and NETLIFY...
 echo This may take a few minutes...
 python "admin/Crea Setup/build_dist.py"
 if %errorlevel% neq 0 (
-    echo Error during build/deploy process!
+    echo Error during build or deployment process!
     pause
     exit /b %errorlevel%
 )
@@ -73,5 +73,5 @@ if %errorlevel% neq 0 (
 echo.
 echo [5/5] Release Process Completed!
 echo.
-echo New version is live on Netlify.
+echo New version is live on NETWORK and NETLIFY.
 pause

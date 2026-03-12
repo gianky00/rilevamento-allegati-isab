@@ -4,10 +4,13 @@ Unit tests for gui/widgets/pdf_graphics_view.py.
 
 import unittest
 from unittest.mock import MagicMock
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QPointF
+
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QApplication
+
 from gui.widgets.pdf_graphics_view import ROIGraphicsView
+
 
 class TestPdfGraphicsView(unittest.TestCase):
     """Test suite for ROIGraphicsView interaction logic."""
@@ -32,10 +35,10 @@ class TestPdfGraphicsView(unittest.TestCase):
         """Test starting a ROI drawing with real event."""
         pos = QPointF(10, 10)
         event = QMouseEvent(
-            QMouseEvent.Type.MouseButtonPress, 
+            QMouseEvent.Type.MouseButtonPress,
             pos, pos, pos,
-            Qt.MouseButton.LeftButton, 
-            Qt.MouseButton.LeftButton, 
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
             Qt.KeyboardModifier.NoModifier
         )
         self.view.mousePressEvent(event)
@@ -45,10 +48,10 @@ class TestPdfGraphicsView(unittest.TestCase):
         """Test release without drawing doesn't crash."""
         pos = QPointF(10, 10)
         event = QMouseEvent(
-            QMouseEvent.Type.MouseButtonRelease, 
+            QMouseEvent.Type.MouseButtonRelease,
             pos, pos, pos,
-            Qt.MouseButton.LeftButton, 
-            Qt.MouseButton.NoButton, 
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.NoButton,
             Qt.KeyboardModifier.NoModifier
         )
         self.view.mouseReleaseEvent(event)

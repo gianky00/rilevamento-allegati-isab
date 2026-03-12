@@ -2,15 +2,17 @@
 Unit tests for roi_utility.py.
 """
 
-import unittest
 import sys
-from unittest.mock import MagicMock, patch
-from PySide6.QtWidgets import QApplication
+import unittest
+from unittest.mock import patch
+
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QApplication
 
 # Activate testing mode before import
 sys._testing = True
 from roi_utility import ROIDrawingApp
+
 
 class TestRoiUtility(unittest.TestCase):
     """Test suite for ROIDrawingApp logic."""
@@ -40,7 +42,7 @@ class TestRoiUtility(unittest.TestCase):
         """Test toggling delete mode sets properties correctly."""
         self.window.toggle_delete_mode(True)
         self.assertTrue(self.window.delete_mode)
-        
+
         self.window.toggle_delete_mode(False)
         self.assertFalse(self.window.delete_mode)
 
@@ -63,7 +65,7 @@ class TestRoiUtility(unittest.TestCase):
         ]
         self.window._update_rules_list()
         # Should call addItem on our dummy listbox
-        # We can't easily check if addItem was called on Dummy without more logic, 
+        # We can't easily check if addItem was called on Dummy without more logic,
         # but the test passing confirms no crash.
 
 if __name__ == "__main__":

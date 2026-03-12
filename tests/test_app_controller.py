@@ -4,8 +4,11 @@ Unit tests for core/app_controller.py.
 
 import unittest
 from unittest.mock import MagicMock, patch
+
 from PySide6.QtCore import QCoreApplication
+
 from core.app_controller import AppController
+
 
 class TestAppController(unittest.TestCase):
     """Test suite for AppController."""
@@ -32,9 +35,9 @@ class TestAppController(unittest.TestCase):
             with patch("core.app_controller.RuleService") as mock_rules:
                 mock_signal = MagicMock()
                 self.controller.rules_updated.connect(mock_signal)
-                
+
                 self.controller.load_settings()
-                
+
                 mock_load.assert_called()
                 mock_rules.assert_called_with({"test": "val"})
                 mock_signal.assert_called_once()
@@ -47,12 +50,12 @@ class TestAppController(unittest.TestCase):
         mock_load.return_value = {"last_access": "yesterday"}
         mock_lic.return_value = {"Cliente": "TestUser", "Scadenza Licenza": "2025-01-01"}
         mock_hwid.return_value = "HW-123"
-        
+
         mock_signal = MagicMock()
         self.controller.license_status_updated.connect(mock_signal)
-        
+
         self.controller.check_license()
-        
+
         mock_signal.assert_called_once()
         info = mock_signal.call_args[0][0]
         self.assertEqual(info["cliente"], "TESTUSER")
@@ -62,7 +65,7 @@ class TestAppController(unittest.TestCase):
     def test_set_pdf_files(self, mock_find):
         """Test finding and setting PDF files."""
         mock_find.return_value = ["file1.pdf", "file2.pdf"]
-        
+
         self.controller.set_pdf_files(["C:/temp"])
         self.assertEqual(len(self.controller.pdf_files), 2)
         self.assertIn("file1.pdf", self.controller.pdf_files)
@@ -72,9 +75,9 @@ class TestAppController(unittest.TestCase):
         """Test starting the processing worker."""
         # Ensure we have files, otherwise it returns False
         self.controller.pdf_files = ["test.pdf"]
-        
+
         res = self.controller.start_processing("ODC001")
-        
+
         self.assertTrue(res)
         self.assertTrue(self.controller._is_processing)
         mock_worker.assert_called()
@@ -84,16 +87,16 @@ class TestAppController(unittest.TestCase):
         """Test log queue processing and signal emission."""
         mock_signal = MagicMock()
         self.controller.log_received.connect(mock_signal)
-        
+
         # Add items to queue
         self.controller.log_queue.put(("Message 1", "INFO"))
         self.controller.log_queue.put({"action": "update_progress", "value": 50, "text": "Wait"})
-        
+
         mock_progress = MagicMock()
         self.controller.progress_updated.connect(mock_progress)
-        
+
         self.controller._process_log_queue()
-        
+
         mock_signal.assert_any_call("Message 1", "INFO", False)
         mock_progress.assert_any_call(50.0, "Wait", None)
 
@@ -103,7 +106,7 @@ class TestAppController(unittest.TestCase):
         mock_has.return_value = True
         mock_signal = MagicMock()
         self.controller.session_status_changed.connect(mock_signal)
-        
+
         self.controller.check_for_restore()
         mock_signal.assert_called_with(True)
 

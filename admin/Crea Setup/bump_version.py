@@ -4,7 +4,6 @@ Supporta l'incremento di major, minor e patch version.
 """
 
 import re
-import sys
 from pathlib import Path
 
 
@@ -14,9 +13,15 @@ def bump_version(part="patch"):
 
     Args:
         part (str): La parte della versione da incrementare ('major', 'minor', o 'patch').
+    Returns:
+        str: La nuova stringa di versione.
     """
     # admin/Crea Setup/bump_version.py -> ../../src/version.py
     version_file = Path(__file__).resolve().parents[2] / "src" / "version.py"
+
+    if not version_file.exists():
+        print(f"Error: version.py not found at {version_file}")
+        return None
 
     content = version_file.read_text(encoding="utf-8")
 
@@ -24,7 +29,7 @@ def bump_version(part="patch"):
     match = re.search(r'__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
     if not match:
         print("Error: Could not find version string.")
-        sys.exit(1)
+        return None
 
     major, minor, patch = map(int, match.groups())
 
@@ -44,6 +49,7 @@ def bump_version(part="patch"):
     version_file.write_text(new_content, encoding="utf-8")
 
     print(f"Version bumped to {new_version}")
+    return new_version
 
 
 if __name__ == "__main__":

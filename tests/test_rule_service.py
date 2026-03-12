@@ -4,7 +4,9 @@ Unit tests for core/rule_service.py.
 
 import unittest
 from unittest.mock import patch
+
 from core.rule_service import RuleService
+
 
 class TestRuleService(unittest.TestCase):
     """Test suite for RuleService."""
@@ -56,7 +58,7 @@ class TestRuleService(unittest.TestCase):
         """Test that updating a rule preserves ROIs if not provided in new data."""
         self.config["classification_rules"][0]["rois"] = [{"x": 10}]
         new_data = {"category_name": "Test1", "keywords": ["updated"]}
-        
+
         self.service.update_rule("Test1", new_data)
         rule = self.service.get_rule_by_category("Test1")
         self.assertEqual(rule["rois"], [{"x": 10}])
@@ -82,7 +84,7 @@ class TestRuleService(unittest.TestCase):
         rule = self.service.get_rule_by_category("Test2")
         self.assertIsNotNone(rule)
         self.assertEqual(rule["category_name"], "Test2")
-        
+
         self.assertIsNone(self.service.get_rule_by_category("Unknown"))
 
     @patch("config_manager.save_config")

@@ -2,11 +2,13 @@
 Unit tests for core/pdf_splitter.py.
 """
 
-import unittest
 import os
-from pathlib import Path
+import unittest
+
 import pymupdf as fitz
+
 from core.pdf_splitter import PdfSplitter
+
 
 class TestPdfSplitter(unittest.TestCase):
     """Test suite for PdfSplitter."""
@@ -33,7 +35,7 @@ class TestPdfSplitter(unittest.TestCase):
         pages = [0, 1, 2, 4, 6, 7]
         ranges = PdfSplitter._get_ranges(pages)
         self.assertEqual(ranges, [(0, 2), (4, 4), (6, 7)])
-        
+
         self.assertEqual(PdfSplitter._get_ranges([]), [])
         self.assertEqual(PdfSplitter._get_ranges([5]), [(5, 5)])
 
@@ -51,25 +53,25 @@ class TestPdfSplitter(unittest.TestCase):
         ]
         output_dir = "."
         odc = "ODC999"
-        
+
         generated = PdfSplitter.split_and_save(doc, page_groups, rules, output_dir, odc)
         doc.close()
-        
+
         # Verify generated list
         self.assertEqual(len(generated), 3)
         paths = [f["path"] for f in generated]
-        
+
         # Check specific filenames
         expected_a = os.path.abspath(os.path.join(output_dir, "ODC999_SUFFIX_A.pdf"))
         expected_b = os.path.abspath(os.path.join(output_dir, "ODC999_CatB.pdf"))
         self.assertIn(expected_a, paths)
         self.assertIn(expected_b, paths)
-        
+
         # Verify content of one generated file
         doc_a = fitz.open(expected_a)
         self.assertEqual(doc_a.page_count, 2)
         doc_a.close()
-        
+
         # Cleanup
         for f in generated:
             if os.path.exists(f["path"]):
@@ -79,8 +81,8 @@ class TestPdfSplitter(unittest.TestCase):
         """Test safe save retry logic (mocking failure then success)."""
         doc = fitz.open()
         doc.new_page()
-        
-        # We can't easily force a PermissionError without OS help, 
+
+        # We can't easily force a PermissionError without OS help,
         # but we can test that it returns True on normal save.
         res = PdfSplitter._safe_save(doc, "test_safe.pdf")
         self.assertTrue(res)

@@ -3,19 +3,14 @@ Unit tests for license_updater.py.
 """
 
 import unittest
-import json
-import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta, timezone
+
 from cryptography.fernet import Fernet
-from license_updater import (
-    get_github_token, 
-    check_grace_period, 
-    update_grace_timestamp, 
-    run_update,
-    GRACE_PERIOD_KEY
-)
+
+from license_updater import GRACE_PERIOD_KEY, check_grace_period, get_github_token, run_update
+
 
 class TestLicenseUpdater(unittest.TestCase):
     """Test suite for license updater and grace period."""
@@ -42,23 +37,23 @@ class TestLicenseUpdater(unittest.TestCase):
     def test_grace_period_valid(self, mock_path):
         """Test grace period verification with a fresh token."""
         mock_path.return_value = str(self.token_path)
-        
+
         # Create a valid token (current time)
         cipher = Fernet(GRACE_PERIOD_KEY)
         now_str = datetime.now(timezone.utc).isoformat()
         self.token_path.write_bytes(cipher.encrypt(now_str.encode()))
-        
+
         self.assertTrue(check_grace_period())
 
     @patch("license_updater._get_validity_token_path")
     def test_grace_period_expired(self, mock_path):
         """Test grace period expiration (> 3 days)."""
         mock_path.return_value = str(self.token_path)
-        
+
         cipher = Fernet(GRACE_PERIOD_KEY)
         old_time = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
         self.token_path.write_bytes(cipher.encrypt(old_time.encode()))
-        
+
         with self.assertRaises(Exception) as cm:
             check_grace_period()
         self.assertIn("SCADUTO", str(cm.exception))
@@ -70,15 +65,15 @@ class TestLicenseUpdater(unittest.TestCase):
         """Test full successful update from GitHub."""
         mock_dir.return_value = str(self.test_dir)
         mock_hwid.return_value = "HW123"
-        
+
         # Mock responses for 3 files
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.content = b"content"
         mock_get.return_value = mock_response
-        
+
         run_update()
-        
+
         # Verify files created
         self.assertTrue((self.test_dir / "config.dat").exists())
         self.assertTrue((self.test_dir / "manifest.json").exists())
