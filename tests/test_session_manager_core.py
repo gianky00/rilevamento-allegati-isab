@@ -2,13 +2,14 @@
 Unit tests for core/session_manager.py.
 """
 
-import unittest
 import json
-import os
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 from core.session_manager import SessionManager
 from shared.constants import SESSION_FILE
+
 
 class TestSessionManager(unittest.TestCase):
     """Test suite for SessionManager."""

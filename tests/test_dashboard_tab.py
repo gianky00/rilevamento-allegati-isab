@@ -4,8 +4,11 @@ Unit tests for gui/tabs/dashboard_tab.py.
 
 import unittest
 from unittest.mock import MagicMock
+
 from PySide6.QtWidgets import QApplication, QWidget
+
 from gui.tabs.dashboard_tab import DashboardTab
+
 
 class TestDashboardTab(unittest.TestCase):
     """Test suite for DashboardTab UI components."""
@@ -35,7 +38,7 @@ class TestDashboardTab(unittest.TestCase):
         self.assertIsNotNone(self.mock_main.odc_entry)
         self.assertIsNotNone(self.mock_main.progress_bar)
         self.assertIsNotNone(self.mock_main.log_area)
-        
+
         # Check if clock label was created on the tab itself
         self.assertTrue(hasattr(self.tab, "clock_label"))
 

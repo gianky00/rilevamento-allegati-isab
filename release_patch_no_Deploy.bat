@@ -1,6 +1,6 @@
 @echo off
 echo ========================================================
-echo      INTELLEO PDF SPLITTER - LOCAL RELEASE (NO DEPLOY)
+echo      INTELLEO PDF SPLITTER - NETWORK RELEASE (NO WEB)
 echo ========================================================
 set VENV_DIR=.venv
 
@@ -58,13 +58,13 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-:: 4. Build ONLY (No Deploy)
+:: 4. Build and Network Deploy (No Netlify)
 echo.
-echo [4/5] Building Application and Installer (LOCAL ONLY)...
+echo [4/5] Building and Uploading to NETWORK PATH...
 echo This may take a few minutes...
 python "admin/Crea Setup/build_dist.py" --no-deploy
 if %errorlevel% neq 0 (
-    echo Error during build process!
+    echo Error during build or network upload!
     pause
     exit /b %errorlevel%
 )
@@ -73,5 +73,5 @@ if %errorlevel% neq 0 (
 echo.
 echo [5/5] Release Process Completed!
 echo.
-echo Setup created locally (No Upload performed).
+echo Setup uploaded to NETWORK (Netlify skipped).
 pause

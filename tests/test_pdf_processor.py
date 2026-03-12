@@ -3,9 +3,10 @@ Unit tests for core/pdf_processor.py.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
-from pathlib import Path
+from unittest.mock import patch
+
 from core.pdf_processor import process_pdf
+
 
 class TestPdfProcessor(unittest.TestCase):
     """Test suite for process_pdf orchestrator."""
@@ -36,25 +37,25 @@ class TestPdfProcessor(unittest.TestCase):
     def test_process_pdf_success(self, mock_is_file, mock_fitz, mock_archive, mock_splitter, mock_analyzer, mock_ocr):
         """Test successful end-to-end processing flow."""
         mock_is_file.return_value = True # Tesseract exists
-        
+
         # Mock Analyzer
         mock_analyzer_inst = mock_analyzer.return_value
         mock_analyzer_inst.analyze_pdf.return_value = {"Cat1": [0, 1]}
         mock_analyzer_inst.rules = []
-        
+
         # Mock Splitter
         mock_splitter.split_and_save.return_value = [{"path": "out.pdf", "category": "Cat1"}]
-        
+
         # Mock Archive
         mock_archive.archive_original.return_value = "ORIGINALI/test.pdf"
-        
+
         success, msg, gen, moved = process_pdf(self.pdf_path, self.odc, self.config)
-        
+
         self.assertTrue(success)
         self.assertEqual(msg, "Successo")
         self.assertEqual(len(gen), 1)
         self.assertEqual(moved, "ORIGINALI/test.pdf")
-        
+
         mock_analyzer_inst.analyze_pdf.assert_called_once()
         mock_splitter.split_and_save.assert_called_once()
         mock_archive.archive_original.assert_called_once()

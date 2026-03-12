@@ -2,12 +2,12 @@
 Unit tests for app_updater.py.
 """
 
+import json
 import unittest
-import sys
-import os
-from unittest.mock import MagicMock, patch, mock_open
-import requests
-from app_updater import check_for_updates, perform_auto_update
+from unittest.mock import patch
+
+import app_updater
+
 
 class TestAppUpdater(unittest.TestCase):
     """Test suite for app_updater module."""
@@ -18,81 +18,76 @@ class TestAppUpdater(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
 
-    @patch("app_updater.requests.get")
+    def setUp(self):
+        """Reset global variables before each test."""
+        app_updater._pending_installer_path = None
+
+    @patch("app_updater.get_metadata_from_network")
+    @patch("app_updater.get_metadata_from_web")
     @patch("app_updater.QMessageBox.question")
     @patch("app_updater.version")
-    def test_check_for_updates_available(self, mock_ver, mock_quest, mock_get):
-        """Test update check when a new version is available."""
+    def test_check_for_updates_network_preferred(self, mock_ver, mock_quest, mock_web, mock_net):
+        """Test that network update is preferred when versions are equal."""
         mock_ver.__version__ = "1.0.0"
-        mock_ver.UPDATE_URL = "http://mock.com/version.json"
-        
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"version": "2.0.0", "url": "http://mock.com/setup.exe"}
-        mock_get.return_value = mock_response
-        
+
+        # Entrambi hanno la 2.0.0
+        mock_net.return_value = {"version": "2.0.0", "url": "\\\\path\\\\setup.exe", "source": "Rete Locale"}
+        mock_web.return_value = {"version": "2.0.0", "url": "http://web/setup.exe", "source": "Web"}
+
         from PySide6.QtWidgets import QMessageBox
         mock_quest.return_value = QMessageBox.StandardButton.Yes
-        
+
         with patch("app_updater.perform_auto_update") as mock_perform:
-            check_for_updates(silent=False)
-            mock_perform.assert_called_once()
+            app_updater.check_for_updates(silent=False)
+            # Deve chiamare perform_auto_update con il percorso di RETE
+            mock_perform.assert_called_once_with("\\\\path\\\\setup.exe")
 
-    @patch("app_updater.requests.get")
+    @patch("app_updater.get_metadata_from_network")
+    @patch("app_updater.get_metadata_from_web")
+    @patch("app_updater.QMessageBox.question")
     @patch("app_updater.version")
-    def test_check_for_updates_already_updated(self, mock_ver, mock_get):
-        """Test update check when already on latest version."""
-        mock_ver.__version__ = "2.0.0"
-        mock_ver.UPDATE_URL = "http://mock.com/version.json"
-        
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"version": "2.0.0"}
-        mock_get.return_value = mock_response
-        
-        with patch("app_updater.QMessageBox.information") as mock_info:
-            check_for_updates(silent=False)
-            mock_info.assert_called()
+    def test_check_for_updates_web_newer(self, mock_ver, mock_quest, mock_web, mock_net):
+        """Test that web update is chosen if it's newer than network."""
+        mock_ver.__version__ = "1.0.0"
 
-    @patch("app_updater.requests.get")
-    @patch("app_updater.QMessageBox.critical")
-    def test_perform_auto_update_failure(self, mock_crit, mock_get):
-        """Test auto update behavior on error, mocking UI components to avoid C++ conflicts."""
-        mock_get.side_effect = Exception("Download failed")
-        
-        with patch("app_updater.QDialog"), \
-             patch("app_updater.QVBoxLayout"), \
-             patch("app_updater.QLabel"), \
-             patch("app_updater.QProgressBar"):
-            perform_auto_update("http://mock.com/fail.exe")
-            mock_crit.assert_called()
+        mock_net.return_value = {"version": "2.0.0", "url": "\\\\path\\\\setup.exe", "source": "Rete Locale"}
+        mock_web.return_value = {"version": "2.1.0", "url": "http://web/setup.exe", "source": "Web"}
 
-    @patch("app_updater.requests.get")
-    @patch("app_updater.subprocess.Popen")
-    def test_perform_auto_update_success(self, mock_popen, mock_get):
-        """Test successful auto update flow with full UI mocking."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-length": "100"}
-        mock_response.iter_content.return_value = [b"chunk1", b"chunk2"]
-        mock_get.return_value = mock_response
-        
-        # Mocking all UI components used inside perform_auto_update
-        with patch("app_updater.QDialog"), \
-             patch("app_updater.QVBoxLayout"), \
-             patch("app_updater.QLabel"), \
-             patch("app_updater.QProgressBar"), \
-             patch("app_updater.QApplication"):
-            
-            mock_file = MagicMock()
-            with patch("builtins.open", return_value=mock_file):
-                mock_file.__enter__.return_value = mock_file
-                with patch("app_updater.sys.exit") as mock_exit:
-                    perform_auto_update("http://mock.com/setup.exe")
-                    
-                    self.assertTrue(mock_file.write.called)
-                    mock_popen.assert_called()
-                    mock_exit.assert_called_with(0)
+        from PySide6.QtWidgets import QMessageBox
+        mock_quest.return_value = QMessageBox.StandardButton.Yes
+
+        with patch("app_updater.perform_auto_update") as mock_perform:
+            app_updater.check_for_updates(silent=False)
+            # Deve chiamare perform_auto_update con l'URL WEB perché 2.1.0 > 2.0.0
+            mock_perform.assert_called_once_with("http://web/setup.exe")
+
+    @patch("app_updater.Path.exists")
+    @patch("app_updater.version")
+    def test_get_metadata_from_network_success(self, mock_ver, mock_exists):
+        """Test retrieving metadata from network share."""
+        mock_ver.NETWORK_UPDATE_PATH = "\\\\server\\\\share"
+        mock_exists.return_value = True
+
+        mock_data = json.dumps({"version": "2.0.0", "url": "setup.exe"})
+        with patch("app_updater.Path.read_text", return_value=mock_data):
+            data = app_updater.get_metadata_from_network()
+            self.assertEqual(data["version"], "2.0.0")
+            self.assertIn("server", data["url"])
+
+    @patch("app_updater.DownloadWorker.start")
+    @patch("app_updater.UpdateProgressDialog.show")
+    def test_perform_auto_update_starts_worker(self, mock_show, mock_worker_start):
+        """Test that perform_auto_update initializes and starts the async worker."""
+        with patch("app_updater.QApplication.topLevelWidgets", return_value=[]):
+            app_updater.perform_auto_update("http://mock.com/setup.exe")
+            mock_worker_start.assert_called_once()
+
+    def test_get_local_setup_path(self):
+        """Test local path generation for both UNC and URL."""
+        path1 = app_updater.get_local_setup_path("\\\\server\\share\\setup.exe")
+        path2 = app_updater.get_local_setup_path("http://web.com/update.exe")
+        self.assertTrue(path1.endswith("setup.exe"))
+        self.assertTrue(path2.endswith("update.exe"))
 
 if __name__ == "__main__":
     unittest.main()

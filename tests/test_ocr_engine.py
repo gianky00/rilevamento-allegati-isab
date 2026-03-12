@@ -3,9 +3,12 @@ Unit tests for core/ocr_engine.py.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 from PIL import Image
+
 from core.ocr_engine import OcrEngine
+
 
 class TestOcrEngine(unittest.TestCase):
     """Test suite for OcrEngine."""
@@ -56,9 +59,9 @@ class TestOcrEngine(unittest.TestCase):
         """Test robust scan finding a keyword in transformed steps."""
         # First call fails, second (rotated) succeeds
         mock_ocr.side_effect = ["nothing", "found target here", "etc"]
-        
+
         found, keyword = self.engine.robust_scan(self.dummy_img, ["target", "other"])
-        
+
         self.assertTrue(found)
         self.assertEqual(keyword, "target")
         # Should have called at least twice
@@ -68,9 +71,9 @@ class TestOcrEngine(unittest.TestCase):
     def test_robust_scan_no_match(self, mock_ocr):
         """Test robust scan when no keywords are found in any step."""
         mock_ocr.return_value = "no match here"
-        
+
         found, keyword = self.engine.robust_scan(self.dummy_img, ["target"])
-        
+
         self.assertFalse(found)
         self.assertEqual(keyword, "")
 

@@ -3,12 +3,15 @@ Unit tests for gui/ui_factory.py.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
-from PySide6.QtWidgets import QApplication, QWidget, QLabel
+from unittest.mock import patch
+
 from PySide6.QtGui import QColor
 from PySide6.QtSvgWidgets import QSvgWidget
-from gui.ui_factory import UIFactory, AnimatedButton
+from PySide6.QtWidgets import QApplication, QLabel
+
 from gui.theme import COLORS
+from gui.ui_factory import AnimatedButton, UIFactory
+
 
 class TestUIFactory(unittest.TestCase):
     """Test suite for UIFactory and AnimatedButton."""

@@ -2,12 +2,13 @@
 Unit tests for config_manager.py.
 """
 
-import unittest
 import json
-import os
+import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import config_manager
+
 
 class TestConfigManager(unittest.TestCase):
     """Test suite for config loading and saving."""
@@ -17,11 +18,11 @@ class TestConfigManager(unittest.TestCase):
         self.test_dir = Path("temp_config_test")
         self.test_dir.mkdir(exist_ok=True)
         self.config_file = self.test_dir / "config.json"
-        
+
         # Patch the global constant in config_manager
         self.patcher = patch("config_manager.CONFIG_FILE", str(self.config_file))
         self.patcher.start()
-        
+
         # Patch get_app_base_dir to an empty temp dir by default
         self.base_dir = self.test_dir / "mock_app_base"
         self.base_dir.mkdir(exist_ok=True)
@@ -40,7 +41,7 @@ class TestConfigManager(unittest.TestCase):
         """Test saving configuration to file."""
         data = {"key": "value", "rules": [1, 2]}
         config_manager.save_config(data)
-        
+
         self.assertTrue(self.config_file.exists())
         with open(self.config_file, encoding="utf-8") as f:
             saved_data = json.load(f)
@@ -50,17 +51,17 @@ class TestConfigManager(unittest.TestCase):
         """Test loading existing configuration."""
         data = {"classification_rules": [{"name": "rule1"}]}
         self.config_file.write_text(json.dumps(data), encoding="utf-8")
-        
+
         loaded = config_manager.load_config()
         self.assertEqual(len(loaded["classification_rules"]), 1)
 
     def test_load_config_corrupt_backup(self):
         """Test that corrupt config is backed up and skipped."""
         self.config_file.write_text("invalid json", encoding="utf-8")
-        
+
         loaded = config_manager.load_config()
         self.assertEqual(loaded, {})
-        
+
         # Check if backup was created
         backup = self.config_file.with_suffix(".json.bak")
         self.assertTrue(backup.exists())
@@ -74,12 +75,12 @@ class TestConfigManager(unittest.TestCase):
         local_config = local_dir / "config.json"
         local_data = {"classification_rules": [{"name": "template"}], "setting": "default"}
         local_config.write_text(json.dumps(local_data), encoding="utf-8")
-        
+
         mock_base.return_value = str(local_dir)
-        
+
         # APPDATA config doesn't exist yet
         loaded = config_manager.load_config()
-        
+
         self.assertEqual(len(loaded["classification_rules"]), 1)
         self.assertEqual(loaded["setting"], "default")
 

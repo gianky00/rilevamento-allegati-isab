@@ -3,10 +3,11 @@ Unit tests for core/processing_worker.py.
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
 from queue import Queue
-from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 from core.processing_worker import PdfProcessingWorker
+
 
 class TestProcessingWorker(unittest.TestCase):
     """Test suite for PdfProcessingWorker."""
@@ -26,24 +27,24 @@ class TestProcessingWorker(unittest.TestCase):
         """Test successful run of the worker."""
         # Mock process_pdf to return success
         mock_process.return_value = (True, "Success", [{"category": "A", "path": "p1.pdf"}], "moved.pdf")
-        
+
         # Mock fitz for page count
         mock_doc = MagicMock()
         mock_doc.page_count = 5
         mock_fitz.return_value.__enter__.return_value = mock_doc
-        
+
         self.worker._run()
-        
+
         # Verify stats
         self.assertEqual(self.worker.files_processed_count, 2)
         self.assertEqual(self.worker.pages_processed_count, 10)
         self.on_complete.assert_called_with(2, 10, [])
-        
+
         # Check if logs were produced
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())
-        
+
         self.assertTrue(any("FILE 1/2" in str(l) for l in logs))
         self.assertTrue(any("ELABORAZIONE COMPLETATA" in str(l) for l in logs))
 
@@ -52,11 +53,11 @@ class TestProcessingWorker(unittest.TestCase):
         """Test worker cancellation."""
         self.worker.cancel()
         self.worker._run()
-        
+
         # Should not call process_pdf if cancelled at start
         mock_process.assert_not_called()
         self.on_complete.assert_called_once()
-        
+
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())
@@ -70,11 +71,11 @@ class TestProcessingWorker(unittest.TestCase):
             (True, "OK", [{"category": "sconosciuto", "path": "u1.pdf"}], "source.pdf"),
             (True, "OK", [{"category": "A", "path": "p1.pdf"}], "source2.pdf")
         ]
-        
+
         # We need to mock fitz to avoid actual file opening
         with patch("pymupdf.open", MagicMock()):
             self.worker._run()
-            
+
             # Check callback args for unknown files
             args = self.on_complete.call_args[0]
             unknown_files = args[2]

@@ -4,8 +4,11 @@ Unit tests for gui/tabs/config_tab.py.
 
 import unittest
 from unittest.mock import MagicMock
+
 from PySide6.QtWidgets import QApplication, QWidget
+
 from gui.tabs.config_tab import ConfigTab
+
 
 class TestConfigTab(unittest.TestCase):
     """Test suite for ConfigTab UI components."""
@@ -32,7 +35,7 @@ class TestConfigTab(unittest.TestCase):
         self.assertIsNotNone(self.mock_main.rules_tree)
         self.assertIsNotNone(self.mock_main.keywords_text)
         self.assertIsNotNone(self.mock_main.roi_details_label)
-        
+
         # Check specific widget types/properties
         self.assertEqual(self.mock_main.rules_tree.columnCount(), 3)
         self.assertTrue(self.mock_main.keywords_text.isReadOnly())

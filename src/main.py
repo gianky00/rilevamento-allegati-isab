@@ -165,7 +165,7 @@ class MainApp(QMainWindow):
             self.dashboard_tab = self.processing_tab = self.dashboard
             self.config_tab = self.config_panel
             self.help_tab = self.help_panel
-            
+
             self.notebook.addTab(self.dashboard, "Dashboard")
             self.notebook.addTab(self.config_panel, "Configurazione")
             self.notebook.addTab(self.help_panel, "Guida")
