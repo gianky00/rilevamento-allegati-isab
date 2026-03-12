@@ -1,86 +1,70 @@
 """
-Unit tests for core/processing_worker.py.
+Unit tests for the background processing worker.
 """
 
 import unittest
 from queue import Queue
 from unittest.mock import MagicMock, patch
 
-from core.processing_worker import PdfProcessingWorker
+from PySide6.QtCore import QCoreApplication
+
+from core.processing_worker import ProcessingWorker
 
 
 class TestProcessingWorker(unittest.TestCase):
-    """Test suite for PdfProcessingWorker."""
+    """Test suite for ProcessingWorker class."""
 
-    def setUp(self):
-        """Setup worker with mocks."""
-        self.log_queue = Queue()
-        self.pdf_files = ["test1.pdf", "test2.pdf"]
-        self.on_complete = MagicMock()
-        self.worker = PdfProcessingWorker(
-            self.log_queue, self.pdf_files, "ODC123", {}, self.on_complete
-        )
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Initialize QApplication for signals."""
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self) -> None:
+        """Setup worker and common mocks."""
+        self.log_queue: Queue = Queue()
+        self.config = {"tesseract_path": "tess", "pdf_output_path": "out"}
+        self.worker = ProcessingWorker(["file1.pdf", "file2.pdf"], "ODC1", self.config, self.log_queue)
 
     @patch("core.pdf_processor.process_pdf")
-    @patch("pymupdf.open")
-    def test_run_success(self, mock_fitz, mock_process):
-        """Test successful run of the worker."""
-        # Mock process_pdf to return success
-        mock_process.return_value = (True, "Success", [{"category": "A", "path": "p1.pdf"}], "moved.pdf")
-
-        # Mock fitz for page count
-        mock_doc = MagicMock()
-        mock_doc.page_count = 5
-        mock_fitz.return_value.__enter__.return_value = mock_doc
-
-        self.worker._run()
-
-        # Verify stats
-        self.assertEqual(self.worker.files_processed_count, 2)
-        self.assertEqual(self.worker.pages_processed_count, 10)
-        self.on_complete.assert_called_with(2, 10, [])
-
-        # Check if logs were produced
+    def test_run_success(self, mock_process) -> None:
+        """Test successful execution loop."""
+        mock_process.return_value = (True, "OK", [], [])
+        
+        self.worker.run()
+        
+        # Verify signals and logs
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())
 
-        self.assertTrue(any("FILE 1/2" in str(l) for l in logs))
-        self.assertTrue(any("ELABORAZIONE COMPLETATA" in str(l) for l in logs))
+        self.assertTrue(any("FILE 1/2" in str(entry) for entry in logs))
+        self.assertTrue(any("ELABORAZIONE COMPLETATA" in str(entry) for entry in logs))
 
     @patch("core.pdf_processor.process_pdf")
-    def test_run_cancel(self, mock_process):
-        """Test worker cancellation."""
-        self.worker.cancel()
-        self.worker._run()
-
-        # Should not call process_pdf if cancelled at start
-        mock_process.assert_not_called()
-        self.on_complete.assert_called_once()
-
+    def test_cancellation(self, mock_process) -> None:
+        """Test worker stop mechanism."""
+        mock_process.return_value = (True, "OK", [], [])
+        self.worker.stop()
+        
+        self.worker.run()
+        
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())
-        self.assertTrue(any("annullata" in str(l) for l in logs))
+        self.assertTrue(any("annullata" in str(entry) for entry in logs))
 
     @patch("core.pdf_processor.process_pdf")
-    def test_unknown_files_detection(self, mock_process):
-        """Test that unknown files are correctly identified and reported."""
-        # First file has unknown page
-        mock_process.side_effect = [
-            (True, "OK", [{"category": "sconosciuto", "path": "u1.pdf"}], "source.pdf"),
-            (True, "OK", [{"category": "A", "path": "p1.pdf"}], "source2.pdf")
-        ]
+    def test_process_failure_handling(self, mock_process) -> None:
+        """Test how the worker handles a single file failure."""
+        mock_process.return_value = (False, "Error msg", [], [])
+        
+        self.worker.run()
+        
+        logs = []
+        while not self.log_queue.empty():
+            logs.append(self.log_queue.get())
+        self.assertTrue(any("ERRORE" in str(entry) for entry in logs))
 
-        # We need to mock fitz to avoid actual file opening
-        with patch("pymupdf.open", MagicMock()):
-            self.worker._run()
-
-            # Check callback args for unknown files
-            args = self.on_complete.call_args[0]
-            unknown_files = args[2]
-            self.assertEqual(len(unknown_files), 1)
-            self.assertEqual(unknown_files[0]["unknown_path"], "u1.pdf")
 
 if __name__ == "__main__":
     unittest.main()

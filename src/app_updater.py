@@ -51,7 +51,7 @@ class DownloadWorker(QThread):
     def run(self):
         """Esegue il download via HTTP o copia via FileSystem."""
         target_path = Path(get_local_setup_path(self.source))
-        
+
         # Caso 1: Percorso di RETE Locale (UNC o Path locale)
         source_path = Path(self.source)
         if source_path.exists() and not self.source.lower().startswith("http"):
@@ -60,7 +60,7 @@ class DownloadWorker(QThread):
                 chunk_size = 1024 * 1024 # 1MB
                 downloaded = 0
                 start_time = time.time()
-                
+
                 with source_path.open("rb") as fsrc, target_path.open("wb") as fdst:
                     while not self._is_cancelled:
                         buf = fsrc.read(chunk_size)
@@ -71,7 +71,7 @@ class DownloadWorker(QThread):
                         elapsed = time.time() - start_time
                         speed = downloaded / elapsed if elapsed > 0 else 0
                         self.progress.emit(downloaded, total_size, speed)
-                
+
                 if not self._is_cancelled:
                     self.finished.emit(str(target_path))
                 return
@@ -90,12 +90,12 @@ class DownloadWorker(QThread):
                 headers = {'Range': f'bytes={downloaded}-'} if downloaded > 0 else {}
                 session = requests.Session()
                 response = session.get(self.source, headers=headers, stream=True, timeout=(10, 30))
-                
+
                 if downloaded > 0 and response.status_code != 206:
                     downloaded = 0
                     with target_path.open("wb") as f:
                         pass
-                
+
                 if response.status_code not in (200, 206):
                     if response.status_code == 416 and total_size > 0 and downloaded >= total_size:
                         self.finished.emit(str(target_path))
@@ -106,7 +106,7 @@ class DownloadWorker(QThread):
                     total_size = int(response.headers.get("content-length", 0))
                 elif 'Content-Range' in response.headers:
                     total_size = int(response.headers['Content-Range'].split('/')[-1])
-                
+
                 mode = "ab" if downloaded > 0 else "wb"
                 with target_path.open(mode) as f:
                     content_iterator = response.iter_content(chunk_size=131072)
@@ -121,10 +121,10 @@ class DownloadWorker(QThread):
                                 elapsed = time.time() - start_time
                                 speed = downloaded / elapsed if elapsed > 0 else 0
                                 self.progress.emit(downloaded, total_size, speed)
-                                retries = 0 
+                                retries = 0
                         except StopIteration:
                             break
-                
+
                 if total_size > 0 and downloaded >= total_size:
                     self.finished.emit(str(target_path))
                     return
@@ -150,7 +150,7 @@ class UpdateProgressDialog(QDialog):
         self.worker.finished.connect(self.on_finished)
         self.worker.error.connect(self.on_error)
         self.worker.retrying.connect(self.on_retrying)
-        
+
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
@@ -266,7 +266,7 @@ def check_for_updates(silent=True, on_confirm=None):
     if net_data and web_data:
         v_net = pkg_version.parse(net_data["version"])
         v_web = pkg_version.parse(web_data["version"])
-        
+
         if v_net >= v_web:
             best_update = net_data
         else:

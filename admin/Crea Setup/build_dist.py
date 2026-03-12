@@ -13,8 +13,8 @@ import sys
 import time
 import zipfile
 from contextlib import suppress
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -25,8 +25,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 # Modernizzazione: sys.path.extend al posto di append multipli
 sys.path.extend([str(ROOT_DIR / "src"), str(Path(__file__).resolve().parent)])
 
-import version  # noqa: E402
 import bump_version  # noqa: E402
+
+import version  # noqa: E402
 
 ENTRY_SCRIPT = "src/app_launcher.py"
 APP_NAME = "Intelleo PDF Splitter"
@@ -63,7 +64,7 @@ def run_command(cmd, cwd=None, shell=False, env=None):
     if env is None:
         env = os.environ.copy()
     process = subprocess.Popen(
-        cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+        cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1, universal_newlines=True, shell=shell, env=env
     )
     while True:
@@ -115,18 +116,18 @@ def deploy_to_network(setup_dir, setup_filename):
     if not NETWORK_DEPLOY_PATH.exists():
         log_and_print(f"ERROR: Network path not reachable: {NETWORK_DEPLOY_PATH}", "ERROR")
         return False
-    
+
     try:
         archive_dir = NETWORK_DEPLOY_PATH / "Archivio"
         archive_dir.mkdir(exist_ok=True)
-        
+
         dst_path = NETWORK_DEPLOY_PATH / setup_filename
-        
+
         # 1. Riorganizzazione: Spostamento vecchio file in Archivio
         if dst_path.exists():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             old_version_name = f"OLD_{timestamp}_{setup_filename}"
-            
+
             old_v_json = NETWORK_DEPLOY_PATH / "version.json"
             if old_v_json.exists():
                 with suppress(Exception):
@@ -137,17 +138,17 @@ def deploy_to_network(setup_dir, setup_filename):
             target_archive = archive_dir / old_version_name
             log_and_print(f"Archiving existing version to: {target_archive.name}")
             shutil.move(str(dst_path), str(target_archive))
-            
+
         # 2. Copia nuovo setup
         log_and_print(f"Copying {setup_filename} to {NETWORK_DEPLOY_PATH}...")
         shutil.copy2(str(setup_dir / setup_filename), str(dst_path))
-        
+
         # 3. Copia version.json aggiornato
         version_json_src = DIST_DIR / "deploy" / "version.json"
         if version_json_src.exists():
             shutil.copy2(str(version_json_src), str(NETWORK_DEPLOY_PATH / "version.json"))
             log_and_print("SUCCESS: version.json updated on network")
-            
+
         log_and_print("SUCCESS: Network deploy completed and reorganized.")
         return True
     except Exception as e:
@@ -170,7 +171,7 @@ def build():
             elif "--major" in sys.argv:
                 part = "major"
             new_v = bump_version.bump_version(part)
-            if new_v: 
+            if new_v:
                 APP_VERSION = new_v
                 import importlib
                 importlib.reload(version)
@@ -197,15 +198,15 @@ def build():
 
         log_and_print("\n--- Step 5: Packaging with PyInstaller ---")
         cmd_pyinstaller = [
-            sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", 
-            f"--name={APP_NAME}", f"--distpath={DIST_DIR}", f"--workpath={DIST_DIR / 'build'}", 
+            sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
+            f"--name={APP_NAME}", f"--distpath={DIST_DIR}", f"--workpath={DIST_DIR / 'build'}",
             f"--paths={OBF_DIR}", "--onedir", "--collect-all=PySide6", "--collect-all=pymupdf", "--windowed"
         ]
         if icon_path:
             cmd_pyinstaller.extend([f"--icon={icon_path}", f"--add-data={icon_path}{';' if os.name == 'nt' else ':'}resources"])
-        
+
         hidden = ["fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet", "numpy", "requests", "PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtSvgWidgets", "pymupdf", "main", "app_launcher", "app_logger", "config_manager", "roi_utility", "version", "core", "gui", "shared", runtime_dir]
-        for h in hidden: 
+        for h in hidden:
             if h:
                 cmd_pyinstaller.append(f"--hidden-import={h}")
 
@@ -278,7 +279,7 @@ def prepare_and_deploy_netlify(deploy_dir, setup_filename):
         headers = {"Authorization": f"Bearer {token}"}
         r_sites = requests.get(sites_url, headers=headers)
         site_id = next((s['site_id'] for s in r_sites.json() if s['name'] == NETLIFY_SITE_NAME), None)
-        
+
         if not site_id:
             log_and_print("Error: Netlify Site ID not found", "ERROR")
             return False
@@ -292,14 +293,13 @@ def prepare_and_deploy_netlify(deploy_dir, setup_filename):
             deploy_url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
             headers["Content-Type"] = "application/zip"
             r_upload = requests.post(deploy_url, headers=headers, data=f, timeout=600)
-            
+
         if r_upload.status_code == 200:
             log_and_print(f"Netlify Upload SUCCESS: {r_upload.json().get('url')}")
             zip_path.unlink()
             return True
-        else:
-            log_and_print(f"Netlify Upload FAILED: {r_upload.text}", "ERROR")
-            return False
+        log_and_print(f"Netlify Upload FAILED: {r_upload.text}", "ERROR")
+        return False
     except Exception as e:
         log_and_print(f"Netlify Error: {e}", "ERROR")
         return False
