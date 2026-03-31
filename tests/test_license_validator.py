@@ -55,7 +55,7 @@ class TestLicenseValidator(unittest.TestCase):
         """Test decrypting license info with dynamic key."""
         mock_hwid.return_value = self.test_hwid
         mock_paths.return_value = self.paths
-        
+
         data = {"Cliente": "Test", "Hardware ID": self.test_hwid}
         encrypted = self.cipher.encrypt(json.dumps(data).encode())
         self.paths["sys_config"].write_bytes(encrypted)
@@ -73,8 +73,8 @@ class TestLicenseValidator(unittest.TestCase):
 
         # 1. Create encrypted config
         data = {
-            "Cliente": "ACME", 
-            "Hardware ID": self.test_hwid, 
+            "Cliente": "ACME",
+            "Hardware ID": self.test_hwid,
             "Scadenza Licenza": "01/01/2099"
         }
         encrypted = self.cipher.encrypt(json.dumps(data).encode())
@@ -90,10 +90,10 @@ class TestLicenseValidator(unittest.TestCase):
         """Test verification of an expired license."""
         mock_hwid.return_value = self.test_hwid
         mock_paths.return_value = self.paths
-        
+
         data = {
-            "Cliente": "Test", 
-            "Hardware ID": self.test_hwid, 
+            "Cliente": "Test",
+            "Hardware ID": self.test_hwid,
             "Scadenza Licenza": "01/01/2020"
         }
         encrypted = self.cipher.encrypt(json.dumps(data).encode())

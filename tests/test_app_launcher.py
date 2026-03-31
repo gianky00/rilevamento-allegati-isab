@@ -29,7 +29,7 @@ class TestAppLauncher(unittest.TestCase):
         mock_instance = mock_qapp.return_value
         mock_qapp.instance.return_value = mock_instance
 
-        with patch("PySide6.QtCore.QTimer.singleShot", lambda ms, cb: cb()), patch("sys.exit") as mock_exit:
+        with patch("PySide6.QtCore.QTimer.singleShot", lambda ms, cb: cb()), patch("sys.exit"):
             app_launcher.run_app()
 
             # Verify calls using the patched module attributes
@@ -51,7 +51,7 @@ class TestAppLauncher(unittest.TestCase):
         with patch("sys.exit"), patch("app_launcher.logger.warning") as mock_warn:
             app_launcher.run_app()
             mock_warn.assert_called()
-            
+
         # mock_msg.assert_called() # Rimosso: il codice reale fa solo warning log
         mock_splash.return_value.hide.assert_not_called() # Non si nasconde se procede
 
@@ -72,7 +72,7 @@ class TestAppLauncher(unittest.TestCase):
 
         with patch("sys.exit"):
             app_launcher.run_app()
-            
+
         mock_msg.assert_called()
         mock_splash.return_value.hide.assert_called()
         mock_clipboard.setText.assert_called_with("MOCK-HWID")

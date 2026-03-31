@@ -2,6 +2,7 @@
 Unit tests for the Notification Manager.
 """
 
+import typing
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,10 +14,12 @@ from core.notification_manager import NotificationManager
 class TestNotificationManager(unittest.TestCase):
     """Test suite for NotificationManager class."""
 
+    app: QApplication
+
     @classmethod
     def setUpClass(cls) -> None:
         """Initialize QApplication for widget tests."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self) -> None:
         """Create notification manager instance with a parent."""
@@ -27,7 +30,7 @@ class TestNotificationManager(unittest.TestCase):
         """Test toast creation and content."""
         toast = self.manager.show_toast("Title", "Message", "INFO")
         self.assertIsNotNone(toast)
-        
+
         labels = toast.findChildren(QLabel)
         texts = [label.text() for label in labels]
         self.assertIn("Title", texts)
@@ -44,7 +47,7 @@ class TestNotificationManager(unittest.TestCase):
         with patch.object(self.manager, "notify") as mock_notify:
             self.manager.on_controller_log("Normal info", "INFO")
             mock_notify.assert_not_called()
-            
+
             self.manager.on_controller_log("Alert!", "WARNING")
             mock_notify.assert_called_once()
 
@@ -54,7 +57,6 @@ class TestNotificationManager(unittest.TestCase):
         self.manager.setup_bell_icon(btn)
         self.manager.notify("Test")
         # Verify no crash
-        pass
 
 
 if __name__ == "__main__":

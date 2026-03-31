@@ -9,7 +9,6 @@ la cattura di errori anche in caso di crash immediato.
 
 import logging
 import os
-import re
 import sys
 import traceback
 from contextlib import suppress

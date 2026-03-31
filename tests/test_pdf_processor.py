@@ -24,7 +24,7 @@ class TestPdfProcessor(unittest.TestCase):
     def test_process_pdf_invalid_tesseract(self, mock_is_file):
         """Test failure when Tesseract path is invalid."""
         mock_is_file.return_value = False
-        success, msg, gen, moved = process_pdf(self.pdf_path, self.odc, self.config)
+        success, msg, _gen, _moved = process_pdf(self.pdf_path, self.odc, self.config)
         self.assertFalse(success)
         self.assertIn("Percorso Tesseract non valido", msg)
 
@@ -62,8 +62,10 @@ class TestPdfProcessor(unittest.TestCase):
 
     def test_process_pdf_cancel(self):
         """Test immediate cancellation."""
-        def cancel_true(): return True
-        success, msg, gen, moved = process_pdf(self.pdf_path, self.odc, self.config, cancel_check=cancel_true)
+        def cancel_true():
+            """Return True to simulate immediate cancellation."""
+            return True
+        success, msg, _gen, _moved = process_pdf(self.pdf_path, self.odc, self.config, cancel_check=cancel_true)
         self.assertFalse(success)
         self.assertEqual(msg, "Annullato")
 

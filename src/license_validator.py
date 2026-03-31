@@ -4,7 +4,6 @@ Tutorial Implementation: HWID via Primary Disk Serial + Normalizzazione Aggressi
 """
 
 import base64
-import hashlib
 import json
 import platform
 import re
@@ -33,10 +32,9 @@ def normalize_hwid(raw_id: str) -> str:
     """
     if not raw_id:
         return "UNKNOWN_HWID"
-    
+
     # Rimuove punti finali, spazi e caratteri non permessi
-    clean_id = re.sub(r"[^a-zA-Z0-9-_]", "", str(raw_id)).strip().upper()
-    return clean_id
+    return re.sub(r"[^a-zA-Z0-9-_]", "", raw_id).strip().upper()
 
 
 def get_hardware_id() -> str:
@@ -52,12 +50,12 @@ def get_hardware_id() -> str:
             output = subprocess.check_output(["powershell", "-NoProfile", "-Command", cmd], stderr=subprocess.DEVNULL).decode().strip()
             if output:
                 raw_id = output.splitlines()[-1].strip()
-    
+
     # Fallback se non siamo su Windows o se la query fallisce
     if not raw_id:
         import uuid
         raw_id = str(uuid.getnode())
-        
+
     return normalize_hwid(raw_id)
 
 
@@ -67,28 +65,27 @@ def derive_license_key(hw_id: str) -> bytes:
     Utilizza KDF PBKDF2 con Salt 2026 e 480.000 iterazioni.
     """
     clean_id = normalize_hwid(hw_id)
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=LICENSE_SALT,
-        iterations=KDF_ITERATIONS,
-        backend=default_backend(),
-    )
     # Importante: encode() dell'id normalizzato
-    key_bytes = kdf.derive(clean_id.encode("utf-8"))
-    return base64.urlsafe_b64encode(key_bytes)
+    return base64.urlsafe_b64encode(
+        PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=LICENSE_SALT,
+            iterations=KDF_ITERATIONS,
+            backend=default_backend(),
+        ).derive(clean_id.encode("utf-8"))
+    )
 
 
 def _get_license_paths():
     """Percorsi ridondanti (AppData + Locale) richiesti dallo standard."""
     import os
-    appdata = os.environ.get("APPDATA") or str(Path.home())
-    sys_dir = Path(appdata) / "Intelleo PDF Splitter" / "Licenza"
-    
+    sys_dir = Path(os.environ.get("APPDATA") or Path.home()) / "Intelleo PDF Splitter" / "Licenza"
+
     # Percorso locale nel progetto
     from core.path_manager import get_app_base_dir
     local_dir = Path(get_app_base_dir()) / "data" / "Licenza"
-    
+
     return {
         "sys_dir": sys_dir,
         "local_dir": local_dir,
@@ -120,14 +117,17 @@ def get_license_info() -> dict | None:
         hw_id = get_hardware_id()
         dynamic_key = derive_license_key(hw_id)
         paths = _get_license_paths()
-        
+
         config_path = paths["sys_config"] if paths["sys_config"].exists() else paths["local_config"]
         if not config_path.exists():
             return None
-        
+
         cipher = Fernet(dynamic_key)
         decrypted_data = cipher.decrypt(config_path.read_bytes())
-        return json.loads(decrypted_data.decode("utf-8"))
+        data = json.loads(decrypted_data.decode("utf-8"))
+        if isinstance(data, dict):
+            return data
+        return None
     except Exception:
         return None
 
@@ -137,15 +137,15 @@ def verify_license() -> tuple[bool, str]:
     payload = get_license_info()
     if not payload:
         return False, "Licenza mancante o non valida per questo PC."
-    
+
     # 1. HWID Match (Security Lock)
     current_hw_id = get_hardware_id()
     license_hw_id = normalize_hwid(payload.get("Hardware ID", ""))
-    
+
     # Se siamo in test, permettiamo il mismatch se mockato
     if not getattr(sys, "_testing", False) and current_hw_id != license_hw_id:
         return False, f"Hardware ID mismatch.\nRegistrato: {license_hw_id}\nCorrente: {current_hw_id}"
-    
+
     # 2. Expiry Check
     expiry_str = payload.get("Scadenza Licenza", "")
     if expiry_str:
@@ -155,7 +155,7 @@ def verify_license() -> tuple[bool, str]:
                 return False, f"Licenza SCADUTA il {expiry_str}"
         except Exception:
             return False, "Data scadenza corrotta."
-        
+
     return True, f"Licenza valida per: {payload.get('Cliente', 'Utente')}"
 
 

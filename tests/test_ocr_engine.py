@@ -21,7 +21,7 @@ class TestOcrEngine(unittest.TestCase):
     def test_initialization(self):
         """Test engine initialization and tesseract path setup."""
         with patch("pytesseract.pytesseract.tesseract_cmd", ""):
-            engine = OcrEngine(tesseract_path="/path/to/tess")
+            OcrEngine(tesseract_path="/path/to/tess")
             import pytesseract
             self.assertEqual(pytesseract.pytesseract.tesseract_cmd, "/path/to/tess")
 

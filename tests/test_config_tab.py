@@ -2,6 +2,7 @@
 Unit tests for gui/tabs/config_tab.py.
 """
 
+import typing
 import unittest
 from unittest.mock import MagicMock
 
@@ -13,10 +14,12 @@ from gui.tabs.config_tab import ConfigTab
 class TestConfigTab(unittest.TestCase):
     """Test suite for ConfigTab UI components."""
 
+    app: QApplication
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Initialize QApplication."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self):
         """Setup tab with a mocked MainApp."""

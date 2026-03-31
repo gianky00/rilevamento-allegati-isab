@@ -3,10 +3,10 @@ Integration tests for the main application window.
 """
 
 import sys
+import typing
 import unittest
 from unittest.mock import MagicMock, patch
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 # NON impostiamo sys._testing = True qui per permettere il caricamento dei tab reali
@@ -17,10 +17,12 @@ import main
 class TestMainApp(unittest.TestCase):
     """Test suite for MainApp class."""
 
+    app: QApplication
+
     @classmethod
     def setUpClass(cls) -> None:
         """Initialize QApplication for widget tests."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self) -> None:
         """Create window and controller mocks."""
@@ -32,14 +34,14 @@ class TestMainApp(unittest.TestCase):
             # Mock config.get per restituire stringhe (evita TypeError in setText)
             self.mock_controller.config = MagicMock()
             self.mock_controller.config.get.return_value = ""
-            
+
             # Creiamo l'istanza. Se sys._testing è False (default), caricherà i tab.
             # Per sicurezza, forziamo False se fosse stato impostato altrove.
             if hasattr(sys, "_testing"):
                 delattr(sys, "_testing")
-                
+
             self.window = main.MainApp()
-            
+
             # Mock degli attributi UI se non creati dai tab (fallback di sicurezza per i test)
             if not hasattr(self.window, "dashboard_start_btn"):
                 self.window.dashboard_start_btn = MagicMock()
@@ -70,14 +72,14 @@ class TestMainApp(unittest.TestCase):
             log_text = self.window.dashboard_tab.console.toPlainText()
         elif hasattr(self.window, "log_area"):
             log_text = self.window.log_area.toPlainText()
-        
+
         self.assertIn("Test message", log_text)
 
     def test_on_processing_state_changed(self) -> None:
         """Test UI updates when processing starts/stops."""
         self.window.on_processing_state_changed(True)
         self.assertFalse(self.window.dashboard_start_btn.isEnabled())
-        
+
         self.window.on_processing_state_changed(False)
         self.assertTrue(self.window.dashboard_start_btn.isEnabled())
 
@@ -85,14 +87,14 @@ class TestMainApp(unittest.TestCase):
         """Test statistics labels update with 4 arguments."""
         # Firma: on_stats_updated(self, s_docs, s_pages, g_docs, g_pages)
         self.window.on_stats_updated(10, 50, 100, 500)
-        
+
         # Se sono widget reali (non mock) usiamo .text(), altrimenti mock assertions
-        for attr, expected in [
+        for attr, expected in (
             ("files_count_sess_label", "10"),
             ("files_count_tot_label", "100"),
             ("pages_count_sess_label", "50"),
             ("pages_count_tot_label", "500")
-        ]:
+        ):
             widget = getattr(self.window, attr)
             if hasattr(widget, "text"):
                 self.assertEqual(widget.text(), expected)

@@ -13,12 +13,10 @@ from typing import Any
 from PySide6.QtCore import QObject, QTimer, Signal
 
 import app_updater
-import config_manager
 import license_validator
-from config_manager import ConfigManager # Import esplicito per i test
-from core.archive_service import ArchiveService # Import esplicito per i test
+from config_manager import ConfigManager  # Import esplicito per i test
 from core.file_service import FileService
-from core.processing_worker import ProcessingWorker, PdfProcessingWorker
+from core.processing_worker import ProcessingWorker
 from core.rule_service import RuleService
 from core.session_manager import SessionManager
 
@@ -28,7 +26,7 @@ logger = logging.getLogger("CONTROLLER")
 class AppController(QObject):
     """
     Controller che separa la logica di business dalla GUI.
-    Emette segnali per aggiornare la View.
+    Emette segnali per aggiornare la View e coordina i servizi core.
     """
 
     # Segnali per la View
@@ -55,7 +53,7 @@ class AppController(QObject):
 
         # Timer per il polling della coda log
         self._log_timer = QTimer()
-        self._log_timer.timeout.connect(self.process_log_queue) # Allineato ai test
+        self._log_timer.timeout.connect(self.process_log_queue)  # Allineato ai test
         self._log_timer.start(50)
 
     def load_settings(self) -> None:
@@ -69,14 +67,14 @@ class AppController(QObject):
             logger.exception(f"Errore caricamento settings: {e}")
 
     def save_settings(self) -> None:
-        """Salva le impostazioni correnti."""
+        """Salva le impostazioni correnti nel file di configurazione."""
         try:
             ConfigManager.save_config(self.config)
         except Exception as e:
             logger.exception(f"Errore salvataggio settings: {e}")
 
     def check_license(self) -> None:
-        """Esegue la validazione della licenza locale e notifica i risultati."""
+        """Esegue la validazione della licenza locale e notifica i risultati alla View."""
         try:
             payload = license_validator.get_license_info()
             hw_id = license_validator.get_hardware_id()
@@ -127,7 +125,7 @@ class AppController(QObject):
             self.log_received.emit("Nessun file PDF trovato nei percorsi indicati", "WARNING", False)
 
     def start_processing(self, odc: str) -> bool:
-        """Avvia il workflow di elaborazione threadata."""
+        """Avvia il workflow di elaborazione threadata previa verifica licenza."""
         if self._is_processing or not self.pdf_files:
             return False
 
@@ -139,6 +137,7 @@ class AppController(QObject):
         self.processing_state_changed.emit(True)
 
         def on_worker_complete(processed_docs: int, processed_pages: int, unknown_files: list[Any]) -> None:
+            """Callback invocata al termine dell'elaborazione per aggiornare statistiche e View."""
             self._is_processing = False
             self._current_worker = None
             self.processing_state_changed.emit(False)
@@ -163,12 +162,13 @@ class AppController(QObject):
         return True
 
     def stop_processing(self) -> None:
+        """Richiede l'interruzione immediata dell'elaborazione in corso."""
         if self._current_worker:
             self.log_received.emit("🛑 Richiesta interruzione...", "WARNING", False)
             self._current_worker.stop()
 
     def process_log_queue(self) -> None:
-        """Alias pubblico per i test (gestisce il drenaggio log)."""
+        """Drena la coda dei messaggi provenienti dal worker e aggiorna la View."""
         try:
             while not self.log_queue.empty():
                 item = self.log_queue.get_nowait()
@@ -185,16 +185,20 @@ class AppController(QObject):
             pass
 
     def check_for_restore(self) -> None:
+        """Verifica se esiste una sessione salvata e notifica la View."""
         self.session_status_changed.emit(SessionManager.has_session())
 
-    def restore_session(self) -> tuple | None:
+    def restore_session(self) -> tuple[list[dict[str, Any]], str] | None:
+        """Recupera i dati di una sessione precedentemente interrotta."""
         return SessionManager.load_session() if SessionManager.has_session() else None
 
     def clear_session(self) -> None:
+        """Rimuove definitivamente la sessione salvata."""
         SessionManager.clear_session()
         self.session_status_changed.emit(False)
 
     def check_roi_signal(self) -> bool:
+        """Controlla se l'utility ROI ha inviato un segnale di aggiornamento regole."""
         from shared.constants import SIGNAL_FILE
         signal_path = Path(SIGNAL_FILE)
         if signal_path.exists():
@@ -205,14 +209,17 @@ class AppController(QObject):
         return False
 
     def check_updates(self, silent: bool = True) -> None:
+        """Controlla la presenza di aggiornamenti dell'applicazione."""
         app_updater.check_for_updates(silent=silent, on_confirm=self.save_settings)
 
     def emit_stats(self) -> None:
+        """Emette i segnali con le statistiche aggiornate (globali e sessione)."""
         g_docs = self.config.get("global_docs", 0)
         g_pages = self.config.get("global_pages", 0)
         self.stats_updated.emit(self.session_docs, self.session_pages, g_docs, g_pages)
 
     def update_last_access(self) -> None:
+        """Registra la data e l'ora correnti come ultimo accesso nella configurazione."""
         try:
             self.config["last_access"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             ConfigManager.save_config(self.config)

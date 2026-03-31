@@ -1,3 +1,6 @@
+"""
+Unit tests for app_logger.py.
+"""
 import contextlib
 import logging
 import os
@@ -13,6 +16,7 @@ import app_logger
 
 
 class TestAppLogger(unittest.TestCase):
+    """Test suite per il modulo app_logger."""
     def setUp(self):
         """Setup prima di ogni test."""
         # Salva lo stato originale del logger
@@ -181,6 +185,7 @@ class TestAppLogger(unittest.TestCase):
 
 
 class TestAppLoggerExceptionHandler(unittest.TestCase):
+    """Test suite specifica per l'exception handler di app_logger."""
     def setUp(self):
         """Setup prima di ogni test."""
         self.original_handlers = logging.root.handlers.copy()

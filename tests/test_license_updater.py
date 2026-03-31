@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
 
-from license_updater import check_grace_period, get_github_token, run_update
 import license_validator
+from license_updater import check_grace_period, get_github_token, run_update
 
 
 class TestLicenseUpdater(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestLicenseUpdater(unittest.TestCase):
         self.test_dir = Path("temp_updater_test")
         self.test_dir.mkdir(exist_ok=True)
         self.token_path = self.test_dir / "validity.token"
-        
+
         self.test_hwid = "TEST-HWID-UPDATE"
         self.dynamic_key = license_validator.derive_license_key(self.test_hwid)
         self.cipher = Fernet(self.dynamic_key)
@@ -71,7 +71,7 @@ class TestLicenseUpdater(unittest.TestCase):
     def test_run_update_success(self, mock_paths, mock_hwid, mock_get):
         """Test full successful update from GitHub."""
         mock_hwid.return_value = self.test_hwid
-        
+
         # Mappa dei percorsi per il test
         paths = {
             "sys_dir": self.test_dir,
@@ -85,14 +85,15 @@ class TestLicenseUpdater(unittest.TestCase):
         # Mock response per il manifest (200 OK)
         mock_resp_manifest = MagicMock()
         mock_resp_manifest.status_code = 200
-        
+
         # Mock response per il config.dat
         mock_resp_config = MagicMock()
         mock_resp_config.status_code = 200
         mock_resp_config.content = b"encrypted_payload"
-        
+
         # Setup side_effect per gestire chiamate multiple a requests.get
         def get_side_effect(url, headers=None, timeout=None):
+            """Handle multiple calls to requests.get with mocked responses."""
             if "manifest.json" in url:
                 return mock_resp_manifest
             if "config.dat" in url:

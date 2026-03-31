@@ -26,6 +26,4 @@ def sanitize_html(html_string: str) -> str:
     s = re.sub(r"\son\w+\s*=\s*'.*?'", "", s, flags=re.IGNORECASE)
 
     # 4. Rimuove tag <script> isolati (se presenti senza chiusura corretta)
-    s = re.sub(r"<script.*?>", "", s, flags=re.IGNORECASE)
-
-    return s
+    return re.sub(r"<script.*?>", "", s, flags=re.IGNORECASE)

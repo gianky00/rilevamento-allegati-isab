@@ -71,20 +71,21 @@ class TestAnalysisService(unittest.TestCase):
 
     def test_analyze_pdf_parallel(self):
         """Test parallel analysis path by mocking only the task method."""
-        with patch("os.cpu_count", return_value=4):
+        with patch("os.cpu_count", return_value=4), patch.object(self.service, "_analyze_page_task") as mock_task:
             # Ensure parallel path is taken by having total_pages > 1 and cpu_count > 1
-            with patch.object(self.service, "_analyze_page_task") as mock_task:
-                mock_task.side_effect = lambda path, p: (p, "Category1" if p==0 else "sconosciuto")
+            mock_task.side_effect = lambda path, p: (p, "Category1" if p==0 else "sconosciuto")
 
-                results = self.service.analyze_pdf(str(self.test_pdf))
+            results = self.service.analyze_pdf(str(self.test_pdf))
 
-                self.assertEqual(mock_task.call_count, 2)
-                self.assertEqual(results["Category1"], [0])
-                self.assertEqual(results["sconosciuto"], [1])
+            self.assertEqual(mock_task.call_count, 2)
+            self.assertEqual(results["Category1"], [0])
+            self.assertEqual(results["sconosciuto"], [1])
 
     def test_analyze_pdf_cancel(self):
         """Test cancellation during analysis."""
-        def cancel_true(): return True
+        def cancel_true():
+            """Return True to simulate cancellation."""
+            return True
         with self.assertRaises(InterruptedError):
             self.service.analyze_pdf(str(self.test_pdf), cancel_check=cancel_true)
 

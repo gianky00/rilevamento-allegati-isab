@@ -1,3 +1,7 @@
+"""
+Configurazione dei test per Pytest.
+Inizializza l'ambiente Qt per i test della GUI.
+"""
 import os
 import sys
 

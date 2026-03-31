@@ -61,3 +61,13 @@ class PdfManager:
         scale = (self.dpi * zoom) / 72
         mat = fitz.Matrix(scale, scale)
         return self.doc[page_index].get_pixmap(matrix=mat)
+
+    def get_page_pixmap(self, path: str, page_index: int, zoom: float = 1.0) -> fitz.Pixmap | None:
+        """Apre un file, estrae la pixmap di una pagina e chiude (o riusa se aperto)."""
+        if self.current_path != path:
+            self.close()
+            success, _ = self.open(path)
+            if not success:
+                return None
+
+        return self.get_pixmap(page_index, zoom)

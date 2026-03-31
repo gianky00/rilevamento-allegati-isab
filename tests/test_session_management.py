@@ -1,3 +1,6 @@
+"""
+Unit tests for session management in MainApp.
+"""
 import json
 import os
 import sys
@@ -9,6 +12,7 @@ import main
 
 
 class TestSessionManagement(unittest.TestCase):
+    """Test suite per la gestione della sessione nell'applicazione principale."""
     def setUp(self):
         """Prepara un ambiente di test pulito."""
         self.dummy_tasks = [
@@ -30,7 +34,7 @@ class TestSessionManagement(unittest.TestCase):
         app = self._get_mock_app()
         dummy_data = (self.dummy_tasks, "ODC123")
         app.controller.restore_session.return_value = dummy_data
-        
+
         with patch.object(app, "on_unknown_files_found") as mock_on_unknown:
             app._restore_session()
             app.controller.restore_session.assert_called_once()

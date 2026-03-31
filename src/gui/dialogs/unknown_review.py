@@ -6,11 +6,10 @@ Gestisce la revisione manuale dei file che non hanno matchato nessuna regola.
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Import richiesto dai test per il mocking (legacy compatibility)
-import pymupdf as fitz
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
 )
 
 from core.session_manager import SessionManager
-from gui.theme import COLORS
 
 logger = logging.getLogger("GUI")
 
@@ -31,18 +29,20 @@ logger = logging.getLogger("GUI")
 class UnknownFilesReviewDialog(QDialog):
     """
     Finestra per la revisione dei file 'sconosciuti'.
+    Permette all'utente di visualizzare i file non classificati e decidere se archiviarli o scartarli.
     """
 
     finished_review = Signal()
 
     def __init__(
         self,
-        parent: Optional[QWidget],
-        tasks: List[Dict[str, Any]],
+        parent: QWidget | None,
+        tasks: list[dict[str, Any]],
         odc: str = "N/A",
-        on_finish: Optional[Any] = None,
-        on_close_callback: Optional[Any] = None
+        on_finish: Any | None = None,
+        on_close_callback: Any | None = None
     ) -> None:
+        """Inizializza il dialogo con la lista dei task (file) da revisionare."""
         super().__init__(parent)
         self.review_tasks = tasks
         self.odc = odc
@@ -54,12 +54,12 @@ class UnknownFilesReviewDialog(QDialog):
         self.setWindowTitle(f"Revisione Allegati Sconosciuti - ODC: {odc}")
         self.resize(1200, 800)
         self.setup_ui()
-        
+
         if self.review_tasks:
             self.load_task(0)
 
     def setup_ui(self) -> None:
-        """Configura l'interfaccia grafica."""
+        """Configura l'interfaccia grafica del dialogo di revisione."""
         self.main_layout = QHBoxLayout(self)
 
         self.left_panel = QWidget()
@@ -88,17 +88,18 @@ class UnknownFilesReviewDialog(QDialog):
 
         self.right_panel = QWidget()
         self.right_layout = QVBoxLayout(self.right_panel)
-        
+
         if getattr(sys, "_testing", False):
             self.preview = QWidget()
         else:
             from gui.widgets.preview_view import PreviewGraphicsView
             self.preview = PreviewGraphicsView()
-            
+
         self.right_layout.addWidget(self.preview, 1)
         self.main_layout.addWidget(self.right_panel)
 
     def load_task(self, index: int) -> None:
+        """Carica un task di revisione specifico visualizzandone l'anteprima PDF."""
         if not (0 <= index < len(self.review_tasks)):
             return
         self.task_index = index
@@ -108,21 +109,27 @@ class UnknownFilesReviewDialog(QDialog):
         self.list_widget.setCurrentRow(index)
 
     def on_keep(self) -> None:
+        """Azione per confermare l'archiviazione del file corrente."""
         self.next_or_close()
 
     def on_ignore(self) -> None:
+        """Azione per ignorare il file corrente."""
         self.next_or_close()
 
     def next_or_close(self) -> None:
+        """Passa al task successivo o chiude il dialogo se terminati."""
         if self.task_index + 1 < len(self.review_tasks):
             self.load_task(self.task_index + 1)
         else:
-            if self._on_finish_callback: self._on_finish_callback()
+            if self._on_finish_callback:
+                self._on_finish_callback()
             self.finished_review.emit()
             self.accept()
 
     def closeEvent(self, event: Any) -> None:
+        """Gestisce l'evento di chiusura salvando la sessione corrente."""
         self._is_closing = True
         SessionManager.save_session(self.review_tasks, self.odc)
-        if self._on_close_callback: self._on_close_callback()
+        if self._on_close_callback:
+            self._on_close_callback()
         super().closeEvent(event)

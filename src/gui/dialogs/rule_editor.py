@@ -30,6 +30,7 @@ class RuleEditorDialog(QDialog):
         self.rule_service = rule_service
         self.rule = rule
         self.chosen_color = rule.get("color", "#0D6EFD") if rule else "#0D6EFD"
+        self._final_data: dict[str, Any] | None = None
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -142,7 +143,7 @@ class RuleEditorDialog(QDialog):
             )
 
     def _on_save(self) -> None:
-        """Valida i dati inseriti e salva la regola nel RuleService."""
+        """Valida i dati inseriti e prepara il salvataggio."""
         category = self.cat_entry.text().strip()
         suffix = self.suffix_entry.text().strip() or category
         keywords = [k.strip() for k in self.kw_entry.text().split(",") if k.strip()]
@@ -151,21 +152,15 @@ class RuleEditorDialog(QDialog):
             QMessageBox.critical(self, "Errore", "Nome categoria e almeno una keyword sono obbligatori.")
             return
 
-        new_data = {
+        self._final_data = {
             "category_name": category,
             "filename_suffix": suffix,
             "keywords": keywords,
             "color": self.chosen_color,
             "rois": self.rule.get("rois", []) if self.rule else [],
         }
+        self.accept()
 
-        success = False
-        if self.rule:
-            success = self.rule_service.update_rule(self.rule["category_name"], new_data)
-        else:
-            success = self.rule_service.add_rule(new_data)
-
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Errore", "Impossibile salvare la regola (nome duplicato?).")
+    def get_rule_data(self) -> dict[str, Any]:
+        """Restituisce i dati della regola configurata."""
+        return self._final_data or {}

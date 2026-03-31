@@ -19,9 +19,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 # Se esiste una cartella 'src' (sviluppo) o se siamo nella root offuscata
-if (ROOT_DIR / "core").exists():
-    if str(ROOT_DIR) not in sys.path:
-        sys.path.insert(0, str(ROOT_DIR))
+if (ROOT_DIR / "core").exists() and str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # 2. Gestione crash precoci prima dell'inizializzazione del logger
 try:
@@ -30,17 +29,17 @@ try:
     # Importazioni locali (ora sicure grazie al fix sul PATH)
     import app_logger
     import version
-    
+
 except Exception as e:
     import tempfile
     import traceback
-    
+
     # Usa la directory temporanea per evitare PermissionError su Windows (Pillar 1)
     crash_file = Path(tempfile.gettempdir()) / "intelleo_crash_startup.txt"
     with crash_file.open("w", encoding="utf-8") as f:
         f.write(f"CRITICAL ERROR DURING EARLY IMPORT: {e}\n")
         f.write(traceback.format_exc())
-    
+
     print(f"ERRORE CRITICO ALL'AVVIO. Dettagli scritti in: {crash_file}")
     sys.exit(1)
 

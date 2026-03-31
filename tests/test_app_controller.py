@@ -2,6 +2,7 @@
 Unit tests for the application controller.
 """
 
+import typing
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,10 +14,12 @@ from core.app_controller import AppController
 class TestAppController(unittest.TestCase):
     """Test suite for AppController class."""
 
+    app: QCoreApplication
+
     @classmethod
     def setUpClass(cls) -> None:
         """Initialize QCoreApplication for signals."""
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = typing.cast("QCoreApplication", QCoreApplication.instance() or QCoreApplication([]))
 
     def setUp(self) -> None:
         """Create controller instance with mocked dependencies."""

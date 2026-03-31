@@ -2,9 +2,10 @@
 Unit tests for the background processing worker.
 """
 
+import typing
 import unittest
 from queue import Queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from PySide6.QtCore import QCoreApplication
 
@@ -14,10 +15,12 @@ from core.processing_worker import ProcessingWorker
 class TestProcessingWorker(unittest.TestCase):
     """Test suite for ProcessingWorker class."""
 
+    app: QCoreApplication
+
     @classmethod
     def setUpClass(cls) -> None:
         """Initialize QApplication for signals."""
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = typing.cast("QCoreApplication", QCoreApplication.instance() or QCoreApplication([]))
 
     def setUp(self) -> None:
         """Setup worker and common mocks."""
@@ -29,9 +32,9 @@ class TestProcessingWorker(unittest.TestCase):
     def test_run_success(self, mock_process) -> None:
         """Test successful execution loop."""
         mock_process.return_value = (True, "OK", [], [])
-        
+
         self.worker.run()
-        
+
         # Verify signals and logs
         logs = []
         while not self.log_queue.empty():
@@ -45,9 +48,9 @@ class TestProcessingWorker(unittest.TestCase):
         """Test worker stop mechanism."""
         mock_process.return_value = (True, "OK", [], [])
         self.worker.stop()
-        
+
         self.worker.run()
-        
+
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())
@@ -57,9 +60,9 @@ class TestProcessingWorker(unittest.TestCase):
     def test_process_failure_handling(self, mock_process) -> None:
         """Test how the worker handles a single file failure."""
         mock_process.return_value = (False, "Error msg", [], [])
-        
+
         self.worker.run()
-        
+
         logs = []
         while not self.log_queue.empty():
             logs.append(self.log_queue.get())

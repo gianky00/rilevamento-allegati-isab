@@ -1,6 +1,6 @@
 """
 Intelleo PDF Splitter - App Updater (PySide6)
-Gestisce il controllo e la notifica di aggiornamenti dell'applicazione.
+Gestisce l'controllo e la notifica di aggiornamenti dell'applicazione.
 Confronta le versioni tra Rete Locale e Web, scegliendo la più recente o privilegiando la LAN.
 """
 
@@ -12,12 +12,13 @@ import tempfile
 import time
 from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 import requests
 from packaging import version as pkg_version
 from PySide6.QtCore import Qt, QThread, Signal, Slot
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QProgressBar, QVBoxLayout, QWidget
 
 import version
 
@@ -40,15 +41,17 @@ class DownloadWorker(QThread):
     error = Signal(str)
     retrying = Signal(int)              # numero del tentativo di riconnessione
 
-    def __init__(self, source_path):
+    def __init__(self, source_path: str):
+        """Inizializza il worker con la sorgente (URL o Path)."""
         super().__init__()
         self.source = source_path
         self._is_cancelled = False
 
-    def stop(self):
+    def stop(self) -> None:
+        """Richiede l'interruzione del download."""
         self._is_cancelled = True
 
-    def run(self):
+    def run(self) -> None:
         """Esegue il download via HTTP o copia via FileSystem."""
         target_path = Path(get_local_setup_path(self.source))
 
@@ -57,7 +60,7 @@ class DownloadWorker(QThread):
         if source_path.exists() and not self.source.lower().startswith("http"):
             try:
                 total_size = source_path.stat().st_size
-                chunk_size = 1024 * 1024 # 1MB
+                chunk_size = 1024 * 1024  # 1MB
                 downloaded = 0
                 start_time = time.time()
 
@@ -139,7 +142,10 @@ class DownloadWorker(QThread):
 
 
 class UpdateProgressDialog(QDialog):
-    def __init__(self, source, parent=None):
+    """Dialogo che mostra l'avanzamento dello scaricamento dell'aggiornamento."""
+
+    def __init__(self, source: str, parent: QWidget | None = None):
+        """Inizializza il dialogo e il worker di download."""
         super().__init__(parent)
         self.setWindowTitle("Aggiornamento Intelligente")
         self.setFixedSize(450, 200)
@@ -151,7 +157,8 @@ class UpdateProgressDialog(QDialog):
         self.worker.error.connect(self.on_error)
         self.worker.retrying.connect(self.on_retrying)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
+        """Configura gli elementi grafici del dialogo."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
         self.lbl_status = QLabel("Avvio scaricamento...")
@@ -169,12 +176,14 @@ class UpdateProgressDialog(QDialog):
         self.lbl_retry.setStyleSheet("color: #DC3545;")
         layout.addWidget(self.lbl_retry)
 
-    def start(self):
+    def start(self) -> None:
+        """Mostra il dialogo e avvia il thread di download."""
         self.show()
         self.worker.start()
 
     @Slot(int, int, float)
-    def update_progress(self, downloaded, total, speed):
+    def update_progress(self, downloaded: int, total: int, speed: float) -> None:
+        """Aggiorna la barra di progresso e le etichette informative."""
         self.lbl_retry.setText("")
         if total > 0:
             self.pb.setMaximum(total)
@@ -189,23 +198,29 @@ class UpdateProgressDialog(QDialog):
             self.pb.setMaximum(0)
 
     @Slot(int)
-    def on_retrying(self, count):
+    def on_retrying(self, count: int) -> None:
+        """Gestisce la visualizzazione dei tentativi di riconnessione."""
         self.lbl_retry.setText(f"⚠️ Tentativo di ripresa #{count}...")
 
     @Slot(str)
-    def on_finished(self, path):
+    def on_finished(self, path: str) -> None:
+        """Chiude il dialogo e chiede conferma per l'installazione."""
         self.close()
         show_install_prompt(path, self.parent())
 
     @Slot(str)
-    def on_error(self, err):
+    def on_error(self, err: str) -> None:
+        """Chiude il dialogo e mostra l'errore avvenuto durante il download."""
         self.close()
-        QMessageBox.critical(self.parent(), "Errore", f"Aggiornamento fallito: {err}")
+        parent = self.parent()
+        parent_widget = parent if isinstance(parent, QWidget) else None
+        QMessageBox.critical(parent_widget, "Errore", f"Aggiornamento fallito: {err}")
 
 
-def show_install_prompt(path, parent=None):
+def show_install_prompt(path: str, parent: Any = None) -> None:
+    """Chiede all'utente se installare subito l'aggiornamento o alla chiusura."""
     global _pending_installer_path
-    msg = QMessageBox(parent)
+    msg = QMessageBox(parent if isinstance(parent, QWidget) else None)
     msg.setWindowTitle("🔄 Aggiornamento Pronto")
     msg.setText("L'aggiornamento è stato scaricato correttamente.\n\nCosa desideri fare?")
     msg.setIcon(QMessageBox.Icon.Question)
@@ -217,46 +232,49 @@ def show_install_prompt(path, parent=None):
         _run_installer_and_exit(path)
     elif msg.clickedButton() == btn_later:
         _pending_installer_path = path
-        QMessageBox.information(parent, "Info", "L'aggiornamento verrà eseguito alla chiusura dell'applicazione.")
+        QMessageBox.information(parent if isinstance(parent, QWidget) else None, "Info", "L'aggiornamento verrà eseguito alla chiusura dell'applicazione.")
 
 
-def _run_installer_and_exit(path):
+def _run_installer_and_exit(path: str) -> None:
+    """Avvia l'installer in modalità silenziosa e chiude l'app corrente."""
     if Path(path).exists():
         subprocess.Popen([path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
         sys.exit(0)
 
 
-def run_pending_installer():
+def run_pending_installer() -> None:
     """Esegue l'installer memorizzato alla chiusura dell'app."""
     global _pending_installer_path
     if _pending_installer_path and Path(_pending_installer_path).exists():
         subprocess.Popen([_pending_installer_path, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/FORCESTART"])
 
 
-def get_metadata_from_network():
+def get_metadata_from_network() -> dict[str, Any] | None:
     """Recupera metadati dalla rete locale."""
     net_json = Path(version.NETWORK_UPDATE_PATH) / "version.json"
     if net_json.exists():
         with suppress(Exception):
             data = json.loads(net_json.read_text(encoding="utf-8"))
-            data["url"] = str(Path(version.NETWORK_UPDATE_PATH) / data["url"])
-            data["source"] = "Rete Locale"
-            return data
+            if isinstance(data, dict):
+                data["url"] = str(Path(version.NETWORK_UPDATE_PATH) / data["url"])
+                data["source"] = "Rete Locale"
+                return data
     return None
 
 
-def get_metadata_from_web():
+def get_metadata_from_web() -> dict[str, Any] | None:
     """Recupera metadati dal web (Netlify)."""
     with suppress(Exception):
         resp = requests.get(version.UPDATE_URL, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            data["source"] = "Web (Netlify)"
-            return data
+            if isinstance(data, dict):
+                data["source"] = "Web (Netlify)"
+                return data
     return None
 
 
-def check_for_updates(silent=True, on_confirm=None):
+def check_for_updates(silent: bool = True, on_confirm: Any = None) -> None:
     """Controlla aggiornamenti confrontando Rete e Web, privilegiando la più recente o la LAN."""
     net_data = get_metadata_from_network()
     web_data = get_metadata_from_web()
@@ -291,14 +309,16 @@ def check_for_updates(silent=True, on_confirm=None):
         if reply == QMessageBox.StandardButton.Yes:
             if on_confirm:
                 on_confirm()
-            perform_auto_update(download_source)
+            if download_source:
+                perform_auto_update(str(download_source))
     elif not silent:
         QMessageBox.information(None, "✅ OK", f"L'app è aggiornata (v{version.__version__})")
 
 
-def perform_auto_update(source):
+def perform_auto_update(source: str) -> None:
+    """Inizia la procedura di aggiornamento automatico."""
     parent = next((w for w in QApplication.topLevelWidgets() if w.isWindow() and not w.parent()), None)
-    dialog = UpdateProgressDialog(source, parent)
+    dialog = UpdateProgressDialog(source, parent if isinstance(parent, QWidget) else None)
     dialog.start()
 
 

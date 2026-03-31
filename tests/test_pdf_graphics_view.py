@@ -2,6 +2,7 @@
 Unit tests for gui/widgets/pdf_graphics_view.py.
 """
 
+import typing
 import unittest
 from unittest.mock import MagicMock
 
@@ -15,10 +16,12 @@ from gui.widgets.pdf_graphics_view import ROIGraphicsView
 class TestPdfGraphicsView(unittest.TestCase):
     """Test suite for ROIGraphicsView interaction logic."""
 
+    app: QApplication
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Initialize QApplication."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self):
         """Setup view with a mocked app."""

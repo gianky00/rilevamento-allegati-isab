@@ -2,6 +2,7 @@
 Unit tests for gui/tabs/dashboard_tab.py.
 """
 
+import typing
 import unittest
 from unittest.mock import MagicMock
 
@@ -13,10 +14,12 @@ from gui.tabs.dashboard_tab import DashboardTab
 class TestDashboardTab(unittest.TestCase):
     """Test suite for DashboardTab UI components."""
 
+    app: QApplication
+
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Initialize QApplication."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self):
         """Setup tab with a mocked MainApp."""

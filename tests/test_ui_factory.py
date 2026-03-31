@@ -55,23 +55,24 @@ class TestUIFactory(unittest.TestCase):
 
     def test_create_combined_stat_card(self):
         """Test combined stat card creation and sub-labels."""
-        card, ds, dt, ps, pt = UIFactory.create_combined_stat_card("Group")
+        card, ds, _dt, _ps, pt = UIFactory.create_combined_stat_card("Group")
         self.assertEqual(ds.text(), "0")
         self.assertEqual(pt.text(), "0")
         card.deleteLater()
 
     def test_create_license_card(self):
         """Test license card creation."""
-        card, status, grid = UIFactory.create_license_card("License")
+        card, status, _grid = UIFactory.create_license_card("License")
         self.assertEqual(status.text(), "VERIFICA...")
-        self.assertIsNotNone(grid)
+        self.assertIsNotNone(_grid)
         card.deleteLater()
 
-    @patch("gui.ui_factory.get_asset_path", return_value="mock_icon.svg")
+    @patch("gui.ui_factory.get_asset_path", return_value="mock.svg")
     def test_create_compact_info_row(self, mock_path):
         """Test info row creation using real widgets."""
-        row, label = UIFactory.create_compact_info_row("Label", "icon.svg")
+        row, _label = UIFactory.create_compact_info_row("Label", "icon.svg")
         # Find the label that contains our text
+
         found_label = None
         for lbl in row.findChildren(QLabel):
             if "Label:" in lbl.text():

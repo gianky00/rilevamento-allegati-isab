@@ -3,12 +3,8 @@ Intelleo PDF Splitter - License Updater (Standard SyncroJob 2026)
 Tutorial Implementation: GitHub Cloud Validation + Grace Period.
 """
 
-import sys
-import json
-import logging
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import requests
 from cryptography.fernet import Fernet
@@ -21,7 +17,6 @@ GRACE_PERIOD_DAYS = 3
 
 class LicenseRevokedError(Exception):
     """Eccezione sollevata quando la licenza è assente sul server (404)."""
-    pass
 
 
 def get_github_token():
@@ -43,7 +38,7 @@ def update_grace_timestamp():
         dynamic_key = license_validator.derive_license_key(hw_id)
         token_path = _get_token_path()
         token_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         current_time = datetime.now(timezone.utc).isoformat()
         cipher = Fernet(dynamic_key)
         encrypted_time = cipher.encrypt(current_time.encode("utf-8"))
@@ -59,7 +54,7 @@ def check_grace_period():
     try:
         hw_id = license_validator.get_hardware_id()
         dynamic_key = license_validator.derive_license_key(hw_id)
-        
+
         cipher = Fernet(dynamic_key)
         decrypted_data = cipher.decrypt(token_path.read_bytes()).decode("utf-8")
         last_online = datetime.fromisoformat(decrypted_data)
@@ -76,7 +71,7 @@ def check_grace_period():
     except Exception as e:
         if "SCADUTO" in str(e) or "Incoerenza" in str(e):
             raise
-        raise Exception(f"Errore verifica periodo di grazia: {e}")
+        raise Exception(f"Errore verifica periodo di grazia: {e}") from e
 
 
 def run_update():
@@ -99,17 +94,17 @@ def run_update():
     try:
         # 1. Verifica esistenza cartella/manifest su GitHub
         resp = requests.get(f"{base_url}/manifest.json", headers=headers, timeout=10)
-        
+
         if resp.status_code == 404:
             # REVOCA ESPLICITA: Standard SyncroJob impone la distruzione locale
             license_validator.destroy_license()
             raise LicenseRevokedError("LICENZA REVOCATA DAL SERVER.")
-        
+
         if resp.status_code != 200:
             # Errore server o rete -> Fallback su Grace Period
             check_grace_period()
             return
-            
+
         # 2. Download payload cifrato
         r_config = requests.get(f"{base_url}/config.dat", headers=headers, timeout=10)
         if r_config.status_code == 200:
@@ -117,7 +112,7 @@ def run_update():
             # Sincronizza immediatamente con la cartella locale del progetto
             license_validator.sync_license_files()
             update_grace_timestamp()
-            
+
     except Exception as e:
         if isinstance(e, LicenseRevokedError):
             raise

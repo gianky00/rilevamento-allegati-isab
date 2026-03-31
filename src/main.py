@@ -6,16 +6,14 @@ Gestisce l'interfaccia grafica e coordina l'interazione tra utente e controller.
 import logging
 import queue
 import sys
-from contextlib import suppress
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QCloseEvent, QIcon
+from PySide6.QtCore import QTimer, Slot
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QGroupBox,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -31,7 +29,6 @@ from PySide6.QtWidgets import (
 )
 
 import app_updater
-import roi_utility
 import version
 from core.app_controller import AppController
 from core.notification_manager import NotificationManager
@@ -49,7 +46,26 @@ logger = logging.getLogger("MAIN")
 class MainApp(QMainWindow):
     """Finestra principale dell'applicazione Intelleo PDF Splitter."""
 
+    # UI Elements assigned by tabs (for Mypy stability)
+    dashboard_tab: DashboardTab
+    config_tab: ConfigTab
+    help_tab: HelpTab
+    log_area: QTextEdit
+    recent_log: QTextEdit
+    dashboard_start_btn: QPushButton
+    files_count_sess_label: QLabel
+    files_count_tot_label: QLabel
+    pages_count_sess_label: QLabel
+    pages_count_tot_label: QLabel
+    proc_group: QGroupBox
+
     def __init__(self, auto_file_path: str | None = None) -> None:
+        """
+        Inizializza l'applicazione, carica i componenti e configura l'interfaccia.
+
+        Args:
+            auto_file_path (str | None): Percorso di un file PDF da caricare automaticamente all'avvio.
+        """
         super().__init__()
         self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
         self.setMinimumSize(1100, 800)
@@ -81,7 +97,7 @@ class MainApp(QMainWindow):
         self.rules_tree = QTreeWidget()
         self.keywords_text = QTextEdit()
         self.roi_details_label = QLabel("")
-        
+
         # Footer Licenza
         self.license_status_label = QLabel("VERIFICA...")
         self.license_fields: dict[str, QLabel] = {}
@@ -93,7 +109,7 @@ class MainApp(QMainWindow):
         self.notebook = QTabWidget()
         self.notebook.currentChanged.connect(self._on_tab_changed)
         main_layout.addWidget(self.notebook)
-        
+
         # Alias per i test
         self.tabs = self.notebook
 
@@ -105,12 +121,12 @@ class MainApp(QMainWindow):
             self.notebook.addTab(self.dashboard_tab, "Dashboard")
             self.notebook.addTab(self.config_tab, "Configurazione")
             self.notebook.addTab(self.help_tab, "Guida")
-        
+
         # Startup logic
         self.controller.load_settings()
         self.controller.check_license()
         self._refresh_ui_from_config()
-        
+
         if auto_file_path:
             self.controller.set_pdf_files([auto_file_path])
 
@@ -128,7 +144,9 @@ class MainApp(QMainWindow):
 
     @Slot(int)
     def _on_tab_changed(self, index: int) -> None:
-        if not hasattr(self, "_prev_tab_index"): self._prev_tab_index = 0
+        """Gestisce l'animazione di transizione tra i tab."""
+        if not hasattr(self, "_prev_tab_index"):
+            self._prev_tab_index = 0
         new_widget = self.notebook.widget(index)
         old_widget = self.notebook.widget(self._prev_tab_index)
         if new_widget and old_widget and index != self._prev_tab_index:
@@ -136,14 +154,17 @@ class MainApp(QMainWindow):
         self._prev_tab_index = index
 
     def _on_drop(self, files: list[str]) -> None:
+        """Callback per il rilascio di file nella drop zone."""
         self.controller.set_pdf_files(files)
 
     def _select_pdf(self) -> None:
+        """Apre il dialogo di selezione file standard."""
         files, _ = QFileDialog.getOpenFileNames(self, "Seleziona PDF", "", "PDF Files (*.pdf)")
         if files:
             self.controller.set_pdf_files(files)
 
     def _quick_select_pdf(self) -> None:
+        """Avvia l'elaborazione rapida verificando prima l'ODC."""
         odc = self.odc_entry.text().strip()
         if not odc:
             QMessageBox.warning(self, "Attenzione", "Inserisci un codice ODC prima di iniziare.")
@@ -155,6 +176,7 @@ class MainApp(QMainWindow):
             self.controller.start_processing(odc)
 
     def _launch_roi_utility(self) -> None:
+        """Avvia lo strumento esterno per il disegno delle ROI."""
         try:
             from roi_utility import ROIDrawingApp
             self._roi_window = ROIDrawingApp()
@@ -163,6 +185,7 @@ class MainApp(QMainWindow):
             logger.exception(f"Errore lancio ROI Utility: {e}")
 
     def _restore_session(self) -> None:
+        """Tenta il ripristino di una sessione di lavoro interrotta."""
         session_data = self.controller.restore_session()
         if session_data:
             tasks, odc = session_data
@@ -170,12 +193,16 @@ class MainApp(QMainWindow):
             self.on_unknown_files_found(tasks, odc)
 
     def _stop_processing(self) -> None:
+        """Invia il segnale di stop al worker di elaborazione."""
         self.controller.stop_processing()
 
     # —————— CONFIGURAZIONE REGOLE ——————
 
     def _add_rule(self) -> None:
-        dialog = RuleEditorDialog(self)
+        """Apre l'editor per creare una nuova regola di classificazione."""
+        if not self.controller.rule_service:
+            return
+        dialog = RuleEditorDialog(self, self.controller.rule_service)
         if dialog.exec():
             new_rule = dialog.get_rule_data()
             if self.controller.rule_service.add_rule(new_rule):
@@ -183,15 +210,18 @@ class MainApp(QMainWindow):
                 self._refresh_rules_tree()
 
     def _modify_rule(self) -> None:
+        """Apre l'editor per modificare la regola selezionata."""
+        if not self.controller.rule_service:
+            return
         selected = self.rules_tree.selectedItems()
         if not selected:
             QMessageBox.warning(self, "Attenzione", "Seleziona una regola da modificare.")
             return
-        
+
         category = selected[0].text(1)
         rule = self.controller.rule_service.get_rule_by_category(category)
         if rule:
-            dialog = RuleEditorDialog(self, rule)
+            dialog = RuleEditorDialog(self, self.controller.rule_service, rule)
             if dialog.exec():
                 updated_rule = dialog.get_rule_data()
                 if self.controller.rule_service.update_rule(category, updated_rule):
@@ -199,28 +229,34 @@ class MainApp(QMainWindow):
                     self._refresh_rules_tree()
 
     def _remove_rule(self) -> None:
+        """Rimuove la regola selezionata previa conferma."""
+        if not self.controller.rule_service:
+            return
         selected = self.rules_tree.selectedItems()
-        if not selected: return
-        
+        if not selected:
+            return
+
         category = selected[0].text(1)
         reply = QMessageBox.question(self, "Conferma", f"Eliminare la regola '{category}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            if self.controller.rule_service.remove_rule(category):
-                self.controller.save_settings()
-                self._refresh_rules_tree()
+        if reply == QMessageBox.StandardButton.Yes and self.controller.rule_service.remove_rule(category):
+            self.controller.save_settings()
+            self._refresh_rules_tree()
 
     # —————— TESSERACT ——————
 
     def _on_tesseract_path_change(self, path: str) -> None:
+        """Aggiorna il percorso di Tesseract nella configurazione."""
         self.controller.config["tesseract_path"] = path
         self.controller.save_settings()
 
     def _browse_tesseract(self) -> None:
+        """Apre il dialogo di selezione per l'eseguibile di Tesseract."""
         path, _ = QFileDialog.getOpenFileName(self, "Seleziona Tesseract.exe", "", "Executable (*.exe)")
         if path:
             self.tesseract_path_entry.setText(path)
 
     def _auto_detect_tesseract(self) -> None:
+        """Tenta di individuare Tesseract automaticamente nel sistema."""
         from core.tesseract_manager import TesseractManager
         path = TesseractManager.auto_detect()
         if path:
@@ -230,12 +266,15 @@ class MainApp(QMainWindow):
             QMessageBox.warning(self, "Non trovato", "Impossibile rilevare Tesseract automaticamente.")
 
     def _update_rule_details_panel(self) -> None:
+        """Aggiorna il pannello laterale con i dettagli della regola selezionata."""
+        if not self.controller.rule_service:
+            return
         selected = self.rules_tree.selectedItems()
         if not selected:
             self.keywords_text.clear()
             self.roi_details_label.setText("")
             return
-        
+
         category = selected[0].text(1)
         rule = self.controller.rule_service.get_rule_by_category(category)
         if rule:
@@ -246,6 +285,7 @@ class MainApp(QMainWindow):
     # —————— SEGNALI CONTROLLER ——————
 
     def _connect_controller_signals(self) -> None:
+        """Collega i segnali del controller ai rispettivi slot della UI."""
         self.controller.log_received.connect(self.add_log_message)
         self.controller.progress_updated.connect(self._on_progress_update)
         self.controller.processing_state_changed.connect(self.on_processing_state_changed)
@@ -256,18 +296,22 @@ class MainApp(QMainWindow):
         self.controller.license_status_updated.connect(self.on_license_status_updated)
 
     def add_log_message(self, message: str, level: str = "INFO", replace_last: bool = False) -> None:
+        """Aggiunge un messaggio formattato nell'area log della Dashboard."""
         if hasattr(self, "log_area"):
             # DashboardTab imposta self.main_app.log_area durante l'inizializzazione
             self.log_area.append(f"[{level}] {message}")
 
     def on_processing_state_changed(self, is_processing: bool) -> None:
+        """Abilita o disabilita i controlli in base allo stato di elaborazione."""
         self._is_processing = is_processing
-        self.dashboard_start_btn.setEnabled(not is_processing)
+        if hasattr(self, "dashboard_start_btn"):
+            self.dashboard_start_btn.setEnabled(not is_processing)
         if hasattr(self, "proc_group"):
             self.proc_group.setVisible(is_processing)
             self.stop_btn.setVisible(is_processing)
 
     def on_stats_updated(self, s_docs: int, s_pages: int, g_docs: int, g_pages: int) -> None:
+        """Aggiorna le etichette delle statistiche globali e di sessione."""
         if hasattr(self, "files_count_sess_label"):
             self.files_count_sess_label.setText(str(s_docs))
         if hasattr(self, "files_count_tot_label"):
@@ -282,7 +326,7 @@ class MainApp(QMainWindow):
         for key, value in info.items():
             if key in self.license_fields:
                 self.license_fields[key].setText(str(value))
-        
+
         if info.get("is_valid"):
             self.license_status_label.setText("SISTEMA ATTIVO")
             self.license_status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: bold;")
@@ -291,9 +335,11 @@ class MainApp(QMainWindow):
             self.license_status_label.setStyleSheet(f"color: {COLORS['danger']}; font-weight: bold;")
 
     def _update_restore_button_state(self, has_session: bool) -> None:
+        """Cambia l'abilitazione del tasto recupera."""
         self.restore_btn.setEnabled(has_session)
 
     def _refresh_rules_tree(self) -> None:
+        """Ricarica la lista delle regole nel widget albero."""
         self.rules_tree.clear()
         rules = self.controller.config.get("classification_rules", [])
         self.rules_count_label.setText(str(len(rules)))
@@ -302,17 +348,20 @@ class MainApp(QMainWindow):
             self.rules_tree.addTopLevelItem(item)
 
     def on_unknown_files_found(self, files: list, odc: str) -> None:
-        from gui.dialogs.unknown_review import UnknownFilesReviewDialog
+        """Mostra il dialogo di revisione per i file non classificati."""
         dialog = UnknownFilesReviewDialog(self, files, odc)
         dialog.finished_review.connect(self.controller.clear_session)
         dialog.exec()
 
     def _on_progress_update(self, value: float, text: str, eta: Any = None) -> None:
+        """Aggiorna la barra di progresso e l'ETA."""
         self.progress_bar.setValue(int(value * 10))
         self.progress_label.setText(text)
-        if eta: self.eta_label.setText(f"ETA: {eta}s")
+        if eta:
+            self.eta_label.setText(f"ETA: {eta}s")
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        """Gestisce la chiusura dell'app e l'eventuale installazione di aggiornamenti."""
         app_updater.run_pending_installer()
         super().closeEvent(event)
 

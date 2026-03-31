@@ -5,13 +5,11 @@ Gestisce le notifiche toast a comparsa.
 
 import logging
 import time
-from contextlib import suppress
-from pathlib import Path
+from typing import Any, cast
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
-from PySide6.QtGui import QCursor, QFont
-from PySide6.QtSvgWidgets import QSvgWidget
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QPropertyAnimation, Qt, QTimer
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 logger = logging.getLogger("MAIN")
 
@@ -30,9 +28,10 @@ COLORS = {
 
 
 class ToastNotification(QWidget):
-    """Widget per una singola notifica toast."""
+    """Widget per una singola notifica toast a comparsa."""
 
-    def __init__(self, title, message, bg_color, fg_color, on_close=None):
+    def __init__(self, title: str, message: str, bg_color: str, fg_color: str, on_close: Any = None) -> None:
+        """Inizializza la notifica toast con stile e contenuti specificati."""
         super().__init__()
         self._on_close_callback = on_close
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
@@ -46,10 +45,13 @@ class ToastNotification(QWidget):
         title_label.setStyleSheet(f"color: {fg_color}; border: none;")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-        close_btn = QLabel("✕")
-        close_btn.setStyleSheet(f"color: {fg_color}; padding: 2px; border: none;")
-        close_btn.mousePressEvent = lambda e: self.close_toast()
-        header_layout.addWidget(close_btn)
+
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(20, 20)
+        self.close_btn.setFlat(True)
+        self.close_btn.setStyleSheet(f"color: {fg_color}; padding: 0px; border: none; font-weight: bold;")
+        self.close_btn.clicked.connect(self.close_toast)
+        header_layout.addWidget(self.close_btn)
         main_layout.addLayout(header_layout)
 
         msg_label = QLabel(message)
@@ -64,42 +66,46 @@ class ToastNotification(QWidget):
         self._fade_anim.setStartValue(0.0)
         self._fade_anim.setEndValue(0.95)
 
-    def show_animated(self):
+    def show_animated(self) -> None:
+        """Mostra la notifica avviando l'animazione di dissolvenza."""
         self.show()
         self._fade_anim.start()
 
-    def close_toast(self):
-        if self._on_close_callback: self._on_close_callback(self)
+    def close_toast(self) -> None:
+        """Chiude la notifica, invoca la callback e distrugge il widget."""
+        if self._on_close_callback:
+            self._on_close_callback(self)
         self.close()
         self.deleteLater()
 
 
 class NotificationManager:
-    """Gestisce le notifiche toast (Standard OOP)."""
+    """Gestisce il ciclo di vita delle notifiche toast e la loro integrazione con il controller."""
 
-    def __init__(self, parent_widget):
+    def __init__(self, parent_widget: QWidget) -> None:
+        """Inizializza il manager collegandolo opzionalmente al controller del parent."""
         self.parent = parent_widget
-        self.notifications = []
-        self.active_toasts = [] # Alias per i test
+        self.notifications: list[dict[str, Any]] = []
+        self.active_toasts: list[ToastNotification] = []  # Alias per i test
         self.unread_count = 0
-        self.history = []
-        self.bell_container = None
-        self.bell_svg = None
-        self.bell_count_label = None
+        self.history: list[dict[str, Any]] = []
+        self.bell_container: QFrame | None = None
+        self.bell_svg: Any = None
+        self.bell_count_label: QLabel | None = None
 
         if hasattr(parent_widget, "controller"):
             parent_widget.controller.log_received.connect(self.on_controller_log)
 
     def on_controller_log(self, message: str, level: str, replace_last: bool = False) -> None:
-        """Alias pubblico per i test."""
+        """Riceve log dal controller e attiva una notifica per i livelli rilevanti."""
         if level in ("SUCCESS", "ERROR", "WARNING"):
             self.notify(message, level)
 
-    def notify(self, message: str, level: str = "INFO", title: str | None = None):
-        """Crea una nuova notifica toast."""
+    def notify(self, message: str, level: str = "INFO", title: str | None = None) -> None:
+        """Crea, visualizza e registra una nuova notifica toast."""
         self.unread_count += 1
         title = title or level
-        
+
         bg_color = COLORS["success"] if level == "SUCCESS" else COLORS["danger"] if level == "ERROR" else COLORS["warning"] if level == "WARNING" else "#333"
         fg_color = "#FFFFFF" if level != "WARNING" else "#000000"
 
@@ -107,29 +113,33 @@ class NotificationManager:
         self.notifications.append({"window": toast})
         self.active_toasts = [n["window"] for n in self.notifications]
         self.history.append({"title": title, "msg": message, "time": time.time(), "level": level})
-        
+
         toast.show_animated()
         QTimer.singleShot(5000, toast.close_toast)
         self._update_bell()
 
-    def _on_toast_closed(self, toast):
+    def _on_toast_closed(self, toast: ToastNotification) -> None:
+        """Rimuove la notifica dalla lista dei toast attivi quando viene chiusa."""
         self.notifications = [n for n in self.notifications if n["window"] is not toast]
         self.active_toasts = [n["window"] for n in self.notifications]
 
-    def setup_bell_icon(self, parent):
+    def setup_bell_icon(self, parent: QHBoxLayout) -> None:
+        """Inizializza gli elementi grafici dell'icona campana nel layout parent."""
         self.bell_container = QFrame()
         self.bell_count_label = QLabel("0")
         self._update_bell()
 
-    def _update_bell(self):
+    def _update_bell(self) -> None:
+        """Aggiorna il contatore numerico sull'icona della campana."""
         if self.bell_count_label:
             self.bell_count_label.setText(str(self.unread_count))
 
-    def show_history(self, event=None):
+    def show_history(self, event: Any = None) -> None:
+        """Azzera il contatore delle notifiche non lette."""
         self.unread_count = 0
         self._update_bell()
 
-    def show_toast(self, title, message, level="INFO"):
-        """Alias richiesto dai test."""
+    def show_toast(self, title: str, message: str, level: str = "INFO") -> ToastNotification:
+        """Crea una notifica e restituisce il widget creato (Metodo richiesto dai test)."""
         self.notify(message, level, title)
-        return self.notifications[-1]["window"]
+        return cast("ToastNotification", self.notifications[-1]["window"])

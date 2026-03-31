@@ -4,6 +4,7 @@ Unit tests for core/pdf_splitter.py.
 
 import os
 import unittest
+from pathlib import Path
 
 import pymupdf as fitz
 
@@ -27,8 +28,8 @@ class TestPdfSplitter(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Cleanup test files."""
-        if os.path.exists(cls.test_pdf_path):
-            os.remove(cls.test_pdf_path)
+        if Path(cls.test_pdf_path).exists():
+            Path(cls.test_pdf_path).unlink()
 
     def test_get_ranges(self):
         """Test page range grouping logic."""
@@ -74,8 +75,9 @@ class TestPdfSplitter(unittest.TestCase):
 
         # Cleanup
         for f in generated:
-            if os.path.exists(f["path"]):
-                os.remove(f["path"])
+            p = Path(f["path"])
+            if p.exists():
+                p.unlink()
 
     def test_safe_save_retry(self):
         """Test safe save retry logic (mocking failure then success)."""
@@ -87,8 +89,9 @@ class TestPdfSplitter(unittest.TestCase):
         res = PdfSplitter._safe_save(doc, "test_safe.pdf")
         self.assertTrue(res)
         doc.close()
-        if os.path.exists("test_safe.pdf"):
-            os.remove("test_safe.pdf")
+        p = Path("test_safe.pdf")
+        if p.exists():
+            p.unlink()
 
 if __name__ == "__main__":
     unittest.main()

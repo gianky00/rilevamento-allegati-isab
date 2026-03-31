@@ -58,9 +58,25 @@ class RuleService:
         """Sincronizza la configurazione su disco."""
         config_manager.save_config(self.config)
 
+    def save_rules(self) -> None:
+        """Alias per save() per coerenza con ROI utility."""
+        self.save()
+
     def get_rule_by_category(self, category_name: str) -> dict[str, Any] | None:
         """Cerca una regola specifica per categoria."""
         for rule in self.get_rules():
             if rule.get("category_name") == category_name:
                 return rule
         return None
+
+    def add_roi_to_rule(self, category_name: str, coords: list[int]) -> bool:
+        """Aggiunge un set di coordinate ROI a una regola esistente."""
+        rule = self.get_rule_by_category(category_name)
+        if not rule:
+            return False
+
+        if "rois" not in rule:
+            rule["rois"] = []
+
+        rule["rois"].append(coords)
+        return True

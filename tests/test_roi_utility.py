@@ -3,8 +3,9 @@ Unit tests for the ROI Drawing utility.
 """
 
 import sys
+import typing
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
@@ -17,10 +18,12 @@ from roi_utility import ROIDrawingApp  # noqa: E402
 class TestRoiUtility(unittest.TestCase):
     """Test suite for ROIDrawingApp utility."""
 
+    app: QApplication
+
     @classmethod
     def setUpClass(cls) -> None:
         """Initialize QApplication for widget tests."""
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = typing.cast("QApplication", QApplication.instance() or QApplication([]))
 
     def setUp(self) -> None:
         """Create window and controller mocks."""
@@ -40,7 +43,7 @@ class TestRoiUtility(unittest.TestCase):
         """Test switching between drawing and deletion modes."""
         self.window.toggle_delete_mode(True)
         self.assertTrue(self.window.delete_mode)
-        
+
         self.window.toggle_delete_mode(False)
         self.assertFalse(self.window.delete_mode)
 
@@ -48,7 +51,6 @@ class TestRoiUtility(unittest.TestCase):
         """Test zoom level updates from the UI slider."""
         self.window.on_zoom_changed(150)
         # Check if no crash
-        pass
 
     def test_on_page_rendered(self) -> None:
         """Test handling of background image rendering."""
