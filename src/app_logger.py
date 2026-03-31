@@ -16,8 +16,6 @@ from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
-from shared.security_utils import sanitize_html
-
 # Costante per il nome dell'applicazione
 APP_NAME = "Intelleo PDF Splitter"
 
@@ -28,6 +26,7 @@ def save_bot_html(html_content: str, filename: str) -> str:
     Previene l'esecuzione di script durante il debug dei log.
     """
     try:
+        from shared.security_utils import sanitize_html
         log_dir = Path(get_log_directory()) / "bot_html"
         log_dir.mkdir(parents=True, exist_ok=True)
 

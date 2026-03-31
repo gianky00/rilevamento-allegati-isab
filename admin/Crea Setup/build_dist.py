@@ -200,12 +200,24 @@ def build():
         cmd_pyinstaller = [
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
             f"--name={APP_NAME}", f"--distpath={DIST_DIR}", f"--workpath={DIST_DIR / 'build'}",
-            f"--paths={OBF_DIR}", "--onedir", "--collect-all=PySide6", "--collect-all=pymupdf", "--windowed"
+            f"--paths={OBF_DIR}", "--onedir", 
+            "--collect-all=PySide6", "--collect-all=pymupdf", 
+            "--collect-all=cryptography", "--collect-all=requests",
+            "--collect-all=core", "--collect-all=gui", "--collect-all=shared",
+            "--windowed"
         ]
         if icon_path:
             cmd_pyinstaller.extend([f"--icon={icon_path}", f"--add-data={icon_path}{';' if os.name == 'nt' else ':'}resources"])
 
-        hidden = ["fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet", "numpy", "requests", "PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets", "PySide6.QtSvgWidgets", "pymupdf", "main", "app_launcher", "app_logger", "config_manager", "roi_utility", "version", "core", "gui", "shared", runtime_dir]
+        hidden = [
+            "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet", 
+            "cryptography.hazmat.primitives.kdf.pbkdf2", "cryptography.hazmat.backends.openssl",
+            "numpy", "requests", "PySide6", "PySide6.QtCore", "PySide6.QtGui", 
+            "PySide6.QtWidgets", "PySide6.QtSvgWidgets", "pymupdf", "main", 
+            "app_launcher", "app_logger", "app_updater", "config_manager", 
+            "license_updater", "license_validator", "roi_utility", "version", 
+            runtime_dir
+        ]
         for h in hidden:
             if h:
                 cmd_pyinstaller.append(f"--hidden-import={h}")

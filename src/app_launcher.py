@@ -8,9 +8,20 @@ import sys
 from pathlib import Path
 
 # 1. Configurazione robusta del PATH per moduli interni (Pillar 1)
-ROOT_DIR = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False):
+    # Quando siamo in un bundle PyInstaller, la root è sys._MEIPASS
+    ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+else:
+    ROOT_DIR = Path(__file__).resolve().parent
+
+# Aggiunge percorsi multipli per coprire ogni variante di import (assoluto/relativo)
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+# Se esiste una cartella 'src' (sviluppo) o se siamo nella root offuscata
+if (ROOT_DIR / "core").exists():
+    if str(ROOT_DIR) not in sys.path:
+        sys.path.insert(0, str(ROOT_DIR))
 
 # 2. Gestione crash precoci prima dell'inizializzazione del logger
 try:
@@ -18,9 +29,8 @@ try:
 
     # Importazioni locali (ora sicure grazie al fix sul PATH)
     import app_logger
-    import license_updater
-    import license_validator
     import version
+    
 except Exception as e:
     import tempfile
     import traceback
@@ -86,6 +96,8 @@ def run_app() -> None:
 
     # 2. Verifica Licenza (DURANTE LO SPLASH SCREEN)
     splash.set_progress(30, "Verifica licenza online...")
+    import license_updater
+    import license_validator
     try:
         license_updater.run_update()
     except license_updater.LicenseRevokedError as e:

@@ -21,7 +21,6 @@ from core.file_service import FileService
 from core.processing_worker import ProcessingWorker, PdfProcessingWorker
 from core.rule_service import RuleService
 from core.session_manager import SessionManager
-from shared.constants import SIGNAL_FILE
 
 logger = logging.getLogger("CONTROLLER")
 
@@ -196,6 +195,7 @@ class AppController(QObject):
         self.session_status_changed.emit(False)
 
     def check_roi_signal(self) -> bool:
+        from shared.constants import SIGNAL_FILE
         signal_path = Path(SIGNAL_FILE)
         if signal_path.exists():
             with suppress(OSError):

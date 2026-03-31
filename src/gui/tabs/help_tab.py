@@ -24,6 +24,7 @@ class HelpTab(QWidget):
 
     def _init_ui(self) -> None:
         """Configura l'interfaccia utente della guida con il browser dei contenuti."""
+        from shared.constants import APP_DATA_DIR
         layout = QVBoxLayout(self)
         layout.setContentsMargins(25, 25, 25, 25)
         layout.setSpacing(15)

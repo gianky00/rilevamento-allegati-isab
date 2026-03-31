@@ -324,6 +324,7 @@ class UIFactory:
         Mostra un messaggio QMessageBox sanificato (Pillar 4).
         Di default usa PlainText. Se abilitato RichText, sanifica l'input.
         """
+        from shared.security_utils import sanitize_html
         msg = QMessageBox(parent)
         msg.setWindowTitle(title)
         msg.setIcon(icon)
@@ -343,6 +344,7 @@ class UIFactory:
         """
         Imposta il testo di una QLabel in modo sicuro (Pillar 4).
         """
+        from shared.security_utils import sanitize_html
         if is_rich_text:
             sanitized_text = sanitize_html(text)
             widget.setTextFormat(Qt.TextFormat.RichText)

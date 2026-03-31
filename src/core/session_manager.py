@@ -19,11 +19,13 @@ class SessionManager:
     @staticmethod
     def has_session() -> bool:
         """Verifica se esiste una sessione precedentemente interrotta."""
+        from shared.constants import SESSION_FILE
         return Path(SESSION_FILE).exists()
 
     @staticmethod
     def clear_session() -> None:
         """Rimuove il file di sessione."""
+        from shared.constants import SESSION_FILE
         session_path = Path(SESSION_FILE)
         if session_path.exists():
             with suppress(OSError):
@@ -32,6 +34,7 @@ class SessionManager:
     @staticmethod
     def save_session(tasks: list[dict[str, Any]], odc: str = "Unknown") -> None:
         """Salva i task correnti in un file di sessione per ripristino futuro."""
+        from shared.constants import SESSION_FILE
         if not tasks:
             SessionManager.clear_session()
             return
@@ -44,6 +47,7 @@ class SessionManager:
     @staticmethod
     def load_session() -> tuple[list[dict[str, Any]], str]:
         """Carica i task salvati dal file di sessione."""
+        from shared.constants import SESSION_FILE
         session_path = Path(SESSION_FILE)
         if not session_path.exists():
             return [], "Unknown"
