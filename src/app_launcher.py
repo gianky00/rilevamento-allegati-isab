@@ -7,21 +7,31 @@ import logging
 import sys
 from pathlib import Path
 
-# Gestione crash precoci prima dell'inizializzazione del logger
+# 1. Configurazione robusta del PATH per moduli interni (Pillar 1)
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+# 2. Gestione crash precoci prima dell'inizializzazione del logger
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
-    # Importazioni locali
+    # Importazioni locali (ora sicure grazie al fix sul PATH)
     import app_logger
     import license_updater
     import license_validator
     import version
 except Exception as e:
-    with Path("crash_startup.txt").open("w") as f:
+    import tempfile
+    import traceback
+    
+    # Usa la directory temporanea per evitare PermissionError su Windows (Pillar 1)
+    crash_file = Path(tempfile.gettempdir()) / "intelleo_crash_startup.txt"
+    with crash_file.open("w", encoding="utf-8") as f:
         f.write(f"CRITICAL ERROR DURING EARLY IMPORT: {e}\n")
-        import traceback
-
         f.write(traceback.format_exc())
+    
+    print(f"ERRORE CRITICO ALL'AVVIO. Dettagli scritti in: {crash_file}")
     sys.exit(1)
 
 # Inizializza log prima di caricare MainApp (che dipende dal logger)

@@ -132,3 +132,12 @@ class ROIGraphicsView(QGraphicsView):
             event.accept()
         else:
             super().mouseReleaseEvent(event)
+    def set_zoom(self, scale_factor: float) -> None:
+        """Imposta il fattore di zoom corrente."""
+        self.resetTransform()
+        self.scale(scale_factor, scale_factor)
+
+    def set_delete_mode(self, enabled: bool) -> None:
+        """Attiva o disattiva la modalità di eliminazione ROI."""
+        cursor_shape = Qt.CursorShape.ForbiddenCursor if enabled else Qt.CursorShape.CrossCursor
+        self.setCursor(QCursor(cursor_shape))

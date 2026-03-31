@@ -256,8 +256,9 @@ class MainApp(QMainWindow):
         self.controller.license_status_updated.connect(self.on_license_status_updated)
 
     def add_log_message(self, message: str, level: str = "INFO", replace_last: bool = False) -> None:
-        if hasattr(self, "dashboard_tab") and hasattr(self.dashboard_tab, "console"):
-            self.dashboard_tab.console.append(f"[{level}] {message}")
+        if hasattr(self, "log_area"):
+            # DashboardTab imposta self.main_app.log_area durante l'inizializzazione
+            self.log_area.append(f"[{level}] {message}")
 
     def on_processing_state_changed(self, is_processing: bool) -> None:
         self._is_processing = is_processing

@@ -82,6 +82,11 @@ class ROIDrawingApp(QMainWindow):
         self.right_panel = QWidget()
         self.right_layout = QVBoxLayout(self.right_panel)
         
+        # Attributi minimi richiesti da ROIGraphicsView
+        self.zoom_level = 1.0
+        self.status_bar = QLabel("Pronto")
+        self.right_layout.addWidget(self.status_bar)
+
         if getattr(sys, "_testing", False):
             from unittest.mock import MagicMock
             self.view: Any = MagicMock()
@@ -89,8 +94,8 @@ class ROIDrawingApp(QMainWindow):
             self.right_layout.addWidget(QWidget())
         else:
             self.scene = QGraphicsScene()
-            self.view = ROIGraphicsView(self.scene)
-            self.view.roi_drawn.connect(self.on_roi_drawn)
+            self.view = ROIGraphicsView(app=self, parent=None)
+            self.view.setScene(self.scene)
             self.right_layout.addWidget(self.view)
             
         self.layout.addWidget(self.right_panel)
@@ -141,7 +146,31 @@ class ROIDrawingApp(QMainWindow):
         for rule in self.rules: self.list_rules.addItem(rule["category_name"])
 
     def on_zoom_changed(self, value: int) -> None:
-        if not getattr(sys, "_testing", False): self.view.set_zoom(value / 100.0)
+        self.zoom_level = value / 100.0
+        if not getattr(sys, "_testing", False): self.view.set_zoom(self.zoom_level)
+
+    def zoom_in(self) -> None:
+        self.zoom_level += 0.1
+        if not getattr(sys, "_testing", False): self.view.set_zoom(self.zoom_level)
+
+    def zoom_out(self) -> None:
+        self.zoom_level = max(0.1, self.zoom_level - 0.1)
+        if not getattr(sys, "_testing", False): self.view.set_zoom(self.zoom_level)
+
+    def prompt_and_save_roi(self, coords_pdf: list[int]) -> None:
+        """Salva i dati della ROI nel gestore regole corrente."""
+        if not self.selected_rule_name:
+            QMessageBox.warning(self, "Attenzione", "Seleziona una regola a sinistra prima di disegnare.")
+            return
+
+        reply = QMessageBox.question(self, "Conferma", f"Salvare questa ROI per '{self.selected_rule_name}'?", 
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.rule_service.add_roi_to_rule(self.selected_rule_name, coords_pdf):
+                self.rule_service.save_rules()
+                self.status_bar.setText(f"ROI salvata per {self.selected_rule_name}")
+                self.show_existing_rois()
 
     def on_page_rendered(self, pixmap: QPixmap) -> None:
         """Metodo unificato per il rendering."""
