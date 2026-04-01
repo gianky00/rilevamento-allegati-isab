@@ -50,10 +50,12 @@ class TestLicenseValidator(unittest.TestCase):
         self.assertEqual(hwid, "XYZ123")
 
     @patch("license_validator._get_license_paths")
+    @patch("license_validator.get_all_hardware_ids")
     @patch("license_validator.get_hardware_id")
-    def test_get_license_info_valid(self, mock_hwid, mock_paths):
+    def test_get_license_info_valid(self, mock_hwid, mock_all, mock_paths):
         """Test decrypting license info with dynamic key."""
         mock_hwid.return_value = self.test_hwid
+        mock_all.return_value = [self.test_hwid]
         mock_paths.return_value = self.paths
 
         data = {"Cliente": "Test", "Hardware ID": self.test_hwid}
@@ -65,10 +67,12 @@ class TestLicenseValidator(unittest.TestCase):
         self.assertEqual(info["Cliente"], "Test")
 
     @patch("license_validator._get_license_paths")
+    @patch("license_validator.get_all_hardware_ids")
     @patch("license_validator.get_hardware_id")
-    def test_verify_license_full_flow(self, mock_hwid, mock_paths):
+    def test_verify_license_full_flow(self, mock_hwid, mock_all, mock_paths):
         """Test the full license verification process."""
         mock_hwid.return_value = self.test_hwid
+        mock_all.return_value = [self.test_hwid]
         mock_paths.return_value = self.paths
 
         # 1. Create encrypted config
@@ -85,10 +89,12 @@ class TestLicenseValidator(unittest.TestCase):
         self.assertIn("ACME", msg)
 
     @patch("license_validator._get_license_paths")
+    @patch("license_validator.get_all_hardware_ids")
     @patch("license_validator.get_hardware_id")
-    def test_verify_license_expired(self, mock_hwid, mock_paths):
+    def test_verify_license_expired(self, mock_hwid, mock_all, mock_paths):
         """Test verification of an expired license."""
         mock_hwid.return_value = self.test_hwid
+        mock_all.return_value = [self.test_hwid]
         mock_paths.return_value = self.paths
 
         data = {
@@ -102,6 +108,7 @@ class TestLicenseValidator(unittest.TestCase):
         valid, msg = verify_license()
         self.assertFalse(valid)
         self.assertIn("SCADUTA", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

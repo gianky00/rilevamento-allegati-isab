@@ -3,6 +3,7 @@ Intelleo PDF Splitter - License Updater (Standard SyncroJob 2026)
 Tutorial Implementation: GitHub Cloud Validation + Grace Period.
 """
 
+import logging
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
@@ -10,6 +11,8 @@ import requests
 from cryptography.fernet import Fernet
 
 import license_validator
+
+logger = logging.getLogger("Intelleo")
 
 # CONFIGURAZIONE (TUTORIAL)
 GRACE_PERIOD_DAYS = 3
@@ -76,46 +79,68 @@ def check_grace_period():
 
 def run_update():
     """
-    Workflow di Sincronizzazione Cloud (GitHub):
-    1. Calcola HWID Normalizzato.
-    2. Costruisce URL Cloud.
-    3. Scarica Manifest e Config se presenti.
-    4. Cancella locale se 404.
+    Workflow di Sincronizzazione Cloud Multi-ID (GitHub):
+    1. Recupera TUTTI gli HWID della macchina (Dischi + UUID).
+    2. Tenta di trovare una licenza su GitHub per almeno uno di essi.
+    3. Se trovata, scarica e aggiorna.
+    4. Se TUTTI danno 404, revoca la licenza.
     """
-    hw_id = license_validator.get_hardware_id()
+    all_ids = license_validator.get_all_hardware_ids()
     paths = license_validator._get_license_paths()
     paths["sys_dir"].mkdir(parents=True, exist_ok=True)
 
-    # Tutorial URL Structure
-    base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
     token = get_github_token()
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.raw"}
 
+    found_id = None
+    network_issues = False
+
     try:
-        # 1. Verifica esistenza cartella/manifest su GitHub
-        resp = requests.get(f"{base_url}/manifest.json", headers=headers, timeout=10)
+        # Tenta ogni ID rilevato sulla macchina
+        for hw_id in all_ids:
+            base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{hw_id}"
+            try:
+                resp = requests.get(f"{base_url}/manifest.json", headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    found_id = hw_id
+                    logger.info(f"Licenza trovata per HWID: {hw_id}")
+                    break
+                if resp.status_code != 404:
+                    # Errore server o rate limit
+                    network_issues = True
+            except requests.exceptions.RequestException:
+                network_issues = True
+                continue
 
-        if resp.status_code == 404:
-            # REVOCA ESPLICITA: Standard SyncroJob impone la distruzione locale
-            license_validator.destroy_license()
-            raise LicenseRevokedError("LICENZA REVOCATA DAL SERVER.")
+        if found_id:
+            # Download payload cifrato per l'ID trovato
+            base_url = f"https://api.github.com/repos/gianky00/intelleo-licenses/contents/licenses/{found_id}"
+            r_config = requests.get(f"{base_url}/config.dat", headers=headers, timeout=10)
+            if r_config.status_code == 200:
+                paths["sys_config"].write_bytes(r_config.content)
+                license_validator.sync_license_files()
+                update_grace_timestamp()
+                logger.info("Sincronizzazione licenza completata.")
+                return True
+            return False
 
-        if resp.status_code != 200:
-            # Errore server o rete -> Fallback su Grace Period
+        if network_issues:
+            # Se abbiamo avuto problemi di rete ma non abbiamo trovato 200, grace period
+            logger.warning("Problemi di rete rilevati durante la scansione HWID. Fallback Grace Period.")
             check_grace_period()
-            return
+            return None
 
-        # 2. Download payload cifrato
-        r_config = requests.get(f"{base_url}/config.dat", headers=headers, timeout=10)
-        if r_config.status_code == 200:
-            paths["sys_config"].write_bytes(r_config.content)
-            # Sincronizza immediatamente con la cartella locale del progetto
-            license_validator.sync_license_files()
-            update_grace_timestamp()
+        # Se siamo arrivati qui, TUTTI gli ID hanno risposto 404 o non sono stati trovati
+        # REVOCA ESPLICITA
+        license_validator.destroy_license()
+        logger.critical("NESSUN HWID VALIDO TROVATO SUL SERVER. Revoca licenza.")
+        raise LicenseRevokedError("LICENZA REVOCATA DAL SERVER.")
 
     except Exception as e:
         if isinstance(e, LicenseRevokedError):
             raise
-        # Fallback period per problemi di rete
+        # Fallback per qualsiasi errore imprevisto
+        logger.error(f"Errore durante run_update: {e}")
         with suppress(Exception):
             check_grace_period()
+

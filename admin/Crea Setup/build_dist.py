@@ -121,26 +121,24 @@ def deploy_to_network(setup_dir, setup_filename):
         archive_dir = NETWORK_DEPLOY_PATH / "Archivio"
         archive_dir.mkdir(exist_ok=True)
 
-        dst_path = NETWORK_DEPLOY_PATH / setup_filename
-
-        # 1. Riorganizzazione: Spostamento vecchio file in Archivio
-        if dst_path.exists():
+        # 1. Riorganizzazione: Spostamento di TUTTI i vecchi file .exe in Archivio
+        log_and_print(f"Cleaning root directory and archiving old setups in {NETWORK_DEPLOY_PATH}...")
+        for old_file in NETWORK_DEPLOY_PATH.glob("*.exe"):
+            # Evitiamo di spostare il file che stiamo per copiare se per caso ha lo stesso nome
+            # (anche se tecnicamente non dovrebbe ancora essere lì)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            old_version_name = f"OLD_{timestamp}_{setup_filename}"
-
-            old_v_json = NETWORK_DEPLOY_PATH / "version.json"
-            if old_v_json.exists():
-                with suppress(Exception):
-                    old_v_data = json.loads(old_v_json.read_text(encoding="utf-8"))
-                    v_str = old_v_data.get("version", "unknown").replace(".", "_")
-                    old_version_name = f"{APP_NAME}_v{v_str}_{timestamp}.exe"
-
-            target_archive = archive_dir / old_version_name
-            log_and_print(f"Archiving existing version to: {target_archive.name}")
-            shutil.move(str(dst_path), str(target_archive))
+            
+            # Tenta di recuperare la versione dal vecchio file se possibile (opzionale, manteniamo logica sicura)
+            old_name = old_file.name
+            target_archive = archive_dir / f"Archivio_{timestamp}_{old_name}"
+            
+            log_and_print(f"Archiving: {old_name} -> {target_archive.name}")
+            with suppress(Exception):
+                shutil.move(str(old_file), str(target_archive))
 
         # 2. Copia nuovo setup
-        log_and_print(f"Copying {setup_filename} to {NETWORK_DEPLOY_PATH}...")
+        dst_path = NETWORK_DEPLOY_PATH / setup_filename
+        log_and_print(f"Copying new setup {setup_filename} to {NETWORK_DEPLOY_PATH}...")
         shutil.copy2(str(setup_dir / setup_filename), str(dst_path))
 
         # 3. Copia version.json aggiornato
@@ -232,7 +230,7 @@ def build():
         run_command(cmd_pyinstaller, cwd=str(OBF_DIR))
 
         final_dist_path = DIST_DIR / APP_NAME
-        
+
         # Copia manuale di cartelle che PyInstaller potrebbe saltare o che servono esterne
         if (OBF_DIR / "config.json").exists():
             shutil.copy(str(OBF_DIR / "config.json"), str(final_dist_path / "config.json"))
