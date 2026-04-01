@@ -24,8 +24,7 @@ class TestAppController(unittest.TestCase):
     def setUp(self) -> None:
         """Create controller instance with mocked dependencies."""
         with patch("core.app_controller.ConfigManager"), \
-             patch("core.app_controller.RuleService"), \
-             patch("core.app_controller.ArchiveService"):
+             patch("core.app_controller.RuleService"):
             self.controller = AppController()
 
     def test_load_settings(self) -> None:

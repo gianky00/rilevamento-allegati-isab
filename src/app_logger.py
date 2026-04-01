@@ -15,6 +15,16 @@ from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
+# --- FIX PATH PER ESEGUIBILI (Pillar 1) ---
+# Assicura che la root dell'app sia nel sys.path prima di altri import
+if getattr(sys, "frozen", False):
+    ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+else:
+    ROOT_DIR = Path(__file__).resolve().parent
+
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 # Costante per il nome dell'applicazione
 APP_NAME = "Intelleo PDF Splitter"
 
@@ -25,7 +35,9 @@ def save_bot_html(html_content: str, filename: str) -> str:
     Previene l'esecuzione di script durante il debug dei log.
     """
     try:
+        # Importazione locale per evitare dipendenze circolari precoci
         from shared.security_utils import sanitize_html
+
         log_dir = Path(get_log_directory()) / "bot_html"
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -118,6 +130,7 @@ def setup_logging():
             _write_immediate(f"LOG FILE INIZIALIZZATO: {test_path}")
             _write_immediate(f"Frozen: {getattr(sys, 'frozen', False)}")
             _write_immediate(f"Executable: {sys.executable}")
+            _write_immediate(f"ROOT_DIR: {ROOT_DIR}")
             break
         except Exception:
             continue

@@ -185,6 +185,7 @@ def build():
 
         OBF_DIR.mkdir(parents=True, exist_ok=True)
         log_and_print("\n--- Step 3: Obfuscating with PyArmor ---")
+        # Includiamo esplicitamente tutti i pacchetti per PyArmor
         cmd_pyarmor = [sys.executable, "-m", "pyarmor.cli", "gen", "-r", "-O", str(OBF_DIR), "."]
         run_command(cmd_pyarmor, cwd=str(ROOT_DIR / "src"))
 
@@ -197,6 +198,7 @@ def build():
         icon_path = str(ROOT_DIR / "src" / "resources" / "icon.ico") if (ROOT_DIR / "src" / "resources" / "icon.ico").exists() else None
 
         log_and_print("\n--- Step 5: Packaging with PyInstaller ---")
+        # Fondamentale aggiungere OBF_DIR ai paths e includere esplicitamente i moduli
         cmd_pyinstaller = [
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
             f"--name={APP_NAME}", f"--distpath={DIST_DIR}", f"--workpath={DIST_DIR / 'build'}",
@@ -209,6 +211,8 @@ def build():
         if icon_path:
             cmd_pyinstaller.extend([f"--icon={icon_path}", f"--add-data={icon_path}{';' if os.name == 'nt' else ':'}resources"])
 
+        # Aggiungiamo i moduli core, gui e shared come hidden-imports per forzarne l'inclusione
+        # PyInstaller a volte fallisce l'analisi statica su file offuscati.
         hidden = [
             "fitz", "PIL", "pytesseract", "cffi", "cryptography", "cryptography.fernet",
             "cryptography.hazmat.primitives.kdf.pbkdf2", "cryptography.hazmat.backends.openssl",
@@ -216,6 +220,8 @@ def build():
             "PySide6.QtWidgets", "PySide6.QtSvgWidgets", "pymupdf", "main",
             "app_launcher", "app_logger", "app_updater", "config_manager",
             "license_updater", "license_validator", "roi_utility", "version",
+            "shared", "shared.constants", "shared.security_utils",
+            "core", "gui",
             runtime_dir
         ]
         for h in hidden:
@@ -226,6 +232,8 @@ def build():
         run_command(cmd_pyinstaller, cwd=str(OBF_DIR))
 
         final_dist_path = DIST_DIR / APP_NAME
+        
+        # Copia manuale di cartelle che PyInstaller potrebbe saltare o che servono esterne
         if (OBF_DIR / "config.json").exists():
             shutil.copy(str(OBF_DIR / "config.json"), str(final_dist_path / "config.json"))
         if (ROOT_DIR / "Tesseract-OCR").exists():
