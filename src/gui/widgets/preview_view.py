@@ -3,11 +3,15 @@ Intelleo PDF Splitter — PreviewGraphicsView
 Vista grafica con zoom e pan per anteprima PDF.
 """
 
+import logging
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QCursor
+from PySide6.QtGui import QBrush, QColor, QCursor, QImage, QPixmap
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
 
 from gui.theme import COLORS
+
+logger = logging.getLogger("GUI")
 
 
 class PreviewGraphicsView(QGraphicsView):
@@ -61,3 +65,26 @@ class PreviewGraphicsView(QGraphicsView):
         self._scene.clear()
         self._scene.addPixmap(qpixmap)
         self._scene.setSceneRect(0, 0, qpixmap.width(), qpixmap.height())
+
+    def load_pdf(self, file_path: str) -> None:
+        """Carica la prima pagina di un PDF nella vista grafica."""
+        try:
+            import fitz
+            doc = fitz.open(file_path)
+            if doc.page_count > 0:
+                page = doc.load_page(0)
+                # Renderizzazione ad alta qualità (2.0 zoom) per nitidezza
+                mat = fitz.Matrix(2.0, 2.0)
+                pix = page.get_pixmap(matrix=mat)
+
+                # Conversione da samples di fitz a QImage
+                fmt = QImage.Format.Format_RGBA8888 if pix.alpha else QImage.Format.Format_RGB888
+                qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+
+                # Creazione di una copia per sicurezza (il buffer di fitz potrebbe essere liberato)
+                self.show_pixmap(QPixmap.fromImage(qimg.copy()))
+                doc.close()
+            else:
+                logger.warning(f"File PDF senza pagine: {file_path}")
+        except Exception as e:
+            logger.error(f"Errore durante il caricamento del PDF {file_path}: {e}")

@@ -176,9 +176,23 @@ class AppController(QObject):
                     msg, level = item
                     self.log_received.emit(str(msg), level, False)
                 elif isinstance(item, dict):
-                    action = item.get("action")
-                    if action == "update_progress":
-                        self.progress_updated.emit(float(item.get("value", 0)), str(item.get("text", "")), item.get("eta_seconds"))
+                    # Gestione progresso (supporta sia il formato 'action' che il nuovo 'page_progress')
+                    is_progress = item.get("action") == "update_progress" or item.get("type") == "page_progress"
+
+                    if is_progress:
+                        val = item.get("value") or item.get("phase_pct", 0)
+                        phase = str(item.get("phase", "Elaborazione")).capitalize()
+                        current = item.get("current", 0)
+                        total = item.get("total", 0)
+
+                        # Se non c'è un testo esplicito, ne generiamo uno leggibile
+                        txt = item.get("text")
+                        if not txt and current and total:
+                            txt = f"{phase}... ({current}/{total})"
+                        elif not txt:
+                            txt = f"{phase}..."
+
+                        self.progress_updated.emit(float(val), str(txt), item.get("eta_seconds"))
                     else:
                         self.log_received.emit(str(item.get("text", item)), "INFO", False)
         except queue.Empty:

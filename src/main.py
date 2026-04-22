@@ -68,7 +68,7 @@ class MainApp(QMainWindow):
         """
         super().__init__()
         self.setWindowTitle(f"Intelleo PDF Splitter v{version.__version__}")
-        self.setMinimumSize(1100, 800)
+        self.setMinimumSize(500, 350)
         self.setStyleSheet(GLOBAL_QSS)
 
         # Stato interno
@@ -349,7 +349,8 @@ class MainApp(QMainWindow):
 
     def on_unknown_files_found(self, files: list, odc: str) -> None:
         """Mostra il dialogo di revisione per i file non classificati."""
-        dialog = UnknownFilesReviewDialog(self, files, odc)
+        rules = self.controller.config.get("classification_rules", [])
+        dialog = UnknownFilesReviewDialog(self, files, odc, rules=rules)
         dialog.finished_review.connect(self.controller.clear_session)
         dialog.exec()
 
