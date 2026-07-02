@@ -304,6 +304,12 @@ class UnknownFilesReviewDialog(QDialog):
             pdf_path = task["unknown_path"]
             doc = fitz.open(pdf_path)
 
+            if len(self.current_page_assignments) < len(doc):
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Attenzione", "Non tutte le pagine sono state smistate. Assegna una categoria a tutte le pagine prima di concludere.")
+                doc.close()
+                return
+
             # Trasforma dict {page: cat} in {cat: [pages]}
             page_groups: dict[str, list[int]] = {}
             for page, cat in self.current_page_assignments.items():
@@ -315,7 +321,19 @@ class UnknownFilesReviewDialog(QDialog):
             PdfSplitter.split_and_save(doc, page_groups, self.rules, output_dir, self.odc)
             doc.close()
 
+            # Elimina il file sconosciuto locale
+            import os
+            try:
+                os.remove(pdf_path)
+            except Exception as e:
+                logger.error(f"Impossibile eliminare {pdf_path}: {e}")
+
             logger.info(f"Smistamento manuale completato per {pdf_path}")
+            
+            # Informa l'utente
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Successo", "Smistamento completato con successo.")
+
             self.next_or_close()
 
         except Exception as e:
