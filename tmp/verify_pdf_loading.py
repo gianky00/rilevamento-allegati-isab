@@ -1,6 +1,7 @@
-import fitz
-import os
 import glob
+
+import fitz
+
 
 def test_pdf_loading():
     # Cerca un PDF nel progetto
@@ -11,7 +12,7 @@ def test_pdf_loading():
 
     pdf_path = pdfs[0]
     print(f"Testando il caricamento di: {pdf_path}")
-    
+
     try:
         doc = fitz.open(pdf_path)
         print(f"Pagine: {doc.page_count}")

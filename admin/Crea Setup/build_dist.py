@@ -127,11 +127,11 @@ def deploy_to_network(setup_dir, setup_filename):
             # Evitiamo di spostare il file che stiamo per copiare se per caso ha lo stesso nome
             # (anche se tecnicamente non dovrebbe ancora essere lì)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+
             # Tenta di recuperare la versione dal vecchio file se possibile (opzionale, manteniamo logica sicura)
             old_name = old_file.name
             target_archive = archive_dir / f"Archivio_{timestamp}_{old_name}"
-            
+
             log_and_print(f"Archiving: {old_name} -> {target_archive.name}")
             with suppress(Exception):
                 shutil.move(str(old_file), str(target_archive))

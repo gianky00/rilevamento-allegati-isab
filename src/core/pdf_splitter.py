@@ -3,6 +3,7 @@ Servizio per la divisione fisica e il salvataggio dei file PDF (SRP).
 Ottimizzato con salvataggio deflate e garbage collection.
 """
 
+import contextlib
 import os
 import time
 from collections.abc import Callable
@@ -108,17 +109,13 @@ class PdfSplitter:
                 break
 
         # Chiudiamo esplicitamente il documento aperto così Windows rilascia il lock sul file originale `path`
-        try:
+        with contextlib.suppress(Exception):
             doc.close()
-        except Exception:
-            pass
 
         if not saved_to_temp:
             if os.path.exists(temp_path):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(temp_path)
-                except Exception:
-                    pass
             return False
 
         # Ora possiamo sovrascrivere il file in modo sicuro (senza PermissionError di file aperto)
@@ -135,8 +132,6 @@ class PdfSplitter:
                 break
 
         if os.path.exists(temp_path):
-            try:
+            with contextlib.suppress(Exception):
                 os.remove(temp_path)
-            except Exception:
-                pass
         return False
