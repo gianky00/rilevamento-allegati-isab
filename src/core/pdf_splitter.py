@@ -3,6 +3,7 @@ Servizio per la divisione fisica e il salvataggio dei file PDF (SRP).
 Ottimizzato con salvataggio deflate e garbage collection.
 """
 
+import contextlib
 import os
 import time
 from collections.abc import Callable
@@ -58,7 +59,11 @@ class PdfSplitter:
 
             path = os.path.join(output_dir, filename)
 
-            new_pdf = fitz.open()
+            if os.path.exists(path):
+                new_pdf = fitz.open(path)
+            else:
+                new_pdf = fitz.open()
+
             pages.sort()
             # Raggruppa pagine consecutive per efficienza
             ranges = PdfSplitter._get_ranges(pages)
@@ -67,7 +72,6 @@ class PdfSplitter:
 
             if PdfSplitter._safe_save(new_pdf, path):
                 generated_files.append({"category": category, "path": os.path.abspath(path)})
-            new_pdf.close()
 
         return generated_files
 
@@ -89,14 +93,45 @@ class PdfSplitter:
 
     @staticmethod
     def _safe_save(doc: fitz.Document, path: str, retries: int = 3) -> bool:
-        """Tenta il salvataggio del PDF con deflate e garbage collection."""
+        """Tenta il salvataggio del PDF su un file temporaneo, chiude l'originale per rilasciare il lock, e sovrascrive."""
+        temp_path = path + ".tmp"
+        saved_to_temp = False
+
         for _i in range(retries):
             try:
                 # deflate=True: compressione stream, garbage=3: rimuove oggetti orfani + compatta xref
-                doc.save(path, deflate=True, garbage=3)
+                doc.save(temp_path, deflate=True, garbage=3)
+                saved_to_temp = True
+                break
+            except PermissionError:
+                time.sleep(1.0)
+            except Exception:
+                break
+
+        # Chiudiamo esplicitamente il documento aperto così Windows rilascia il lock sul file originale `path`
+        with contextlib.suppress(Exception):
+            doc.close()
+
+        if not saved_to_temp:
+            if os.path.exists(temp_path):
+                with contextlib.suppress(Exception):
+                    os.remove(temp_path)
+            return False
+
+        # Ora possiamo sovrascrivere il file in modo sicuro (senza PermissionError di file aperto)
+        for _i in range(retries):
+            try:
+                if os.path.exists(path):
+                    os.replace(temp_path, path)
+                else:
+                    os.rename(temp_path, path)
                 return True
             except PermissionError:
                 time.sleep(1.0)
             except Exception:
                 break
+
+        if os.path.exists(temp_path):
+            with contextlib.suppress(Exception):
+                os.remove(temp_path)
         return False

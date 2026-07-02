@@ -88,7 +88,7 @@ class TestPdfSplitter(unittest.TestCase):
         # but we can test that it returns True on normal save.
         res = PdfSplitter._safe_save(doc, "test_safe.pdf")
         self.assertTrue(res)
-        doc.close()
+        
         p = Path("test_safe.pdf")
         if p.exists():
             p.unlink()

@@ -198,10 +198,11 @@ class UnknownFilesReviewDialog(QDialog):
         # Pulisci griglia
         while self.thumb_grid.count():
             item = self.thumb_grid.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.setParent(None)
-                widget.deleteLater()
+            if item is not None:
+                widget = item.widget()
+                if widget:
+                    widget.setParent(None)
+                    widget.deleteLater()
 
         try:
             import fitz
@@ -259,10 +260,12 @@ class UnknownFilesReviewDialog(QDialog):
     def select_all_pages(self) -> None:
         """Seleziona tutte le miniature presenti nella griglia."""
         for i in range(self.thumb_grid.count()):
-            widget = self.thumb_grid.itemAt(i).widget()
-            if isinstance(widget, PageThumbnail):
-                widget.toggle_selection(True)
-                self.selected_pages.add(widget.index)
+            item = self.thumb_grid.itemAt(i)
+            if item is not None:
+                widget = item.widget()
+                if isinstance(widget, PageThumbnail):
+                    widget.toggle_selection(True)
+                    self.selected_pages.add(widget.index)
 
     def apply_category_to_selection(self) -> None:
         """Assegna la categoria selezionata alle pagine marcate."""
@@ -280,11 +283,13 @@ class UnknownFilesReviewDialog(QDialog):
 
         # Feedback visivo
         for i in range(self.thumb_grid.count()):
-            widget = self.thumb_grid.itemAt(i).widget()
-            if isinstance(widget, PageThumbnail) and widget.index in self.selected_pages:
-                widget.info_label.setText(f"PAG {widget.index + 1} -> {category[:10]}")
-                widget.info_label.setStyleSheet("font-size: 10px; color: #198754; font-weight: bold;")
-                widget.toggle_selection(False)
+            item = self.thumb_grid.itemAt(i)
+            if item is not None:
+                widget = item.widget()
+                if isinstance(widget, PageThumbnail) and widget.index in self.selected_pages:
+                    widget.info_label.setText(f"PAG {widget.index + 1} -> {category[:10]}")
+                    widget.info_label.setStyleSheet("font-size: 10px; color: #198754; font-weight: bold;")
+                    widget.toggle_selection(False)
 
         self.selected_pages.clear()
 
@@ -304,6 +309,12 @@ class UnknownFilesReviewDialog(QDialog):
             pdf_path = task["unknown_path"]
             doc = fitz.open(pdf_path)
 
+            if len(self.current_page_assignments) < len(doc):
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Attenzione", "Non tutte le pagine sono state smistate. Assegna una categoria a tutte le pagine prima di concludere.")
+                doc.close()
+                return
+
             # Trasforma dict {page: cat} in {cat: [pages]}
             page_groups: dict[str, list[int]] = {}
             for page, cat in self.current_page_assignments.items():
@@ -315,7 +326,19 @@ class UnknownFilesReviewDialog(QDialog):
             PdfSplitter.split_and_save(doc, page_groups, self.rules, output_dir, self.odc)
             doc.close()
 
+            # Elimina il file sconosciuto locale
+            import os
+            try:
+                os.remove(pdf_path)
+            except Exception as e:
+                logger.error(f"Impossibile eliminare {pdf_path}: {e}")
+
             logger.info(f"Smistamento manuale completato per {pdf_path}")
+
+            # Informa l'utente
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Successo", "Smistamento completato con successo.")
+
             self.next_or_close()
 
         except Exception as e:

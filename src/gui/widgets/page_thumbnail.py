@@ -4,7 +4,7 @@ Widget per la visualizzazione di una singola pagina PDF come miniatura con stato
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap, QMouseEvent
+from PySide6.QtGui import QMouseEvent, QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
